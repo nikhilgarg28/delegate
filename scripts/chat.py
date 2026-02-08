@@ -159,6 +159,17 @@ def end_session(
     conn.close()
 
 
+def update_session_task(root: Path, session_id: int, task_id: int) -> None:
+    """Update the task_id on a running session (e.g. when agent starts a task)."""
+    conn = _connect(root)
+    conn.execute(
+        "UPDATE sessions SET task_id = ? WHERE id = ? AND task_id IS NULL",
+        (task_id, session_id),
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_task_stats(root: Path, task_id: int) -> dict:
     """Get aggregated stats for a task from the sessions table."""
     conn = _connect(root)

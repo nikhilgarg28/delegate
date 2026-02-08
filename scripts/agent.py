@@ -70,10 +70,20 @@ def _next_worklog_number(agent_dir: Path) -> int:
 
 
 def _get_current_task_id(root: Path, agent: str) -> int | None:
-    """Get the ID of the agent's current in-progress task, if exactly one."""
+    """Get the ID of the agent's current task, if exactly one.
+
+    Checks in_progress first (most specific), then falls back to open.
+    At session start, tasks are typically still 'open' because the agent
+    sets them to 'in_progress' during the session.
+    """
     try:
         from scripts.task import list_tasks
+        # Prefer in_progress (most specific)
         tasks = list_tasks(root, assignee=agent, status="in_progress")
+        if len(tasks) == 1:
+            return tasks[0]["id"]
+        # Fall back to open (task assigned but not yet started)
+        tasks = list_tasks(root, assignee=agent, status="open")
         if len(tasks) == 1:
             return tasks[0]["id"]
     except Exception:
@@ -308,7 +318,7 @@ async def run_agent_loop(
     token_budget = state.get("token_budget")
 
     # Session tracking
-    from scripts.chat import start_session, end_session, log_event
+    from scripts.chat import start_session, end_session, log_event, update_session_task
     current_task_id = _get_current_task_id(root, agent)
     session_id = start_session(root, agent, task_id=current_task_id)
     task_label = f" on T{current_task_id:04d}" if current_task_id else ""
@@ -363,6 +373,12 @@ async def run_agent_loop(
                 if m.filename:
                     mark_inbox_read(root, agent, m.filename)
 
+            # Re-check task association (agent may have set a task to in_progress)
+            if current_task_id is None:
+                current_task_id = _get_current_task_id(root, agent)
+                if current_task_id is not None:
+                    update_session_task(root, session_id, current_task_id)
+
             turn = 1
 
             # --- Event loop: wait for new inbox messages ---
@@ -388,6 +404,12 @@ async def run_agent_loop(
                 for m in read_inbox(root, agent, unread_only=True):
                     if m.filename:
                         mark_inbox_read(root, agent, m.filename)
+
+                # Re-check task association after each turn
+                if current_task_id is None:
+                    current_task_id = _get_current_task_id(root, agent)
+                    if current_task_id is not None:
+                        update_session_task(root, session_id, current_task_id)
 
         finally:
             await client.disconnect()
