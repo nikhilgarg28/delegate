@@ -14,12 +14,17 @@ Usage:
 """
 
 import argparse
+import asyncio
 import json
 import logging
 import re
 import shutil
 import sqlite3
 import subprocess
+import tempfile
+import threading
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -764,9 +769,569 @@ def print_judge_results(results: dict) -> None:
     print("=" * 60)
 
 
+# ---------------------------------------------------------------------------
+# Eval runner orchestration (T0031)
+# ---------------------------------------------------------------------------
+
+
+def load_benchmark_specs(suite_dir: Path) -> list[dict]:
+    """Load all benchmark task specs from a suite directory.
+
+    Args:
+        suite_dir: Directory containing benchmark YAML files.
+
+    Returns:
+        List of parsed benchmark spec dicts (each has title, description,
+        acceptance_criteria, etc.).
+    """
+    specs = []
+    if not suite_dir.is_dir():
+        logger.warning("Suite directory not found: %s", suite_dir)
+        return specs
+
+    for yaml_file in sorted(suite_dir.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(yaml_file.read_text())
+            if data and "title" in data:
+                data["_source_file"] = str(yaml_file)
+                specs.append(data)
+                logger.info("Loaded benchmark spec: %s", data["title"])
+        except Exception:
+            logger.exception("Failed to load benchmark spec from %s", yaml_file)
+
+    return specs
+
+
+def seed_tasks(root: Path, specs: list[dict]) -> list[dict]:
+    """Create tasks from benchmark specs via the task system.
+
+    Args:
+        root: Team root directory.
+        specs: List of benchmark spec dicts.
+
+    Returns:
+        List of created task dicts (with IDs assigned).
+    """
+    from scripts.task import create_task
+
+    created = []
+    for spec in specs:
+        task = create_task(
+            root,
+            title=spec["title"],
+            description=spec.get("description", ""),
+            project="eval-run",
+            priority="high",
+        )
+        created.append(task)
+        logger.info("Seeded task T%04d: %s", task["id"], spec["title"])
+
+    return created
+
+
+def setup_repo(root: Path, specs: list[dict]) -> None:
+    """Set up repo files from benchmark spec repo_setup entries.
+
+    Creates any files specified in the repo_setup section of each spec
+    in the team's working directory.
+
+    Args:
+        root: Team root directory.
+        specs: List of benchmark spec dicts.
+    """
+    for spec in specs:
+        for entry in spec.get("repo_setup", []):
+            path = root / entry["path"]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(entry.get("content", ""))
+            logger.info("Set up repo file: %s", path)
+
+
+def check_acceptance_criteria(root: Path, specs: list[dict]) -> dict[str, list[dict]]:
+    """Run acceptance criteria checks from benchmark specs.
+
+    Each criterion is checked and returns pass/fail with details.
+
+    Args:
+        root: Team root directory (used as cwd for commands).
+        specs: List of benchmark spec dicts with acceptance_criteria.
+
+    Returns:
+        Dict mapping task title to list of {type, details, passed} dicts.
+    """
+    results: dict[str, list[dict]] = {}
+
+    for spec in specs:
+        title = spec["title"]
+        criteria_results = []
+
+        for criterion in spec.get("acceptance_criteria", []):
+            result = _check_single_criterion(root, criterion)
+            criteria_results.append(result)
+
+        results[title] = criteria_results
+
+    return results
+
+
+def _check_single_criterion(root: Path, criterion: dict) -> dict:
+    """Check a single acceptance criterion.
+
+    Returns dict with: type, details, passed (bool), error (optional).
+    """
+    if "file_exists" in criterion:
+        spec = criterion["file_exists"]
+        path = root / spec["path"]
+        passed = path.is_file()
+        return {
+            "type": "file_exists",
+            "details": {"path": spec["path"]},
+            "passed": passed,
+            "error": None if passed else f"File not found: {spec['path']}",
+        }
+
+    elif "tests_pass" in criterion:
+        spec = criterion["tests_pass"]
+        cmd = spec["command"]
+        try:
+            result = subprocess.run(
+                cmd, shell=True, capture_output=True, text=True,
+                timeout=120, cwd=str(root),
+            )
+            passed = result.returncode == 0
+            return {
+                "type": "tests_pass",
+                "details": {"command": cmd},
+                "passed": passed,
+                "error": None if passed else result.stderr[:500],
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                "type": "tests_pass",
+                "details": {"command": cmd},
+                "passed": False,
+                "error": "Command timed out",
+            }
+
+    elif "grep_match" in criterion:
+        spec = criterion["grep_match"]
+        path = root / spec["path"]
+        pattern = spec["pattern"]
+        if not path.is_file():
+            return {
+                "type": "grep_match",
+                "details": {"path": spec["path"], "pattern": pattern},
+                "passed": False,
+                "error": f"File not found: {spec['path']}",
+            }
+        content = path.read_text()
+        try:
+            passed = bool(re.search(pattern, content))
+        except re.error:
+            # Pattern may contain regex special chars intended as literals
+            # Fall back to literal string matching
+            passed = pattern in content
+        return {
+            "type": "grep_match",
+            "details": {"path": spec["path"], "pattern": pattern},
+            "passed": passed,
+            "error": None if passed else f"Pattern not found in {spec['path']}",
+        }
+
+    elif "command_succeeds" in criterion:
+        spec = criterion["command_succeeds"]
+        cmd = spec["command"]
+        try:
+            result = subprocess.run(
+                cmd, shell=True, capture_output=True, text=True,
+                timeout=120, cwd=str(root),
+            )
+            passed = result.returncode == 0
+            return {
+                "type": "command_succeeds",
+                "details": {"command": cmd},
+                "passed": passed,
+                "error": None if passed else result.stderr[:500],
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                "type": "command_succeeds",
+                "details": {"command": cmd},
+                "passed": False,
+                "error": "Command timed out",
+            }
+
+    return {
+        "type": "unknown",
+        "details": criterion,
+        "passed": False,
+        "error": f"Unknown criterion type: {list(criterion.keys())}",
+    }
+
+
+def _run_daemon_loop(
+    root: Path,
+    stop_event: threading.Event,
+    interval: float = 1.0,
+    max_concurrent: int = 3,
+    token_budget: int | None = None,
+) -> None:
+    """Run the daemon loop (router + orchestrator) in a thread.
+
+    This replicates the logic from scripts/web.py:_daemon_loop but runs
+    synchronously in a thread instead of as an async task.
+    """
+    from scripts.router import route_once
+    from scripts.orchestrator import orchestrate_once, spawn_agent_subprocess
+
+    def _spawn(r: Path, a: str) -> None:
+        spawn_agent_subprocess(r, a, token_budget=token_budget)
+
+    logger.info("Eval daemon loop started — polling every %.1fs", interval)
+
+    while not stop_event.is_set():
+        try:
+            routed = route_once(root)
+            if routed > 0:
+                logger.info("Routed %d message(s)", routed)
+
+            spawned = orchestrate_once(
+                root, max_concurrent=max_concurrent, spawn_fn=_spawn,
+            )
+            if spawned:
+                logger.info("Spawned agents: %s", ", ".join(spawned))
+        except Exception:
+            logger.exception("Error during eval daemon cycle")
+
+        stop_event.wait(timeout=interval)
+
+    logger.info("Eval daemon loop stopped")
+
+
+def _poll_tasks_done(root: Path, task_count: int, timeout: float) -> bool:
+    """Poll until all tasks reach 'done' status or timeout.
+
+    Returns True if all tasks completed, False on timeout.
+    """
+    from scripts.task import list_tasks
+
+    start = time.monotonic()
+    while time.monotonic() - start < timeout:
+        tasks = list_tasks(root)
+        done_count = sum(1 for t in tasks if t["status"] == "done")
+        total = len(tasks)
+
+        if total > 0 and done_count >= task_count:
+            logger.info("All %d tasks completed", task_count)
+            return True
+
+        elapsed = time.monotonic() - start
+        logger.info(
+            "Progress: %d/%d tasks done (%.0fs elapsed, %.0fs remaining)",
+            done_count, task_count, elapsed, timeout - elapsed,
+        )
+        time.sleep(5.0)
+
+    logger.warning("Timeout reached (%.0fs) — not all tasks completed", timeout)
+    return False
+
+
+def run_eval(
+    variant: str,
+    suite: str | Path,
+    timeout: float = 600,
+    dry_run: bool = False,
+    manager: str = "manager",
+    director: str = "director",
+    agents: list[str] | None = None,
+    max_concurrent: int = 3,
+    token_budget: int | None = None,
+) -> dict:
+    """Run a full eval: bootstrap, seed tasks, run agents, check results.
+
+    Args:
+        variant: Charter variant name (e.g. "ship-fast").
+        suite: Path to benchmark tasks directory.
+        timeout: Max seconds to wait for all tasks to complete.
+        dry_run: If True, validate the pipeline without spawning agents.
+        manager: Name of the manager agent.
+        director: Name of the director.
+        agents: Worker agent names (default: ["alice", "bob"]).
+        max_concurrent: Max concurrent agent processes.
+        token_budget: Token budget per agent session.
+
+    Returns:
+        Structured results dict with keys:
+        - run_dir: Path to the eval run directory
+        - variant: Charter variant used
+        - suite: Benchmark suite path
+        - dry_run: Whether this was a dry run
+        - tasks_seeded: Number of tasks created
+        - completed: Whether all tasks finished
+        - timed_out: Whether the run timed out
+        - acceptance: Acceptance criteria results
+        - metrics: Raw metrics from db.sqlite
+        - started_at: ISO timestamp
+        - ended_at: ISO timestamp
+        - duration_seconds: Total wall-clock time
+    """
+    suite_dir = Path(suite)
+    agents = agents or ["alice", "bob"]
+    started_at = datetime.now(timezone.utc)
+
+    # 1. Create a temp directory for the eval run
+    run_dir = Path(tempfile.mkdtemp(prefix="eval-run-"))
+    logger.info("Eval run directory: %s", run_dir)
+
+    results: dict = {
+        "run_dir": str(run_dir),
+        "variant": variant,
+        "suite": str(suite_dir),
+        "dry_run": dry_run,
+        "started_at": started_at.isoformat(),
+    }
+
+    try:
+        # 2. Bootstrap a fresh team with the variant
+        bootstrap_with_variant(
+            run_dir,
+            variant_name=variant,
+            manager=manager,
+            director=director,
+            agents=agents,
+        )
+        logger.info("Bootstrapped team at %s with variant '%s'", run_dir, variant)
+
+        # 3. Load benchmark specs
+        specs = load_benchmark_specs(suite_dir)
+        if not specs:
+            results["error"] = "No benchmark specs found"
+            results["tasks_seeded"] = 0
+            return results
+
+        # 4. Set up repo files from specs
+        setup_repo(run_dir, specs)
+
+        # 5. Seed the task queue
+        created_tasks = seed_tasks(run_dir, specs)
+        results["tasks_seeded"] = len(created_tasks)
+        logger.info("Seeded %d tasks", len(created_tasks))
+
+        # Build task specs dict for sim-director
+        task_specs = {s["title"]: s.get("description", "") for s in specs}
+
+        if dry_run:
+            # Validate only — don't start agents
+            logger.info("Dry run — skipping agent execution")
+            results["completed"] = False
+            results["timed_out"] = False
+            results["acceptance"] = {}
+            results["metrics"] = {}
+            return results
+
+        # 6. Start the sim-director in a background thread
+        from scripts.sim_director import start_sim_director_thread
+
+        sim_thread, sim_stop = start_sim_director_thread(
+            run_dir, task_specs, poll_interval=2.0,
+        )
+        logger.info("Sim-director started")
+
+        # 7. Start the daemon (router + orchestrator) in a background thread
+        daemon_stop = threading.Event()
+        daemon_thread = threading.Thread(
+            target=_run_daemon_loop,
+            args=(run_dir, daemon_stop),
+            kwargs={
+                "interval": 1.0,
+                "max_concurrent": max_concurrent,
+                "token_budget": token_budget,
+            },
+            daemon=True,
+            name="eval-daemon",
+        )
+        daemon_thread.start()
+        logger.info("Eval daemon started")
+
+        # Send a kick message from director to manager to start work
+        from scripts.mailbox import send as mailbox_send
+
+        task_list_msg = "Here are the tasks for this eval run:\n"
+        for task in created_tasks:
+            task_list_msg += f"- T{task['id']:04d}: {task['title']}\n"
+        task_list_msg += "\nPlease assign and complete all tasks."
+        mailbox_send(run_dir, director, manager, task_list_msg)
+
+        try:
+            # 8. Poll until all tasks reach 'done' or timeout
+            all_done = _poll_tasks_done(run_dir, len(created_tasks), timeout)
+            results["completed"] = all_done
+            results["timed_out"] = not all_done
+
+        finally:
+            # 9. Stop daemon + sim-director
+            daemon_stop.set()
+            sim_stop.set()
+            daemon_thread.join(timeout=10)
+            sim_thread.join(timeout=10)
+            logger.info("Stopped daemon and sim-director")
+
+        # 10. Run acceptance criteria checks
+        acceptance = check_acceptance_criteria(run_dir, specs)
+        results["acceptance"] = acceptance
+
+        # 11. Collect raw metrics
+        metrics = collect_metrics(run_dir)
+        results["metrics"] = metrics
+
+    finally:
+        ended_at = datetime.now(timezone.utc)
+        results["ended_at"] = ended_at.isoformat()
+        results["duration_seconds"] = (ended_at - started_at).total_seconds()
+
+        # Save results as JSON
+        results_dir = run_dir / "results"
+        results_dir.mkdir(exist_ok=True)
+        results_file = results_dir / "run_results.json"
+        results_file.write_text(json.dumps(results, indent=2, default=str))
+        logger.info("Results saved to %s", results_file)
+
+    return results
+
+
+def compare_results(results_dir: Path) -> None:
+    """Load multiple run results and print a side-by-side comparison table.
+
+    Args:
+        results_dir: Directory containing run result JSON files, or parent
+            directory containing multiple run directories each with results/.
+    """
+    # Find all run_results.json files
+    result_files = sorted(results_dir.glob("**/run_results.json"))
+    if not result_files:
+        print(f"No run results found in {results_dir}")
+        return
+
+    runs = []
+    for f in result_files:
+        try:
+            data = json.loads(f.read_text())
+            runs.append(data)
+        except Exception:
+            logger.warning("Failed to load %s", f)
+
+    if not runs:
+        print("No valid run results to compare.")
+        return
+
+    # Print comparison table
+    print()
+    print("=" * 80)
+    print("  EVAL RUN COMPARISON")
+    print("=" * 80)
+
+    # Header
+    labels = []
+    for r in runs:
+        variant = r.get("variant", "unknown")
+        dry = " (dry)" if r.get("dry_run") else ""
+        labels.append(f"{variant}{dry}")
+
+    col_width = max(20, max(len(l) for l in labels) + 2)
+    header = f"  {'Metric':<30}" + "".join(f"{l:>{col_width}}" for l in labels)
+    print(f"\n{header}")
+    print("  " + "-" * (30 + col_width * len(runs)))
+
+    # Rows
+    rows = [
+        ("Tasks seeded", "tasks_seeded", None),
+        ("Completed", "completed", None),
+        ("Timed out", "timed_out", None),
+        ("Duration (s)", "duration_seconds", ".1f"),
+    ]
+
+    # Metric rows (from nested metrics dict)
+    metric_rows = [
+        ("Total tokens in", "total_tokens_in", ",d"),
+        ("Total tokens out", "total_tokens_out", ",d"),
+        ("Total cost (USD)", "total_cost_usd", ".4f"),
+        ("Total sessions", "total_sessions", "d"),
+        ("Total messages", "total_messages", "d"),
+        ("Tasks completed", "tasks_completed", "d"),
+        ("Tasks failed", "tasks_failed", "d"),
+        ("Messages/task", "messages_per_task", ".2f"),
+        ("Avg sessions/task", "avg_sessions_per_task", ".2f"),
+        ("Avg seconds/task", "avg_seconds_per_task", ".1f"),
+    ]
+
+    for label, key, fmt in rows:
+        values = []
+        for r in runs:
+            val = r.get(key)
+            if val is None:
+                values.append("—")
+            elif fmt:
+                values.append(f"{val:{fmt}}")
+            else:
+                values.append(str(val))
+        row_str = f"  {label:<30}" + "".join(f"{v:>{col_width}}" for v in values)
+        print(row_str)
+
+    print()
+    print(f"  {'--- Metrics ---':<30}")
+
+    for label, key, fmt in metric_rows:
+        values = []
+        for r in runs:
+            metrics = r.get("metrics", {})
+            val = metrics.get(key)
+            if val is None:
+                values.append("—")
+            elif fmt:
+                try:
+                    values.append(f"{val:{fmt}}")
+                except (ValueError, TypeError):
+                    values.append(str(val))
+            else:
+                values.append(str(val))
+        row_str = f"  {label:<30}" + "".join(f"{v:>{col_width}}" for v in values)
+        print(row_str)
+
+    # Acceptance criteria summary
+    print()
+    print(f"  {'--- Acceptance ---':<30}")
+    for r in runs:
+        acceptance = r.get("acceptance", {})
+        total = sum(len(v) for v in acceptance.values())
+        passed = sum(
+            sum(1 for c in v if c.get("passed"))
+            for v in acceptance.values()
+        )
+        # Will print per-run, but format as a column
+        pass  # Handled below
+
+    # Print acceptance as pass/total
+    acc_values = []
+    for r in runs:
+        acceptance = r.get("acceptance", {})
+        total = sum(len(v) for v in acceptance.values())
+        passed = sum(
+            sum(1 for c in v if c.get("passed"))
+            for v in acceptance.values()
+        )
+        acc_values.append(f"{passed}/{total}" if total > 0 else "—")
+    row_str = f"  {'Criteria passed':<30}" + "".join(
+        f"{v:>{col_width}}" for v in acc_values
+    )
+    print(row_str)
+
+    print()
+    print("=" * 80)
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Eval harness — charter variants, metrics, and judge scoring"
+        description="Eval harness — charter variants, metrics, judge scoring, and eval runner"
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -812,6 +1377,47 @@ def main():
     p_judge.add_argument(
         "--reps", type=int, default=3,
         help="Number of independent judge calls per task (default: 3)",
+    )
+
+    # run — eval runner
+    p_run = sub.add_parser(
+        "run", help="Run a full eval: bootstrap, seed tasks, run agents, check results"
+    )
+    p_run.add_argument(
+        "--variant", required=True, help="Charter variant name (e.g. ship-fast)"
+    )
+    p_run.add_argument(
+        "--suite", type=Path, required=True,
+        help="Path to benchmark tasks directory",
+    )
+    p_run.add_argument(
+        "--timeout", type=float, default=600,
+        help="Max seconds to wait for completion (default: 600)",
+    )
+    p_run.add_argument(
+        "--dry-run", action="store_true",
+        help="Validate pipeline without spawning agents",
+    )
+    p_run.add_argument(
+        "--agents", default="alice,bob",
+        help="Comma-separated worker names (default: alice,bob)",
+    )
+    p_run.add_argument(
+        "--max-concurrent", type=int, default=3,
+        help="Max concurrent agent processes (default: 3)",
+    )
+    p_run.add_argument(
+        "--token-budget", type=int, default=None,
+        help="Token budget per agent session",
+    )
+
+    # compare — side-by-side comparison
+    p_compare = sub.add_parser(
+        "compare", help="Compare multiple eval run results side-by-side"
+    )
+    p_compare.add_argument(
+        "--results-dir", type=Path, required=True,
+        help="Directory containing run results (or parent of multiple run dirs)",
     )
 
     args = parser.parse_args()
@@ -869,6 +1475,36 @@ def main():
             return
         results = judge_run(run_dir, reps=args.reps)
         print_judge_results(results)
+
+    elif args.command == "run":
+        agent_names = [a.strip() for a in args.agents.split(",") if a.strip()]
+        results = run_eval(
+            variant=args.variant,
+            suite=args.suite,
+            timeout=args.timeout,
+            dry_run=args.dry_run,
+            agents=agent_names,
+            max_concurrent=args.max_concurrent,
+            token_budget=args.token_budget,
+        )
+        print(f"\nEval run {'(dry run) ' if args.dry_run else ''}complete.")
+        print(f"  Run directory: {results['run_dir']}")
+        print(f"  Variant: {results['variant']}")
+        print(f"  Tasks seeded: {results.get('tasks_seeded', 0)}")
+        if not args.dry_run:
+            print(f"  Completed: {results.get('completed', False)}")
+            print(f"  Duration: {results.get('duration_seconds', 0):.1f}s")
+            # Print acceptance summary
+            acceptance = results.get("acceptance", {})
+            total = sum(len(v) for v in acceptance.values())
+            passed = sum(
+                sum(1 for c in v if c.get("passed"))
+                for v in acceptance.values()
+            )
+            print(f"  Acceptance criteria: {passed}/{total} passed")
+
+    elif args.command == "compare":
+        compare_results(args.results_dir)
 
 
 if __name__ == "__main__":

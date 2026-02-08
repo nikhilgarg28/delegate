@@ -9,6 +9,14 @@ import pytest
 import yaml
 
 from scripts.eval import (
+    # T0031 — eval runner
+    load_benchmark_specs,
+    seed_tasks,
+    setup_repo,
+    check_acceptance_criteria,
+    run_eval,
+    compare_results,
+    _check_single_criterion,
     list_variants,
     load_variant,
     bootstrap_with_variant,
@@ -978,3 +986,460 @@ class TestRubricConstants:
         """DEFAULT_RUBRIC text references every dimension."""
         for dim in RUBRIC_DIMENSIONS:
             assert dim in DEFAULT_RUBRIC
+
+
+# ---------------------------------------------------------------------------
+# Eval runner tests (T0031)
+# ---------------------------------------------------------------------------
+
+# Sample benchmark spec for testing
+_SAMPLE_SPEC = {
+    "title": "Fix pagination bug",
+    "description": "Fix the off-by-one error in paginate.py.",
+    "repo_setup": [
+        {"path": "src/paginate.py", "content": "def paginate(): pass\n"},
+        {"path": "tests/test_paginate.py", "content": "def test_paginate(): pass\n"},
+    ],
+    "acceptance_criteria": [
+        {"file_exists": {"path": "src/paginate.py"}},
+        {"grep_match": {"path": "src/paginate.py", "pattern": "def paginate"}},
+    ],
+    "timeout_seconds": 120,
+    "tags": ["bugfix"],
+}
+
+_SAMPLE_SPEC_2 = {
+    "title": "Add CSV reporter",
+    "description": "Create a CSV reporter module.",
+    "repo_setup": [
+        {"path": "src/reporter.py", "content": "# reporter\n"},
+    ],
+    "acceptance_criteria": [
+        {"file_exists": {"path": "src/reporter.py"}},
+    ],
+    "timeout_seconds": 300,
+    "tags": ["feature"],
+}
+
+
+@pytest.fixture
+def specs_dir(tmp_path):
+    """Create a directory with sample benchmark spec YAML files."""
+    d = tmp_path / "benchmarks" / "tasks"
+    d.mkdir(parents=True)
+    (d / "fix_pagination.yaml").write_text(yaml.dump(_SAMPLE_SPEC))
+    (d / "add_reporter.yaml").write_text(yaml.dump(_SAMPLE_SPEC_2))
+    return d
+
+
+class TestLoadBenchmarkSpecs:
+    """Tests for load_benchmark_specs()."""
+
+    def test_loads_all_specs(self, specs_dir):
+        """Loads all YAML specs from the directory."""
+        specs = load_benchmark_specs(specs_dir)
+        assert len(specs) == 2
+        titles = {s["title"] for s in specs}
+        assert "Fix pagination bug" in titles
+        assert "Add CSV reporter" in titles
+
+    def test_includes_source_file(self, specs_dir):
+        """Each spec includes _source_file metadata."""
+        specs = load_benchmark_specs(specs_dir)
+        for spec in specs:
+            assert "_source_file" in spec
+
+    def test_empty_directory(self, tmp_path):
+        """Returns empty list for empty directory."""
+        d = tmp_path / "empty"
+        d.mkdir()
+        assert load_benchmark_specs(d) == []
+
+    def test_nonexistent_directory(self, tmp_path):
+        """Returns empty list for nonexistent directory."""
+        assert load_benchmark_specs(tmp_path / "nope") == []
+
+    def test_skips_invalid_yaml(self, tmp_path):
+        """Skips files without a 'title' field."""
+        d = tmp_path / "specs"
+        d.mkdir()
+        (d / "good.yaml").write_text(yaml.dump({"title": "Good", "description": "ok"}))
+        (d / "bad.yaml").write_text(yaml.dump({"description": "no title"}))
+        specs = load_benchmark_specs(d)
+        assert len(specs) == 1
+
+    def test_loads_real_benchmarks(self):
+        """Loads actual benchmark tasks from the repo."""
+        real_dir = Path(__file__).parent.parent / "benchmarks" / "tasks"
+        if real_dir.is_dir():
+            specs = load_benchmark_specs(real_dir)
+            assert len(specs) > 0
+
+
+class TestSeedTasks:
+    """Tests for seed_tasks()."""
+
+    def test_creates_tasks(self, tmp_path, specs_dir):
+        """Creates tasks from benchmark specs."""
+        from scripts.bootstrap import bootstrap
+        root = tmp_path / "team"
+        bootstrap(root, manager="mgr", director="dir", agents=["alice"])
+
+        specs = load_benchmark_specs(specs_dir)
+        created = seed_tasks(root, specs)
+        assert len(created) == 2
+        for task in created:
+            assert "id" in task
+            assert task["status"] == "open"
+            assert task["project"] == "eval-run"
+
+    def test_task_ids_are_unique(self, tmp_path, specs_dir):
+        """Each seeded task gets a unique ID."""
+        from scripts.bootstrap import bootstrap
+        root = tmp_path / "team"
+        bootstrap(root, manager="mgr", director="dir", agents=["alice"])
+
+        specs = load_benchmark_specs(specs_dir)
+        created = seed_tasks(root, specs)
+        ids = [t["id"] for t in created]
+        assert len(ids) == len(set(ids))
+
+
+class TestSetupRepo:
+    """Tests for setup_repo()."""
+
+    def test_creates_files(self, tmp_path):
+        """Creates files specified in repo_setup."""
+        setup_repo(tmp_path, [_SAMPLE_SPEC])
+        assert (tmp_path / "src" / "paginate.py").is_file()
+        assert (tmp_path / "tests" / "test_paginate.py").is_file()
+
+    def test_file_content(self, tmp_path):
+        """Files contain the specified content."""
+        setup_repo(tmp_path, [_SAMPLE_SPEC])
+        content = (tmp_path / "src" / "paginate.py").read_text()
+        assert "def paginate" in content
+
+    def test_creates_directories(self, tmp_path):
+        """Creates parent directories as needed."""
+        spec = {
+            "title": "test",
+            "repo_setup": [
+                {"path": "deep/nested/dir/file.py", "content": "# deep\n"},
+            ],
+        }
+        setup_repo(tmp_path, [spec])
+        assert (tmp_path / "deep" / "nested" / "dir" / "file.py").is_file()
+
+    def test_no_repo_setup(self, tmp_path):
+        """Does nothing when specs have no repo_setup."""
+        spec = {"title": "test", "description": "no setup"}
+        setup_repo(tmp_path, [spec])
+        # No error, no files created beyond tmp_path
+
+
+class TestCheckAcceptanceCriteria:
+    """Tests for check_acceptance_criteria() and _check_single_criterion()."""
+
+    def test_file_exists_passes(self, tmp_path):
+        """file_exists passes when the file is present."""
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "paginate.py").write_text("code")
+
+        result = _check_single_criterion(
+            tmp_path, {"file_exists": {"path": "src/paginate.py"}}
+        )
+        assert result["passed"] is True
+        assert result["type"] == "file_exists"
+
+    def test_file_exists_fails(self, tmp_path):
+        """file_exists fails when the file is missing."""
+        result = _check_single_criterion(
+            tmp_path, {"file_exists": {"path": "src/missing.py"}}
+        )
+        assert result["passed"] is False
+
+    def test_grep_match_passes(self, tmp_path):
+        """grep_match passes when pattern is found in file."""
+        (tmp_path / "code.py").write_text("def paginate(items): pass\n")
+
+        result = _check_single_criterion(
+            tmp_path, {"grep_match": {"path": "code.py", "pattern": "def paginate"}}
+        )
+        assert result["passed"] is True
+
+    def test_grep_match_fails(self, tmp_path):
+        """grep_match fails when pattern is not found."""
+        (tmp_path / "code.py").write_text("def other(): pass\n")
+
+        result = _check_single_criterion(
+            tmp_path, {"grep_match": {"path": "code.py", "pattern": "def paginate"}}
+        )
+        assert result["passed"] is False
+
+    def test_grep_match_regex_special_chars(self, tmp_path):
+        """grep_match handles regex special chars (e.g., parentheses)."""
+        (tmp_path / "code.py").write_text("start = (page - 1) * page_size\n")
+
+        result = _check_single_criterion(
+            tmp_path,
+            {"grep_match": {"path": "code.py", "pattern": "\\(page - 1\\)"}},
+        )
+        assert result["passed"] is True
+
+    def test_grep_match_literal_fallback(self, tmp_path):
+        """grep_match falls back to literal match on invalid regex."""
+        (tmp_path / "code.py").write_text("value = foo[bar\n")
+
+        # This is an invalid regex pattern (unclosed bracket)
+        result = _check_single_criterion(
+            tmp_path,
+            {"grep_match": {"path": "code.py", "pattern": "foo[bar"}},
+        )
+        assert result["passed"] is True
+
+    def test_grep_match_missing_file(self, tmp_path):
+        """grep_match fails when file doesn't exist."""
+        result = _check_single_criterion(
+            tmp_path,
+            {"grep_match": {"path": "missing.py", "pattern": "anything"}},
+        )
+        assert result["passed"] is False
+
+    def test_full_acceptance_check(self, tmp_path):
+        """check_acceptance_criteria returns results for all specs."""
+        setup_repo(tmp_path, [_SAMPLE_SPEC])
+
+        results = check_acceptance_criteria(tmp_path, [_SAMPLE_SPEC])
+        assert "Fix pagination bug" in results
+        criteria = results["Fix pagination bug"]
+        assert len(criteria) == 2
+        assert criteria[0]["passed"] is True  # file_exists
+        assert criteria[1]["passed"] is True  # grep_match
+
+    def test_unknown_criterion_type(self, tmp_path):
+        """Unknown criterion types are reported as failed."""
+        result = _check_single_criterion(
+            tmp_path, {"unknown_check": {"key": "val"}}
+        )
+        assert result["passed"] is False
+        assert result["type"] == "unknown"
+
+
+class TestRunEvalDryRun:
+    """Tests for run_eval() in dry-run mode."""
+
+    def test_dry_run_creates_directory(self, specs_dir):
+        """Dry run creates a run directory."""
+        results = run_eval(
+            variant="ship-fast",
+            suite=specs_dir,
+            dry_run=True,
+        )
+        assert "run_dir" in results
+        assert Path(results["run_dir"]).is_dir()
+
+    def test_dry_run_seeds_tasks(self, specs_dir):
+        """Dry run seeds tasks from benchmark specs."""
+        results = run_eval(
+            variant="ship-fast",
+            suite=specs_dir,
+            dry_run=True,
+        )
+        assert results["tasks_seeded"] == 2
+
+    def test_dry_run_sets_variant(self, specs_dir):
+        """Dry run records the variant used."""
+        results = run_eval(
+            variant="quality-first",
+            suite=specs_dir,
+            dry_run=True,
+        )
+        assert results["variant"] == "quality-first"
+
+    def test_dry_run_flag_set(self, specs_dir):
+        """Dry run sets dry_run=True in results."""
+        results = run_eval(
+            variant="ship-fast",
+            suite=specs_dir,
+            dry_run=True,
+        )
+        assert results["dry_run"] is True
+        assert results["completed"] is False
+        assert results["timed_out"] is False
+
+    def test_dry_run_bootstraps_team(self, specs_dir):
+        """Dry run creates the full team directory structure."""
+        results = run_eval(
+            variant="ship-fast",
+            suite=specs_dir,
+            dry_run=True,
+        )
+        run_dir = Path(results["run_dir"])
+        assert (run_dir / ".standup").is_dir()
+        assert (run_dir / ".standup" / "charter").is_dir()
+        assert (run_dir / ".standup" / "roster.md").is_file()
+
+    def test_dry_run_applies_variant(self, specs_dir):
+        """Dry run applies the charter variant."""
+        results = run_eval(
+            variant="ship-fast",
+            suite=specs_dir,
+            dry_run=True,
+        )
+        run_dir = Path(results["run_dir"])
+        constitution = (run_dir / ".standup" / "charter" / "constitution.md").read_text()
+        assert "ships fast" in constitution.lower()
+
+    def test_dry_run_sets_up_repo_files(self, specs_dir):
+        """Dry run creates repo setup files from specs."""
+        results = run_eval(
+            variant="ship-fast",
+            suite=specs_dir,
+            dry_run=True,
+        )
+        run_dir = Path(results["run_dir"])
+        # From _SAMPLE_SPEC
+        assert (run_dir / "src" / "paginate.py").is_file()
+        # From _SAMPLE_SPEC_2
+        assert (run_dir / "src" / "reporter.py").is_file()
+
+    def test_dry_run_saves_results_json(self, specs_dir):
+        """Dry run saves results as JSON."""
+        results = run_eval(
+            variant="ship-fast",
+            suite=specs_dir,
+            dry_run=True,
+        )
+        run_dir = Path(results["run_dir"])
+        results_file = run_dir / "results" / "run_results.json"
+        assert results_file.is_file()
+
+        loaded = json.loads(results_file.read_text())
+        assert loaded["variant"] == "ship-fast"
+        assert loaded["dry_run"] is True
+        assert loaded["tasks_seeded"] == 2
+
+    def test_dry_run_with_custom_agents(self, specs_dir):
+        """Dry run works with custom agent names."""
+        results = run_eval(
+            variant="ship-fast",
+            suite=specs_dir,
+            dry_run=True,
+            agents=["worker1", "worker2", "worker3"],
+        )
+        run_dir = Path(results["run_dir"])
+        assert (run_dir / ".standup" / "team" / "worker1").is_dir()
+        assert (run_dir / ".standup" / "team" / "worker2").is_dir()
+        assert (run_dir / ".standup" / "team" / "worker3").is_dir()
+
+    def test_dry_run_has_timestamps(self, specs_dir):
+        """Dry run includes timing information."""
+        results = run_eval(
+            variant="ship-fast",
+            suite=specs_dir,
+            dry_run=True,
+        )
+        assert "started_at" in results
+        assert "ended_at" in results
+        assert "duration_seconds" in results
+        assert results["duration_seconds"] >= 0
+
+    def test_dry_run_no_specs_returns_error(self, tmp_path):
+        """Dry run with empty suite returns error."""
+        empty_suite = tmp_path / "empty_suite"
+        empty_suite.mkdir()
+        results = run_eval(
+            variant="ship-fast",
+            suite=empty_suite,
+            dry_run=True,
+        )
+        assert results.get("error") is not None
+        assert results["tasks_seeded"] == 0
+
+    def test_dry_run_different_variants_produce_different_results(self, specs_dir):
+        """Different variants produce different team configurations."""
+        r1 = run_eval(variant="ship-fast", suite=specs_dir, dry_run=True)
+        r2 = run_eval(variant="quality-first", suite=specs_dir, dry_run=True)
+
+        d1 = Path(r1["run_dir"])
+        d2 = Path(r2["run_dir"])
+
+        c1 = (d1 / ".standup" / "charter" / "constitution.md").read_text()
+        c2 = (d2 / ".standup" / "charter" / "constitution.md").read_text()
+        assert c1 != c2
+
+
+class TestCompareResults:
+    """Tests for compare_results()."""
+
+    def test_prints_comparison(self, tmp_path, capsys):
+        """compare_results prints a comparison table."""
+        # Create two run result files
+        r1 = {
+            "variant": "ship-fast",
+            "tasks_seeded": 3,
+            "completed": True,
+            "timed_out": False,
+            "duration_seconds": 120.5,
+            "metrics": {
+                "total_tokens_in": 5000,
+                "total_tokens_out": 2000,
+                "total_cost_usd": 0.05,
+                "total_sessions": 3,
+                "total_messages": 10,
+                "tasks_completed": 3,
+                "tasks_failed": 0,
+                "messages_per_task": 3.33,
+                "avg_sessions_per_task": 1.0,
+                "avg_seconds_per_task": 40.0,
+            },
+            "acceptance": {
+                "Task 1": [{"passed": True}],
+                "Task 2": [{"passed": True}, {"passed": False}],
+            },
+        }
+        r2 = {
+            "variant": "quality-first",
+            "tasks_seeded": 3,
+            "completed": True,
+            "timed_out": False,
+            "duration_seconds": 200.0,
+            "metrics": {
+                "total_tokens_in": 8000,
+                "total_tokens_out": 3000,
+                "total_cost_usd": 0.08,
+                "total_sessions": 5,
+                "total_messages": 15,
+                "tasks_completed": 3,
+                "tasks_failed": 0,
+                "messages_per_task": 5.0,
+                "avg_sessions_per_task": 1.67,
+                "avg_seconds_per_task": 66.7,
+            },
+            "acceptance": {
+                "Task 1": [{"passed": True}],
+                "Task 2": [{"passed": True}, {"passed": True}],
+            },
+        }
+
+        d1 = tmp_path / "run1" / "results"
+        d2 = tmp_path / "run2" / "results"
+        d1.mkdir(parents=True)
+        d2.mkdir(parents=True)
+        (d1 / "run_results.json").write_text(json.dumps(r1))
+        (d2 / "run_results.json").write_text(json.dumps(r2))
+
+        compare_results(tmp_path)
+
+        output = capsys.readouterr().out
+        assert "EVAL RUN COMPARISON" in output
+        assert "ship-fast" in output
+        assert "quality-first" in output
+        assert "Criteria passed" in output
+
+    def test_no_results_found(self, tmp_path, capsys):
+        """Handles empty results directory gracefully."""
+        compare_results(tmp_path)
+        output = capsys.readouterr().out
+        assert "No run results found" in output
