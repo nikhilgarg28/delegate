@@ -90,7 +90,7 @@ def create_task(
     path.write_text(yaml.dump(task, default_flow_style=False, sort_keys=False))
 
     from scripts.chat import log_event
-    log_event(root, f"T{task_id:04d} created (project={project or 'none'}, priority={priority.capitalize()})")
+    log_event(root, f"Created T{task_id:04d}: {title}")
 
     return task
 
