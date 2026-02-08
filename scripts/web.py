@@ -373,6 +373,12 @@ HTML_PAGE = """\
   .task-dates { display: flex; gap: 24px; margin-top: 10px; font-size: 11px; color: #555; align-items: center; }
   .diff-btn { margin-left: auto; padding: 4px 10px; border-radius: 5px; border: 1px solid rgba(96,165,250,0.3); background: rgba(96,165,250,0.08); color: #60a5fa; font-family: inherit; font-size: 11px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
   .diff-btn:hover { background: rgba(96,165,250,0.16); border-color: rgba(96,165,250,0.5); }
+  .task-vcs-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .task-branch { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; background: rgba(255,255,255,0.06); color: #a1a1a1; padding: 3px 10px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+  .task-commit { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; background: rgba(96,165,250,0.1); color: #60a5fa; padding: 2px 8px; border-radius: 4px; cursor: pointer; border: none; transition: background 0.15s; }
+  .task-commit:hover { background: rgba(96,165,250,0.2); }
+  .btn-diff { padding: 4px 12px; border-radius: 5px; border: 1px solid rgba(96,165,250,0.3); background: rgba(96,165,250,0.08); color: #60a5fa; font-family: inherit; font-size: 11px; cursor: pointer; transition: background 0.15s, border-color 0.15s; margin-left: auto; }
+  .btn-diff:hover { background: rgba(96,165,250,0.16); border-color: rgba(96,165,250,0.5); }
   .badge { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; letter-spacing: 0.01em; }
   .badge-open { background: rgba(52,211,153,0.12); color: #34d399; }
   .badge-in_progress { background: rgba(251,191,36,0.12); color: #fbbf24; }
@@ -712,11 +718,11 @@ function _taskRowHtml(t) {
         <div class="task-detail-item"><div class="task-detail-label">Assignee</div><div class="task-detail-value">${t.assignee ? cap(t.assignee) : '\u2014'}</div></div>
         <div class="task-detail-item"><div class="task-detail-label">Priority</div><div class="task-detail-value">${cap(t.priority)}</div></div>
       </div>
+      ${s && s.branch ? '<div class="task-vcs-row" onclick="event.stopPropagation()"><span class="task-branch" title="' + esc(s.branch) + '">' + esc(s.branch) + '</span>' + (s.commits && s.commits.length ? s.commits.map(c => '<button class="task-commit" onclick="event.stopPropagation();openDiffPanel(' + t.id + ')" title="' + esc(String(c)) + '">' + esc(String(c).substring(0,7)) + '</button>').join('') : '') + '<button class="btn-diff" onclick="event.stopPropagation();openDiffPanel(' + t.id + ')">View Changes</button></div>' : ''}
       ${t.description ? '<div class="task-desc">' + esc(t.description) + '</div>' : ''}
       <div class="task-dates">
         <span>Created: <span class="ts" data-ts="${t.created_at || ''}">${fmtTimestamp(t.created_at)}</span></span>
         <span>Completed: <span class="ts" data-ts="${t.completed_at || ''}">${fmtTimestamp(t.completed_at)}</span></span>
-        ${s && s.branch ? '<button class="diff-btn" onclick="openDiffPanel(' + t.id + ')">View Diff</button>' : ''}
       </div>
     </div>
   </div>`;
@@ -758,6 +764,59 @@ function _updateTaskRowInPlace(row, t) {
     detail.after(div);
   } else if (!t.description && descEl) {
     descEl.remove();
+  }
+  // Update VCS row (branch, commits, View Changes)
+  const existingVcs = row.querySelector('.task-vcs-row');
+  if (s && s.branch) {
+    if (existingVcs) {
+      // Update branch pill
+      const branchEl = existingVcs.querySelector('.task-branch');
+      if (branchEl) { branchEl.textContent = s.branch; branchEl.title = s.branch; }
+      // Update commit pills — rebuild them
+      const oldCommits = existingVcs.querySelectorAll('.task-commit');
+      oldCommits.forEach(el => el.remove());
+      const btnDiff = existingVcs.querySelector('.btn-diff');
+      if (s.commits && s.commits.length) {
+        s.commits.forEach(c => {
+          const btn = document.createElement('button');
+          btn.className = 'task-commit';
+          btn.textContent = String(c).substring(0, 7);
+          btn.title = String(c);
+          btn.onclick = function(ev) { ev.stopPropagation(); openDiffPanel(t.id); };
+          existingVcs.insertBefore(btn, btnDiff);
+        });
+      }
+    } else {
+      // Create VCS row
+      const vcsDiv = document.createElement('div');
+      vcsDiv.className = 'task-vcs-row';
+      vcsDiv.onclick = function(ev) { ev.stopPropagation(); };
+      const branchSpan = document.createElement('span');
+      branchSpan.className = 'task-branch';
+      branchSpan.textContent = s.branch;
+      branchSpan.title = s.branch;
+      vcsDiv.appendChild(branchSpan);
+      if (s.commits && s.commits.length) {
+        s.commits.forEach(c => {
+          const btn = document.createElement('button');
+          btn.className = 'task-commit';
+          btn.textContent = String(c).substring(0, 7);
+          btn.title = String(c);
+          btn.onclick = function(ev) { ev.stopPropagation(); openDiffPanel(t.id); };
+          vcsDiv.appendChild(btn);
+        });
+      }
+      const diffBtn = document.createElement('button');
+      diffBtn.className = 'btn-diff';
+      diffBtn.textContent = 'View Changes';
+      diffBtn.onclick = function(ev) { ev.stopPropagation(); openDiffPanel(t.id); };
+      vcsDiv.appendChild(diffBtn);
+      // Insert after detail grid, before desc or dates
+      const grid = row.querySelector('.task-detail-grid');
+      grid.after(vcsDiv);
+    }
+  } else if (existingVcs) {
+    existingVcs.remove();
   }
   // Update dates (with data-ts for live refresh)
   const tsSpans = row.querySelectorAll('.task-dates .ts');
