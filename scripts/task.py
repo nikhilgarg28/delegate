@@ -90,7 +90,7 @@ def create_task(
     path.write_text(yaml.dump(task, default_flow_style=False, sort_keys=False))
 
     from scripts.chat import log_event
-    log_event(root, f"Task created: T{task_id:04d} '{title}' (project={project or 'none'}, priority={priority.capitalize()})")
+    log_event(root, f"T{task_id:04d} created (project={project or 'none'}, priority={priority.capitalize()})")
 
     return task
 
@@ -129,7 +129,7 @@ def assign_task(root: Path, task_id: int, assignee: str) -> dict:
     task = update_task(root, task_id, assignee=assignee)
 
     from scripts.chat import log_event
-    log_event(root, f"Task T{task_id:04d} assigned to {assignee.capitalize()}")
+    log_event(root, f"T{task_id:04d} assigned to {assignee.capitalize()}")
 
     return task
 
@@ -139,7 +139,7 @@ def set_reviewer(root: Path, task_id: int, reviewer: str) -> dict:
     task = update_task(root, task_id, reviewer=reviewer)
 
     from scripts.chat import log_event
-    log_event(root, f"Task T{task_id:04d} reviewer set to {reviewer.capitalize()}")
+    log_event(root, f"T{task_id:04d} reviewer set to {reviewer.capitalize()}")
 
     return task
 
@@ -148,13 +148,16 @@ def change_status(root: Path, task_id: int, status: str) -> dict:
     """Change task status. Sets completed_at when moving to 'done'."""
     if status not in VALID_STATUSES:
         raise ValueError(f"Invalid status '{status}'. Must be one of: {VALID_STATUSES}")
+    old_task = get_task(root, task_id)
+    old_status = old_task["status"].replace("_", " ").title()
     updates: dict = {"status": status}
     if status == "done":
         updates["completed_at"] = _now()
     task = update_task(root, task_id, **updates)
 
+    new_status = status.replace("_", " ").title()
     from scripts.chat import log_event
-    log_event(root, f"Task T{task_id:04d} status → {status.replace('_', ' ').title()}")
+    log_event(root, f"Status of T{task_id:04d} changed from {old_status} \u2192 {new_status}")
 
     return task
 
