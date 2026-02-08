@@ -7,6 +7,7 @@ Usage:
     python scripts/task.py list <root> [--status open] [--assignee alice] [--project myproject]
     python scripts/task.py update <root> <task_id> [--title ...] [--description ...] [--priority ...]
     python scripts/task.py assign <root> <task_id> <assignee>
+    python scripts/task.py reviewer <root> <task_id> <reviewer>
     python scripts/task.py status <root> <task_id> <status>
     python scripts/task.py show <root> <task_id>
 """
@@ -56,6 +57,7 @@ def create_task(
     description: str = "",
     project: str = "",
     priority: str = "medium",
+    reviewer: str = "",
     depends_on: list[int] | None = None,
 ) -> dict:
     """Create a new task. Returns the task dict with assigned ID."""
@@ -72,6 +74,7 @@ def create_task(
         "description": description,
         "status": "open",
         "assignee": "",
+        "reviewer": reviewer,
         "project": project,
         "priority": priority,
         "created_at": now,
@@ -95,7 +98,9 @@ def get_task(root: Path, task_id: int) -> dict:
     path = _task_path(tasks_dir, task_id)
     if not path.exists():
         raise FileNotFoundError(f"Task {task_id} not found at {path}")
-    return yaml.safe_load(path.read_text())
+    task = yaml.safe_load(path.read_text())
+    task.setdefault("reviewer", "")
+    return task
 
 
 def update_task(root: Path, task_id: int, **updates) -> dict:
@@ -120,6 +125,16 @@ def assign_task(root: Path, task_id: int, assignee: str) -> dict:
 
     from scripts.chat import log_event
     log_event(root, f"Task T{task_id:04d} assigned to {assignee.capitalize()}")
+
+    return task
+
+
+def set_reviewer(root: Path, task_id: int, reviewer: str) -> dict:
+    """Set the reviewer for a task."""
+    task = update_task(root, task_id, reviewer=reviewer)
+
+    from scripts.chat import log_event
+    log_event(root, f"Task T{task_id:04d} reviewer set to {reviewer.capitalize()}")
 
     return task
 
@@ -173,6 +188,7 @@ def main():
     p_create.add_argument("--description", default="")
     p_create.add_argument("--project", default="")
     p_create.add_argument("--priority", default="medium", choices=VALID_PRIORITIES)
+    p_create.add_argument("--reviewer", default="")
 
     # list
     p_list = sub.add_parser("list", help="List tasks")
@@ -195,6 +211,12 @@ def main():
     p_assign.add_argument("task_id", type=int)
     p_assign.add_argument("assignee")
 
+    # reviewer
+    p_reviewer = sub.add_parser("reviewer", help="Set task reviewer")
+    p_reviewer.add_argument("root", type=Path)
+    p_reviewer.add_argument("task_id", type=int)
+    p_reviewer.add_argument("reviewer_name")
+
     # status
     p_status = sub.add_parser("status", help="Change task status")
     p_status.add_argument("root", type=Path)
@@ -215,6 +237,7 @@ def main():
             description=args.description,
             project=args.project,
             priority=args.priority,
+            reviewer=args.reviewer,
         )
         print(f"Created T{task['id']:04d}: {task['title']}")
 
@@ -245,6 +268,10 @@ def main():
     elif args.command == "assign":
         task = assign_task(args.root, args.task_id, args.assignee)
         print(f"Assigned T{task['id']:04d} to {args.assignee}")
+
+    elif args.command == "reviewer":
+        task = set_reviewer(args.root, args.task_id, args.reviewer_name)
+        print(f"T{task['id']:04d} reviewer -> {args.reviewer_name}")
 
     elif args.command == "status":
         task = change_status(args.root, args.task_id, args.new_status)
