@@ -597,6 +597,39 @@ function _updateMuteBtn() {
   }
 }
 
+// --- Notification sounds ---
+let _audioCtx = null;
+let _lastMsgTimestamp = '';
+let _prevTaskStatuses = {};
+let _msgSendCooldown = false;
+
+function _getAudioCtx() {
+  if (!_audioCtx) { try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { return null; } }
+  return _audioCtx;
+}
+
+function playMsgSound() {
+  if (_isMuted) return;
+  const ctx = _getAudioCtx(); if (!ctx) return;
+  const now = ctx.currentTime;
+  const g = ctx.createGain(); g.connect(ctx.destination); g.gain.setValueAtTime(0.15, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+  const o1 = ctx.createOscillator(); o1.type = 'sine'; o1.frequency.value = 800; o1.connect(g); o1.start(now); o1.stop(now + 0.08);
+  const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = 1000; o2.connect(g); o2.start(now + 0.1); o2.stop(now + 0.18);
+}
+
+function playTaskSound() {
+  if (_isMuted) return;
+  const ctx = _getAudioCtx(); if (!ctx) return;
+  const now = ctx.currentTime;
+  [523.25, 659.25, 783.99].forEach((freq, i) => {
+    const t = now + i * 0.15;
+    const g = ctx.createGain(); g.connect(ctx.destination); g.gain.setValueAtTime(0.12, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = freq; o.connect(g); o.start(t); o.stop(t + 0.15);
+  });
+}
+
 function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
 function fmtStatus(s){return s.split('_').map(w=>cap(w)).join(' ');}
 function fmtTime(iso){const d=new Date(iso);return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});}
@@ -727,6 +760,18 @@ async function loadTasks() {
   const res = await fetch('/tasks');
   const allTasks = await res.json();
   const el = document.getElementById('taskTable');
+
+  // Detect task status transitions to done/review for notification sound
+  let taskSoundNeeded = false;
+  for (const t of allTasks) {
+    const prev = _prevTaskStatuses[t.id];
+    if (prev && prev !== t.status && (t.status === 'done' || t.status === 'review')) {
+      taskSoundNeeded = true;
+    }
+    _prevTaskStatuses[t.id] = t.status;
+  }
+  if (taskSoundNeeded) playTaskSound();
+
   if (!allTasks.length) { el.innerHTML = '<p style="color:#888">No tasks yet.</p>'; return; }
 
   // Populate assignee dropdown from task data (always rebuild, preserve selection)
@@ -832,6 +877,16 @@ async function loadChat() {
       if (filterTo && m.recipient !== filterTo) return false;
       return true;
     });
+  }
+
+  // Detect new messages for notification sound
+  const chatMsgs = msgs.filter(m => m.type === 'chat');
+  if (chatMsgs.length > 0) {
+    const newestTs = chatMsgs[chatMsgs.length - 1].timestamp || '';
+    if (_lastMsgTimestamp && newestTs > _lastMsgTimestamp && !_msgSendCooldown) {
+      playMsgSound();
+    }
+    _lastMsgTimestamp = newestTs;
   }
 
   const log = document.getElementById('chatLog');
@@ -1130,6 +1185,8 @@ async function sendMsg() {
   const input = document.getElementById('msgInput');
   const recipient = document.getElementById('recipient').value;
   if (!input.value.trim()) return;
+  _msgSendCooldown = true;
+  setTimeout(function() { _msgSendCooldown = false; }, 4000);
   await fetch('/messages', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
