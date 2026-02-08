@@ -294,6 +294,7 @@ HTML_PAGE = """\
       <select id="chatFilterTo" onchange="loadChat()">
         <option value="">Anyone</option>
       </select>
+      <label><input type="checkbox" id="chatBetween" onchange="loadChat()"> Between</label>
       <label><input type="checkbox" id="chatShowEvents" checked onchange="loadChat()"> System events</label>
     </div>
     <div class="chat-log" id="chatLog"></div>
@@ -405,9 +406,14 @@ async function loadChat() {
   toSel.value = prevTo;
 
   // Client-side filter: match sender and/or recipient
+  const between = document.getElementById('chatBetween').checked;
   if (filterFrom || filterTo) {
     msgs = msgs.filter(m => {
       if (m.type === 'event') return true;
+      if (between && filterFrom && filterTo) {
+        return (m.sender === filterFrom && m.recipient === filterTo)
+            || (m.sender === filterTo && m.recipient === filterFrom);
+      }
       if (filterFrom && m.sender !== filterFrom) return false;
       if (filterTo && m.recipient !== filterTo) return false;
       return true;
