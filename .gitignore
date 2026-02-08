@@ -1,0 +1,29 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# uv
+.python-version
+
+# direnv
+.direnv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime data (created by bootstrap, not part of source)
+# Uncomment these if you want to keep runtime data out of git:
+# workspace/
+# repos/
