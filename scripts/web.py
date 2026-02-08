@@ -77,7 +77,7 @@ async def _lifespan(app: FastAPI):
     task = None
     if enable:
         interval = float(os.environ.get("STANDUP_INTERVAL", "1.0"))
-        max_concurrent = int(os.environ.get("STANDUP_MAX_CONCURRENT", "3"))
+        max_concurrent = int(os.environ.get("STANDUP_MAX_CONCURRENT", "32"))
         budget_str = os.environ.get("STANDUP_TOKEN_BUDGET")
         token_budget = int(budget_str) if budget_str else None
 
