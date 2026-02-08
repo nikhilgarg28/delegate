@@ -198,15 +198,16 @@ HTML_PAGE = """\
 <title>Standup — Director Dashboard</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e0e0e0; }
-  .header { background: #1a1d28; padding: 16px 24px; border-bottom: 1px solid #2a2d3a; display: flex; align-items: center; gap: 16px; }
+  html, body { height: 100%; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e0e0e0; display: flex; flex-direction: column; }
+  .header { background: #1a1d28; padding: 16px 24px; border-bottom: 1px solid #2a2d3a; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
   .header h1 { font-size: 20px; font-weight: 600; }
   .tabs { display: flex; gap: 4px; margin-left: 32px; }
   .tab { padding: 8px 16px; cursor: pointer; border-radius: 6px 6px 0 0; background: transparent; border: none; color: #888; font-size: 14px; }
   .tab.active { background: #252836; color: #fff; }
-  .content { max-width: 960px; margin: 24px auto; padding: 0 24px; }
+  .content { max-width: 960px; width: 100%; margin: 0 auto; padding: 24px; flex: 1; display: flex; flex-direction: column; min-height: 0; }
   .panel { display: none; }
-  .panel.active { display: block; }
+  .panel.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
   /* Tasks */
   table { width: 100%; border-collapse: collapse; }
@@ -219,12 +220,12 @@ HTML_PAGE = """\
   .badge-done { background: #1a1d28; color: #888; }
 
   /* Chat */
-  .chat-log { height: 500px; overflow-y: auto; background: #1a1d28; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+  .chat-log { flex: 1; min-height: 0; overflow-y: auto; background: #1a1d28; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
   .msg { margin-bottom: 8px; line-height: 1.5; }
   .msg .sender { font-weight: 600; color: #60a5fa; }
   .msg .event { color: #888; font-style: italic; }
   .msg .time { color: #555; font-size: 12px; margin-right: 8px; }
-  .chat-input { display: flex; gap: 8px; }
+  .chat-input { display: flex; gap: 8px; flex-shrink: 0; }
   .chat-input input { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #2a2d3a; background: #1a1d28; color: #e0e0e0; font-size: 14px; }
   .chat-input select { padding: 10px; border-radius: 8px; border: 1px solid #2a2d3a; background: #1a1d28; color: #e0e0e0; }
   .chat-input button { padding: 10px 20px; border-radius: 8px; border: none; background: #3b82f6; color: white; font-weight: 500; cursor: pointer; }
@@ -275,20 +276,52 @@ function switchTab(name) {
   if (name === 'agents') loadAgents();
 }
 
+function fmtElapsed(sec) {
+  if (sec == null) return '\u2014';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return m > 0 ? m + 'm ' + s + 's' : s + 's';
+}
+function fmtTokens(tin, tout) {
+  if (tin == null && tout == null) return '\u2014';
+  return Number(tin || 0).toLocaleString() + ' / ' + Number(tout || 0).toLocaleString();
+}
+function fmtCost(usd) {
+  if (usd == null) return '\u2014';
+  return '$' + Number(usd).toFixed(2);
+}
+
 async function loadTasks() {
   const res = await fetch('/tasks');
   const tasks = await res.json();
   const el = document.getElementById('tasks');
   if (!tasks.length) { el.innerHTML = '<p style="color:#888">No tasks yet.</p>'; return; }
-  el.innerHTML = '<table><thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Assignee</th><th>Project</th><th>Priority</th></tr></thead><tbody>'
-    + tasks.map(t => `<tr>
-      <td>task-${String(t.id).padStart(4,'0')}</td>
+
+  // Fetch stats for in_progress and done tasks only (per director request)
+  const showStats = new Set(['in_progress', 'done']);
+  const statsMap = {};
+  await Promise.all(tasks.filter(t => showStats.has(t.status)).map(async t => {
+    try {
+      const r = await fetch('/tasks/' + t.id + '/stats');
+      if (r.ok) statsMap[t.id] = await r.json();
+    } catch(e) { /* stats unavailable, show dashes */ }
+  }));
+
+  el.innerHTML = '<table><thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Assignee</th><th>Project</th><th>Priority</th><th>Time</th><th>Tokens (in/out)</th><th>Cost</th></tr></thead><tbody>'
+    + tasks.map(t => {
+      const s = statsMap[t.id];
+      return `<tr>
+      <td>T${String(t.id).padStart(4,'0')}</td>
       <td>${esc(t.title)}</td>
       <td><span class="badge badge-${t.status}">${fmtStatus(t.status)}</span></td>
       <td>${t.assignee ? cap(t.assignee) : '\u2014'}</td>
       <td>${t.project || '\u2014'}</td>
       <td>${cap(t.priority)}</td>
-    </tr>`).join('') + '</tbody></table>';
+      <td>${s ? fmtElapsed(s.elapsed_seconds) : '\u2014'}</td>
+      <td>${s ? fmtTokens(s.total_tokens_in, s.total_tokens_out) : '\u2014'}</td>
+      <td>${s ? fmtCost(s.total_cost_usd) : '\u2014'}</td>
+    </tr>`;
+    }).join('') + '</tbody></table>';
 }
 
 async function loadChat() {
