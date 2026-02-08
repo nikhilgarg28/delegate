@@ -837,7 +837,7 @@ async function loadChat() {
   const log = document.getElementById('chatLog');
   const wasNearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
   log.innerHTML = msgs.map(m => {
-    if (m.type === 'event') return `<div class="msg-event"><span class="msg-event-line"></span><span class="msg-event-text">${esc(m.content)}</span><span class="msg-event-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span><span class="msg-event-line"></span></div>`;
+    if (m.type === 'event') return `<div class="msg-event"><span class="msg-event-line"></span><span class="msg-event-text">${esc(m.content)}</span><span class="msg-event-line"></span><span class="msg-event-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div>`;
     const c = avatarColor(m.sender);
     return `<div class="msg"><div class="msg-avatar" style="background:${c}">${avatarInitial(m.sender)}</div><div class="msg-body"><div class="msg-header"><span class="msg-sender">${cap(m.sender)}</span><span class="msg-recipient">\u2192 ${cap(m.recipient)}</span><span class="msg-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div><div class="msg-content">${esc(m.content)}</div></div></div>`;
   }).join('');

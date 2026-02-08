@@ -200,7 +200,7 @@ class TestEventLogging:
         from scripts.chat import get_messages
         create_task(tmp_team, title="Build API", project="backend", priority="high")
         events = get_messages(tmp_team, msg_type="event")
-        assert any("T0001 created" in e["content"] for e in events)
+        assert any("Created T0001:" in e["content"] for e in events)
 
     def test_assign_task_logs_event(self, tmp_team):
         from scripts.chat import get_messages
