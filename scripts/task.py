@@ -84,7 +84,7 @@ def create_task(
     path.write_text(yaml.dump(task, default_flow_style=False, sort_keys=False))
 
     from scripts.chat import log_event
-    log_event(root, f"Task created: T{task_id:04d} '{title}' (project={project or 'none'}, priority={priority})")
+    log_event(root, f"Task created: T{task_id:04d} '{title}' (project={project or 'none'}, priority={priority.capitalize()})")
 
     return task
 
@@ -119,7 +119,7 @@ def assign_task(root: Path, task_id: int, assignee: str) -> dict:
     task = update_task(root, task_id, assignee=assignee)
 
     from scripts.chat import log_event
-    log_event(root, f"Task T{task_id:04d} assigned to {assignee}")
+    log_event(root, f"Task T{task_id:04d} assigned to {assignee.capitalize()}")
 
     return task
 
@@ -134,7 +134,7 @@ def change_status(root: Path, task_id: int, status: str) -> dict:
     task = update_task(root, task_id, **updates)
 
     from scripts.chat import log_event
-    log_event(root, f"Task T{task_id:04d} status → {status}")
+    log_event(root, f"Task T{task_id:04d} status → {status.replace('_', ' ').title()}")
 
     return task
 

@@ -201,11 +201,11 @@ class TestEventLogging:
         t = create_task(tmp_team, title="Build API")
         assign_task(tmp_team, t["id"], "alice")
         events = get_messages(tmp_team, msg_type="event")
-        assert any("assigned to alice" in e["content"] for e in events)
+        assert any("assigned to Alice" in e["content"] for e in events)
 
     def test_change_status_logs_event(self, tmp_team):
         from scripts.chat import get_messages
         t = create_task(tmp_team, title="Build API")
         change_status(tmp_team, t["id"], "in_progress")
         events = get_messages(tmp_team, msg_type="event")
-        assert any("status" in e["content"] and "in_progress" in e["content"] for e in events)
+        assert any("status" in e["content"] and "In Progress" in e["content"] for e in events)
