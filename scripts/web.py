@@ -220,11 +220,24 @@ HTML_PAGE = """\
   .panel.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
   /* Tasks */
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 13px; }
-  th { color: #555; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
-  td { color: #a1a1a1; }
-  tr:hover td { background: rgba(255,255,255,0.02); }
+  .task-list { display: flex; flex-direction: column; gap: 2px; }
+  .task-row { cursor: pointer; border-radius: 8px; border: 1px solid transparent; transition: border-color 0.15s, background 0.15s; }
+  .task-row:hover { background: rgba(255,255,255,0.02); }
+  .task-row.expanded { border-color: rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); }
+  .task-summary { display: grid; grid-template-columns: 60px 1fr auto auto auto; gap: 12px; align-items: center; padding: 10px 14px; font-size: 13px; }
+  .task-summary > span { white-space: nowrap; }
+  .task-id { color: #555; font-variant-numeric: tabular-nums; font-size: 12px; }
+  .task-title { color: #ededed; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .task-assignee { color: #a1a1a1; font-size: 12px; min-width: 70px; text-align: right; }
+  .task-priority { color: #a1a1a1; font-size: 12px; min-width: 60px; text-align: right; }
+  .task-detail { max-height: 0; overflow: hidden; transition: max-height 0.25s ease-out, padding 0.25s ease-out; padding: 0 14px; }
+  .task-row.expanded .task-detail { max-height: 400px; padding: 0 14px 14px; transition: max-height 0.3s ease-in, padding 0.2s ease-in; }
+  .task-detail-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
+  .task-detail-item { background: rgba(255,255,255,0.03); border-radius: 8px; padding: 10px 14px; }
+  .task-detail-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #555; margin-bottom: 4px; }
+  .task-detail-value { font-size: 13px; color: #ededed; font-variant-numeric: tabular-nums; }
+  .task-desc { color: #a1a1a1; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; padding: 10px 14px; background: rgba(255,255,255,0.02); border-radius: 8px; }
+  .task-dates { display: flex; gap: 24px; margin-top: 10px; font-size: 11px; color: #555; }
   .badge { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; letter-spacing: 0.01em; }
   .badge-open { background: rgba(52,211,153,0.12); color: #34d399; }
   .badge-in_progress { background: rgba(251,191,36,0.12); color: #fbbf24; }
@@ -292,9 +305,9 @@ HTML_PAGE = """\
 <div class="header">
   <h1>Standup</h1>
   <div class="tabs">
-    <button class="tab active" onclick="switchTab('chat')">Chat</button>
-    <button class="tab" onclick="switchTab('tasks')">Tasks</button>
-    <button class="tab" onclick="switchTab('agents')">Agents</button>
+    <button class="tab active" data-tab="chat" onclick="switchTab('chat')">Chat</button>
+    <button class="tab" data-tab="tasks" onclick="switchTab('tasks')">Tasks</button>
+    <button class="tab" data-tab="agents" onclick="switchTab('agents')">Agents</button>
   </div>
 </div>
 <div class="content">
@@ -353,11 +366,12 @@ function esc(s){const d=document.createElement('div');d.textContent=s;return d.i
 const _avatarColors=['#e11d48','#7c3aed','#2563eb','#0891b2','#059669','#d97706','#dc2626','#4f46e5'];
 function avatarColor(name){let h=0;for(let i=0;i<name.length;i++)h=name.charCodeAt(i)+((h<<5)-h);return _avatarColors[Math.abs(h)%_avatarColors.length];}
 function avatarInitial(name){return name.charAt(0).toUpperCase();}
-function switchTab(name) {
+function switchTab(name, pushHash) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(name).classList.add('active');
-  event.target.classList.add('active');
+  document.querySelector('.tab[data-tab="' + name + '"]').classList.add('active');
+  if (pushHash !== false) window.location.hash = name;
   if (name === 'tasks') loadTasks();
   if (name === 'chat') loadChat();
   if (name === 'agents') loadAgents();
@@ -377,6 +391,9 @@ function fmtCost(usd) {
   if (usd == null) return '\u2014';
   return '$' + Number(usd).toFixed(2);
 }
+
+let _expandedTasks = new Set();
+let _taskStatsCache = {};
 
 async function loadTasks() {
   const res = await fetch('/tasks');
@@ -404,31 +421,54 @@ async function loadTasks() {
 
   if (!tasks.length) { el.innerHTML = '<p style="color:#888">No tasks match filters.</p>'; return; }
 
-  // Fetch stats for in_progress and done tasks only (per director request)
-  const showStats = new Set(['in_progress', 'done']);
-  const statsMap = {};
-  await Promise.all(tasks.filter(t => showStats.has(t.status)).map(async t => {
+  // Fetch stats for expanded tasks
+  await Promise.all(tasks.filter(t => _expandedTasks.has(t.id)).map(async t => {
     try {
       const r = await fetch('/tasks/' + t.id + '/stats');
-      if (r.ok) statsMap[t.id] = await r.json();
-    } catch(e) { /* stats unavailable, show dashes */ }
+      if (r.ok) _taskStatsCache[t.id] = await r.json();
+    } catch(e) {}
   }));
 
-  el.innerHTML = '<table><thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Assignee</th><th>Project</th><th>Priority</th><th>Time</th><th>Tokens (in/out)</th><th>Cost</th></tr></thead><tbody>'
-    + tasks.map(t => {
-      const s = statsMap[t.id];
-      return `<tr>
-      <td>T${String(t.id).padStart(4,'0')}</td>
-      <td>${esc(t.title)}</td>
-      <td><span class="badge badge-${t.status}">${fmtStatus(t.status)}</span></td>
-      <td>${t.assignee ? cap(t.assignee) : '\u2014'}</td>
-      <td>${t.project || '\u2014'}</td>
-      <td>${cap(t.priority)}</td>
-      <td>${s ? fmtElapsed(s.elapsed_seconds) : '\u2014'}</td>
-      <td>${s ? fmtTokens(s.total_tokens_in, s.total_tokens_out) : '\u2014'}</td>
-      <td>${s ? fmtCost(s.total_cost_usd) : '\u2014'}</td>
-    </tr>`;
-    }).join('') + '</tbody></table>';
+  el.innerHTML = '<div class="task-list">' + tasks.map(t => {
+    const expanded = _expandedTasks.has(t.id);
+    const s = _taskStatsCache[t.id];
+    const tid = 'T' + String(t.id).padStart(4,'0');
+    const fmtDate = d => d ? new Date(d).toLocaleString() : '\u2014';
+    return `<div class="task-row${expanded ? ' expanded' : ''}" data-id="${t.id}" onclick="toggleTask(${t.id})">
+      <div class="task-summary">
+        <span class="task-id">${tid}</span>
+        <span class="task-title">${esc(t.title)}</span>
+        <span><span class="badge badge-${t.status}">${fmtStatus(t.status)}</span></span>
+        <span class="task-assignee">${t.assignee ? cap(t.assignee) : '\u2014'}</span>
+        <span class="task-priority">${cap(t.priority)}</span>
+      </div>
+      <div class="task-detail" onclick="event.stopPropagation()">
+        <div class="task-detail-grid">
+          <div class="task-detail-item"><div class="task-detail-label">Project</div><div class="task-detail-value">${t.project || '\u2014'}</div></div>
+          <div class="task-detail-item"><div class="task-detail-label">Reviewer</div><div class="task-detail-value">${t.reviewer ? cap(t.reviewer) : '\u2014'}</div></div>
+          <div class="task-detail-item"><div class="task-detail-label">Time</div><div class="task-detail-value">${s ? fmtElapsed(s.elapsed_seconds) : '\u2014'}</div></div>
+          <div class="task-detail-item"><div class="task-detail-label">Tokens (in/out)</div><div class="task-detail-value">${s ? fmtTokens(s.total_tokens_in, s.total_tokens_out) : '\u2014'}</div></div>
+          <div class="task-detail-item"><div class="task-detail-label">Cost</div><div class="task-detail-value">${s ? fmtCost(s.total_cost_usd) : '\u2014'}</div></div>
+          <div class="task-detail-item"><div class="task-detail-label">Status</div><div class="task-detail-value">${fmtStatus(t.status)}</div></div>
+          <div class="task-detail-item"><div class="task-detail-label">Assignee</div><div class="task-detail-value">${t.assignee ? cap(t.assignee) : '\u2014'}</div></div>
+          <div class="task-detail-item"><div class="task-detail-label">Priority</div><div class="task-detail-value">${cap(t.priority)}</div></div>
+        </div>
+        ${t.description ? '<div class="task-desc">' + esc(t.description) + '</div>' : ''}
+        <div class="task-dates">
+          <span>Created: ${fmtDate(t.created_at)}</span>
+          <span>Completed: ${fmtDate(t.completed_at)}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('') + '</div>';
+}
+function toggleTask(id) {
+  if (_expandedTasks.has(id)) {
+    _expandedTasks.delete(id);
+  } else {
+    _expandedTasks.add(id);
+  }
+  loadTasks();
 }
 
 async function loadChat() {
