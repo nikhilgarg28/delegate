@@ -411,9 +411,6 @@ HTML_PAGE = """\
   .agent-card { cursor: pointer; }
   .dot-active { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.4); }
   .dot-idle { background: #333; }
-  .agent-stats { display: none; width: 100%; padding: 14px 0 2px; }
-  .agent-card.expanded .agent-stats { display: block; }
-  .agent-card.expanded { flex-wrap: wrap; }
   .agent-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
   .agent-stat { background: rgba(255,255,255,0.03); border-radius: 8px; padding: 10px 14px; }
   .agent-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #555; margin-bottom: 4px; }
@@ -469,6 +466,23 @@ HTML_PAGE = """\
   .diff-empty { color: #555; font-size: 13px; padding: 24px; text-align: center; }
   @media (max-width: 900px) { .diff-panel { width: 100vw; } }
 
+  /* Agent Panel */
+  .agent-msg { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .agent-msg.unread { border-left: 2px solid #60a5fa; }
+  .agent-msg.pending { border-left: 2px solid #fbbf24; }
+  .agent-msg-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .agent-msg-sender { font-weight: 500; font-size: 12px; color: #ededed; }
+  .agent-msg-time { font-size: 11px; color: #444; }
+  .agent-msg-body { font-size: 12px; color: #a1a1a1; line-height: 1.5; }
+  .agent-msg-body.collapsed { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+  .agent-log-session { margin-bottom: 12px; }
+  .agent-log-header { cursor: pointer; padding: 8px 12px; background: rgba(255,255,255,0.03); border-radius: 6px; font-size: 12px; color: #a1a1a1; display: flex; align-items: center; gap: 8px; }
+  .agent-log-header:hover { background: rgba(255,255,255,0.05); }
+  .agent-log-arrow { font-size: 10px; color: #555; transition: transform 0.15s; }
+  .agent-log-arrow.expanded { transform: rotate(90deg); }
+  .agent-log-content { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; line-height: 1.5; color: #888; padding: 8px 12px; white-space: pre-wrap; max-height: 400px; overflow-y: auto; display: none; }
+  .agent-log-content.expanded { display: block; }
+
   /* Mute toggle */
   .mute-toggle { background: transparent; border: none; color: #555; cursor: pointer; font-size: 14px; padding: 4px 8px; transition: color 0.15s; margin-left: auto; display: flex; align-items: center; justify-content: center; line-height: 1; }
   .mute-toggle:hover { color: #999; }
@@ -478,7 +492,6 @@ HTML_PAGE = """\
   .chat-input .mic-btn:hover { border-color: rgba(255,255,255,0.25); color: #ccc; }
   .chat-input .mic-btn.recording { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.4); color: #ef4444; animation: mic-pulse 1.5s ease-in-out infinite; }
   @keyframes mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); } 50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } }
-
   /* Scrollbar */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -568,7 +581,7 @@ HTML_PAGE = """\
     <div class="diff-panel-title" id="diffPanelTitle"></div>
     <div class="diff-panel-branch" id="diffPanelBranch"></div>
     <div class="diff-panel-commits" id="diffPanelCommits"></div>
-    <button class="diff-panel-close" onclick="closeDiffPanel()">&times;</button>
+    <button class="diff-panel-close" onclick="closePanel()">&times;</button>
   </div>
   <div class="diff-panel-tabs">
     <button class="diff-tab active" data-dtab="files" onclick="switchDiffTab('files')">Files Changed</button>
@@ -576,7 +589,7 @@ HTML_PAGE = """\
   </div>
   <div class="diff-panel-body" id="diffPanelBody"></div>
 </div>
-<div id="diffBackdrop" class="diff-backdrop" onclick="closeDiffPanel()"></div>
+<div id="diffBackdrop" class="diff-backdrop" onclick="closePanel()"></div>
 <script>
 // --- Mute toggle ---
 let _isMuted = localStorage.getItem('standup-muted') === 'true';
@@ -894,7 +907,7 @@ async function loadChat() {
   log.innerHTML = msgs.map(m => {
     if (m.type === 'event') return `<div class="msg-event"><span class="msg-event-line"></span><span class="msg-event-text">${esc(m.content)}</span><span class="msg-event-line"></span><span class="msg-event-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div>`;
     const c = avatarColor(m.sender);
-    return `<div class="msg"><div class="msg-avatar" style="background:${c}">${avatarInitial(m.sender)}</div><div class="msg-body"><div class="msg-header"><span class="msg-sender">${cap(m.sender)}</span><span class="msg-recipient">\u2192 ${cap(m.recipient)}</span><span class="msg-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div><div class="msg-content">${esc(m.content)}</div></div></div>`;
+    return `<div class="msg"><div class="msg-avatar" style="background:${c}">${avatarInitial(m.sender)}</div><div class="msg-body"><div class="msg-header"><span class="msg-sender" style="cursor:pointer" onclick="openAgentPanel('${m.sender}')">${cap(m.sender)}</span><span class="msg-recipient">\u2192 ${cap(m.recipient)}</span><span class="msg-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div><div class="msg-content">${esc(m.content)}</div></div></div>`;
   }).join('');
   if (wasNearBottom) log.scrollTop = log.scrollHeight;
 
@@ -910,9 +923,6 @@ async function loadChat() {
   const mgr = agents.find(a => a.role === 'manager');
   sel.value = prev || (mgr ? mgr.name : agents[0]?.name || '');
 }
-
-let _expandedAgents = new Set();
-let _agentStatsCache = {};
 
 async function loadAgents() {
   const res = await fetch('/agents');
@@ -937,56 +947,12 @@ async function loadAgents() {
     }
   } else {
     // Full rebuild — agents changed
-    el.innerHTML = agents.map(a => `<div class="agent-card${_expandedAgents.has(a.name) ? ' expanded' : ''}" data-name="${a.name}" onclick="toggleAgent(this, '${a.name}')">
+    el.innerHTML = agents.map(a => `<div class="agent-card" data-name="${a.name}" onclick="openAgentPanel('${a.name}')">
       <span class="dot ${a.pid ? 'dot-active' : 'dot-idle'}"></span>
       <span class="agent-name">${cap(a.name)}</span>
       <span class="agent-status">${a.pid ? 'Running (PID ' + a.pid + ')' : 'Idle'} \u00b7 ${a.unread_inbox} unread</span>
-      <div class="agent-stats" id="agent-stats-${a.name}" onclick="event.stopPropagation()"></div>
     </div>`).join('');
-    // Restore stats from cache immediately (fetch happens in common block below)
-    for (const name of _expandedAgents) {
-      if (agentNames.has(name) && _agentStatsCache[name]) {
-        renderAgentStats(name, _agentStatsCache[name]);
-      }
-    }
   }
-  // Refresh stats for expanded cards periodically (in-place path too)
-  for (const name of _expandedAgents) {
-    if (agentNames.has(name)) fetchAgentStats(name);
-  }
-}
-async function toggleAgent(card, name) {
-  card.classList.toggle('expanded');
-  if (card.classList.contains('expanded')) {
-    _expandedAgents.add(name);
-    fetchAgentStats(name);
-  } else {
-    _expandedAgents.delete(name);
-  }
-}
-function renderAgentStats(name, s) {
-  const el = document.getElementById('agent-stats-' + name);
-  if (!el) return;
-  el.innerHTML = `<div class="agent-stats-grid">
-    <div class="agent-stat"><div class="agent-stat-label">Tasks done</div><div class="agent-stat-value">${s.tasks_done}</div></div>
-    <div class="agent-stat"><div class="agent-stat-label">In review</div><div class="agent-stat-value">${s.tasks_in_review}</div></div>
-    <div class="agent-stat"><div class="agent-stat-label">Total tasks</div><div class="agent-stat-value">${s.tasks_total}</div></div>
-    <div class="agent-stat"><div class="agent-stat-label">Sessions</div><div class="agent-stat-value">${s.session_count}</div></div>
-    <div class="agent-stat"><div class="agent-stat-label">Tokens (in/out)</div><div class="agent-stat-value">${fmtTokens(s.total_tokens_in, s.total_tokens_out)}</div></div>
-    <div class="agent-stat"><div class="agent-stat-label">Total cost</div><div class="agent-stat-value">${fmtCost(s.total_cost_usd)}</div></div>
-    <div class="agent-stat"><div class="agent-stat-label">Agent time</div><div class="agent-stat-value">${fmtElapsed(s.agent_time_seconds)}</div></div>
-    <div class="agent-stat"><div class="agent-stat-label">Avg task time</div><div class="agent-stat-value">${fmtElapsed(s.avg_task_seconds)}</div></div>
-  </div>`;
-}
-async function fetchAgentStats(name) {
-  const el = document.getElementById('agent-stats-' + name);
-  if (!el) return;
-  try {
-    const r = await fetch('/agents/' + name + '/stats');
-    const s = await r.json();
-    _agentStatsCache[name] = s;
-    renderAgentStats(name, s);
-  } catch(e) { el.innerHTML = '<p style="color:#555;font-size:12px">Stats unavailable</p>'; }
 }
 
 // --- Sidebar ---
@@ -1030,7 +996,7 @@ async function loadSidebar() {
         dotClass = 'dot-queued';
       }
       const cost = statsMap[a.name] ? '$' + Number(statsMap[a.name].total_cost_usd || 0).toFixed(2) : '';
-      agentHtml += '<div class="sidebar-agent-row">' +
+      agentHtml += '<div class="sidebar-agent-row" style="cursor:pointer" onclick="openAgentPanel(\\'' + a.name + '\\')">' +
         '<span class="sidebar-agent-dot ' + dotClass + '"></span>' +
         '<span class="sidebar-agent-name">' + cap(a.name) + '</span>' +
         '<span class="sidebar-agent-activity">' + esc(activity) + '</span>' +
@@ -1058,6 +1024,12 @@ async function loadSidebar() {
     document.getElementById('sidebarTaskList').innerHTML = taskHtml;
   } catch(e) { console.error('Sidebar load error:', e); }
 }
+
+// --- Panel (shared state for diff + agent modes) ---
+let _panelMode = null; // 'diff' | 'agent'
+let _panelAgent = null;
+let _agentTabData = {};
+let _agentCurrentTab = 'inbox';
 
 // --- Diff Panel ---
 let _diffData = null;
@@ -1147,11 +1119,18 @@ function switchDiffTab(tab) {
 }
 
 async function openDiffPanel(taskId) {
+  _panelMode = 'diff';
+  _panelAgent = null;
+  _agentTabData = {};
   const panel = document.getElementById('diffPanel');
   const backdrop = document.getElementById('diffBackdrop');
   document.getElementById('diffPanelTitle').textContent = 'T' + String(taskId).padStart(4, '0');
   document.getElementById('diffPanelBranch').textContent = 'Loading...';
   document.getElementById('diffPanelCommits').innerHTML = '';
+  document.getElementById('diffPanelCommits').style.display = '';
+  // Restore diff tabs
+  const tabsEl = panel.querySelector('.diff-panel-tabs');
+  tabsEl.innerHTML = '<button class="diff-tab active" data-dtab="files" onclick="switchDiffTab(\\'files\\')">Files Changed</button><button class="diff-tab" data-dtab="diff" onclick="switchDiffTab(\\'diff\\')">Full Diff</button>';
   document.getElementById('diffPanelBody').innerHTML = '<div class="diff-empty">Loading diff...</div>';
   panel.classList.add('open');
   backdrop.classList.add('open');
@@ -1170,14 +1149,137 @@ async function openDiffPanel(taskId) {
   }
 }
 
-function closeDiffPanel() {
+function closePanel() {
   document.getElementById('diffPanel').classList.remove('open');
   document.getElementById('diffBackdrop').classList.remove('open');
   _diffData = null;
+  _panelMode = null;
+  _panelAgent = null;
+  _agentTabData = {};
+}
+function closeDiffPanel() { closePanel(); }
+
+// --- Agent Panel ---
+function renderAgentInbox(msgs) {
+  if (!msgs || !msgs.length) return '<div class="diff-empty">No messages</div>';
+  return msgs.map(m => {
+    const cls = m.read ? '' : ' unread';
+    return '<div class="agent-msg' + cls + '"><div class="agent-msg-header"><span class="agent-msg-sender">' + esc(cap(m.sender)) + '</span><span class="agent-msg-time">' + fmtTimestamp(m.time) + '</span></div><div class="agent-msg-body collapsed" onclick="this.classList.toggle(\\'collapsed\\')">' + esc(m.body) + '</div></div>';
+  }).join('');
+}
+
+function renderAgentOutbox(msgs) {
+  if (!msgs || !msgs.length) return '<div class="diff-empty">No messages</div>';
+  return msgs.map(m => {
+    const cls = m.routed ? '' : ' pending';
+    return '<div class="agent-msg' + cls + '"><div class="agent-msg-header"><span class="agent-msg-sender">\\u2192 ' + esc(cap(m.recipient)) + '</span><span class="agent-msg-time">' + fmtTimestamp(m.time) + '</span></div><div class="agent-msg-body collapsed" onclick="this.classList.toggle(\\'collapsed\\')">' + esc(m.body) + '</div></div>';
+  }).join('');
+}
+
+function renderAgentLogs(data) {
+  const sessions = data && data.sessions ? data.sessions : [];
+  if (!sessions.length) return '<div class="diff-empty">No worklogs</div>';
+  return sessions.map((s, i) => {
+    const expanded = i === 0;
+    return '<div class="agent-log-session"><div class="agent-log-header" onclick="toggleLogSession(this)"><span class="agent-log-arrow' + (expanded ? ' expanded' : '') + '">\\u25B6</span>' + esc(s.filename) + '</div><div class="agent-log-content' + (expanded ? ' expanded' : '') + '">' + esc(s.content) + '</div></div>';
+  }).join('');
+}
+
+function toggleLogSession(header) {
+  const arrow = header.querySelector('.agent-log-arrow');
+  const content = header.nextElementSibling;
+  arrow.classList.toggle('expanded');
+  content.classList.toggle('expanded');
+}
+
+function renderAgentStatsPanel(s) {
+  if (!s) return '<div class="diff-empty">Stats unavailable</div>';
+  return '<div class="agent-stats-grid">' +
+    '<div class="agent-stat"><div class="agent-stat-label">Tasks done</div><div class="agent-stat-value">' + s.tasks_done + '</div></div>' +
+    '<div class="agent-stat"><div class="agent-stat-label">In review</div><div class="agent-stat-value">' + s.tasks_in_review + '</div></div>' +
+    '<div class="agent-stat"><div class="agent-stat-label">Total tasks</div><div class="agent-stat-value">' + s.tasks_total + '</div></div>' +
+    '<div class="agent-stat"><div class="agent-stat-label">Sessions</div><div class="agent-stat-value">' + s.session_count + '</div></div>' +
+    '<div class="agent-stat"><div class="agent-stat-label">Tokens (in/out)</div><div class="agent-stat-value">' + fmtTokens(s.total_tokens_in, s.total_tokens_out) + '</div></div>' +
+    '<div class="agent-stat"><div class="agent-stat-label">Total cost</div><div class="agent-stat-value">' + fmtCost(s.total_cost_usd) + '</div></div>' +
+    '<div class="agent-stat"><div class="agent-stat-label">Agent time</div><div class="agent-stat-value">' + fmtElapsed(s.agent_time_seconds) + '</div></div>' +
+    '<div class="agent-stat"><div class="agent-stat-label">Avg task time</div><div class="agent-stat-value">' + fmtElapsed(s.avg_task_seconds) + '</div></div>' +
+  '</div>';
+}
+
+async function switchAgentTab(tab) {
+  _agentCurrentTab = tab;
+  const panel = document.getElementById('diffPanel');
+  panel.querySelectorAll('.diff-tab').forEach(t => t.classList.toggle('active', t.dataset.dtab === tab));
+  const body = document.getElementById('diffPanelBody');
+  const name = _panelAgent;
+  if (!name) return;
+
+  // Use cached data if available
+  if (_agentTabData[tab]) {
+    _renderAgentTab(tab, _agentTabData[tab]);
+    return;
+  }
+
+  body.innerHTML = '<div class="diff-empty">Loading...</div>';
+  try {
+    let url = '/agents/' + name + '/' + tab;
+    const res = await fetch(url);
+    const data = await res.json();
+    _agentTabData[tab] = data;
+    _renderAgentTab(tab, data);
+  } catch(e) {
+    body.innerHTML = '<div class="diff-empty">Failed to load ' + tab + '</div>';
+  }
+}
+
+function _renderAgentTab(tab, data) {
+  const body = document.getElementById('diffPanelBody');
+  if (tab === 'inbox') body.innerHTML = renderAgentInbox(data);
+  else if (tab === 'outbox') body.innerHTML = renderAgentOutbox(data);
+  else if (tab === 'logs') body.innerHTML = renderAgentLogs(data);
+  else if (tab === 'stats') body.innerHTML = renderAgentStatsPanel(data);
+}
+
+async function openAgentPanel(agentName) {
+  _panelMode = 'agent';
+  _panelAgent = agentName;
+  _agentTabData = {};
+  _agentCurrentTab = 'inbox';
+  _diffData = null;
+
+  const panel = document.getElementById('diffPanel');
+  const backdrop = document.getElementById('diffBackdrop');
+
+  document.getElementById('diffPanelTitle').textContent = cap(agentName);
+  document.getElementById('diffPanelBranch').textContent = '';
+  document.getElementById('diffPanelCommits').innerHTML = '';
+  document.getElementById('diffPanelCommits').style.display = 'none';
+
+  // Fetch role for subtitle
+  try {
+    const r = await fetch('/agents');
+    const agents = await r.json();
+    const agent = agents.find(a => a.name === agentName);
+    if (agent) document.getElementById('diffPanelBranch').textContent = cap(agent.role);
+  } catch(e) {}
+
+  // Replace tabs with agent tabs
+  const tabsEl = panel.querySelector('.diff-panel-tabs');
+  tabsEl.innerHTML = '<button class="diff-tab active" data-dtab="inbox" onclick="switchAgentTab(\\'inbox\\')">Inbox</button>' +
+    '<button class="diff-tab" data-dtab="outbox" onclick="switchAgentTab(\\'outbox\\')">Outbox</button>' +
+    '<button class="diff-tab" data-dtab="logs" onclick="switchAgentTab(\\'logs\\')">Logs</button>' +
+    '<button class="diff-tab" data-dtab="stats" onclick="switchAgentTab(\\'stats\\')">Stats</button>';
+
+  document.getElementById('diffPanelBody').innerHTML = '<div class="diff-empty">Loading...</div>';
+  panel.classList.add('open');
+  backdrop.classList.add('open');
+
+  // Load inbox tab by default
+  switchAgentTab('inbox');
 }
 
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeDiffPanel();
+  if (e.key === 'Escape') closePanel();
 });
 
 async function sendMsg() {
