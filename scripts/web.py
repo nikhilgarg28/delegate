@@ -196,48 +196,71 @@ HTML_PAGE = """\
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Standup — Director Dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans/400.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans/500.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans/600.css">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e0e0e0; display: flex; flex-direction: column; }
-  .header { background: #1a1d28; padding: 16px 24px; border-bottom: 1px solid #2a2d3a; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
-  .header h1 { font-size: 20px; font-weight: 600; }
-  .tabs { display: flex; gap: 4px; margin-left: 32px; }
-  .tab { padding: 8px 16px; cursor: pointer; border-radius: 6px 6px 0 0; background: transparent; border: none; color: #888; font-size: 14px; }
-  .tab.active { background: #252836; color: #fff; }
-  .content { max-width: 960px; width: 100%; margin: 0 auto; padding: 24px; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  body { font-family: 'Geist Sans', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0b; color: #ededed; font-size: 14px; line-height: 1.5; letter-spacing: -0.01em; display: flex; flex-direction: column; -webkit-font-smoothing: antialiased; }
+  .header { background: #111113; padding: 14px 24px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+  .header h1 { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; color: #fafafa; }
+  .tabs { display: flex; gap: 2px; margin-left: 32px; }
+  .tab { padding: 7px 14px; cursor: pointer; border-radius: 6px; background: transparent; border: none; color: #666; font-family: inherit; font-size: 13px; font-weight: 500; transition: color 0.15s, background 0.15s; }
+  .tab:hover { color: #999; background: rgba(255,255,255,0.04); }
+  .tab.active { background: rgba(255,255,255,0.08); color: #fafafa; }
+  .content { max-width: 1000px; width: 100%; margin: 0 auto; padding: 24px; flex: 1; display: flex; flex-direction: column; min-height: 0; }
   .panel { display: none; }
   .panel.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
   /* Tasks */
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a2d3a; }
-  th { color: #888; font-weight: 500; font-size: 13px; text-transform: uppercase; }
-  .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 500; }
-  .badge-open { background: #1e3a2f; color: #4ade80; }
-  .badge-in_progress { background: #2a2520; color: #fbbf24; }
-  .badge-review { background: #1e2a3a; color: #60a5fa; }
-  .badge-done { background: #1a1d28; color: #888; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 13px; }
+  th { color: #555; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  td { color: #a1a1a1; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .badge { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; letter-spacing: 0.01em; }
+  .badge-open { background: rgba(52,211,153,0.12); color: #34d399; }
+  .badge-in_progress { background: rgba(251,191,36,0.12); color: #fbbf24; }
+  .badge-review { background: rgba(96,165,250,0.12); color: #60a5fa; }
+  .badge-done { background: rgba(255,255,255,0.06); color: #555; }
 
   /* Chat */
-  .chat-log { flex: 1; min-height: 0; overflow-y: auto; background: #1a1d28; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
-  .msg { margin-bottom: 8px; line-height: 1.5; }
-  .msg .sender { font-weight: 600; color: #60a5fa; }
-  .msg .event { color: #888; font-style: italic; }
-  .msg .time { color: #555; font-size: 12px; margin-right: 8px; }
+  .chat-log { flex: 1; min-height: 0; overflow-y: auto; background: #111113; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+  .msg { display: flex; gap: 12px; padding: 10px 12px; border-radius: 8px; margin-bottom: 2px; transition: background 0.15s; }
+  .msg:hover { background: rgba(255,255,255,0.02); }
+  .msg-avatar { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #fff; flex-shrink: 0; margin-top: 2px; }
+  .msg-body { flex: 1; min-width: 0; }
+  .msg-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+  .msg-sender { font-weight: 600; color: #ededed; font-size: 13px; }
+  .msg-recipient { color: #555; font-size: 12px; font-weight: 400; }
+  .msg-time { color: #444; font-size: 11px; font-variant-numeric: tabular-nums; margin-left: auto; flex-shrink: 0; }
+  .msg-content { color: #a1a1a1; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .msg-event { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px 12px; margin: 4px 0; }
+  .msg-event-line { flex: 1; height: 1px; background: rgba(255,255,255,0.06); }
+  .msg-event-text { color: #444; font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .chat-input { display: flex; gap: 8px; flex-shrink: 0; }
-  .chat-input input { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #2a2d3a; background: #1a1d28; color: #e0e0e0; font-size: 14px; }
-  .chat-input select { padding: 10px; border-radius: 8px; border: 1px solid #2a2d3a; background: #1a1d28; color: #e0e0e0; }
-  .chat-input button { padding: 10px 20px; border-radius: 8px; border: none; background: #3b82f6; color: white; font-weight: 500; cursor: pointer; }
-  .chat-input button:hover { background: #2563eb; }
+  .chat-input input { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: #111113; color: #ededed; font-family: inherit; font-size: 13px; outline: none; transition: border-color 0.15s; }
+  .chat-input input:focus { border-color: rgba(255,255,255,0.25); }
+  .chat-input input::placeholder { color: #444; }
+  .chat-input select { padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: #111113; color: #ededed; font-family: inherit; font-size: 13px; outline: none; cursor: pointer; }
+  .chat-input button { padding: 10px 20px; border-radius: 8px; border: none; background: #fafafa; color: #0a0a0b; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.15s; }
+  .chat-input button:hover { background: #d4d4d4; }
 
   /* Agents */
-  .agent-card { background: #1a1d28; border-radius: 8px; padding: 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 16px; }
-  .agent-name { font-weight: 600; min-width: 120px; }
-  .agent-status { font-size: 13px; color: #888; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
-  .dot-active { background: #4ade80; }
-  .dot-idle { background: #555; }
+  .agent-card { background: #111113; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 16px 20px; margin-bottom: 8px; display: flex; align-items: center; gap: 16px; transition: border-color 0.15s; }
+  .agent-card:hover { border-color: rgba(255,255,255,0.12); }
+  .agent-name { font-weight: 600; min-width: 120px; color: #ededed; font-size: 13px; }
+  .agent-status { font-size: 12px; color: #555; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+  .dot-active { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+  .dot-idle { background: #333; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
 </style>
 </head>
 <body>
@@ -266,6 +289,9 @@ function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
 function fmtStatus(s){return s.split('_').map(w=>cap(w)).join(' ');}
 function fmtTime(iso){const d=new Date(iso);return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});}
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+const _avatarColors=['#e11d48','#7c3aed','#2563eb','#0891b2','#059669','#d97706','#dc2626','#4f46e5'];
+function avatarColor(name){let h=0;for(let i=0;i<name.length;i++)h=name.charCodeAt(i)+((h<<5)-h);return _avatarColors[Math.abs(h)%_avatarColors.length];}
+function avatarInitial(name){return name.charAt(0).toUpperCase();}
 function switchTab(name) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -329,8 +355,9 @@ async function loadChat() {
   const msgs = await res.json();
   const log = document.getElementById('chatLog');
   log.innerHTML = msgs.map(m => {
-    if (m.type === 'event') return `<div class="msg"><span class="time">${fmtTime(m.timestamp)}</span><span class="event">${esc(m.content)}</span></div>`;
-    return `<div class="msg"><span class="time">${fmtTime(m.timestamp)}</span><span class="sender">${cap(m.sender)} \u2192 ${cap(m.recipient)}:</span> ${esc(m.content)}</div>`;
+    if (m.type === 'event') return `<div class="msg-event"><span class="msg-event-line"></span><span class="msg-event-text">${fmtTime(m.timestamp)} \u2002${esc(m.content)}</span><span class="msg-event-line"></span></div>`;
+    const c = avatarColor(m.sender);
+    return `<div class="msg"><div class="msg-avatar" style="background:${c}">${avatarInitial(m.sender)}</div><div class="msg-body"><div class="msg-header"><span class="msg-sender">${cap(m.sender)}</span><span class="msg-recipient">\u2192 ${cap(m.recipient)}</span><span class="msg-time">${fmtTime(m.timestamp)}</span></div><div class="msg-content">${esc(m.content)}</div></div></div>`;
   }).join('');
   log.scrollTop = log.scrollHeight;
 
