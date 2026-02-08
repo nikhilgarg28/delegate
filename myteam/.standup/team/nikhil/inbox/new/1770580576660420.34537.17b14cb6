@@ -1,0 +1,7 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T19:56:16.193671Z
+---
+Done — created T0042 (chat message truncation with expand/collapse) and assigned to mark. Messages will be clamped to 3 lines with a 'Show more' toggle for long ones. CSS line-clamp approach, clean and simple.
+
+Also just merged T0039 (notification sounds) — the mute toggle 🔔/🔕 is now in the header, sounds play on new messages and task completions, persisted to localStorage.

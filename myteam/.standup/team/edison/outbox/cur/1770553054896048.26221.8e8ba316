@@ -1,0 +1,5 @@
+sender: edison
+recipient: john
+time: 2026-02-08T12:17:34.895789Z
+---
+T0025 assigned to you: Fix the zero token counts bug. All tasks show 0 tokens/cost in the dashboard. T0010 added debug logging but never fixed the root cause. Investigate _collect_tokens_from_message in scripts/agent.py and the SDK client to figure out why usage data isn't being captured. Check agent logs for debug output. Mark will review. Branch: standup-ui/john/0025-fix-token-counts

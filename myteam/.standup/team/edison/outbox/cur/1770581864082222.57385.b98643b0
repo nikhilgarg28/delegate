@@ -1,0 +1,13 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T20:17:44.081753Z
+---
+Second ping — nikhil is asking about T0038 progress. The diff panel (T0037) has been merged for a while now, so you're unblocked. Please respond with your status ASAP.
+
+If you haven't started, please begin immediately:
+- T0038: Wire up diff panel to task details (branch display, clickable commits, View Changes button)
+- Note: bob's T0037 already added a 'View Diff' button in the task row, so check existing code before adding duplicates
+- Branch: alice/standup-ui/038-wire-diff-panel
+- Base off current HEAD: bob/standup-ui/046-agent-detail-panel (commit 7732337)
+
+T0040 (light/dark theme) can wait until T0038 is done.

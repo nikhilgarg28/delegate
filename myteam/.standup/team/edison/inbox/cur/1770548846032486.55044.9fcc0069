@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T11:07:25.485393Z
+---
+Finally, third reminder of a task - I think the script that computes tokens taken by an agent isn't working - I only see token counts of zero for all tasks? Can you please ack on this when done?

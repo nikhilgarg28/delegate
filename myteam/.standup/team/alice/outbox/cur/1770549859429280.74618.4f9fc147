@@ -1,0 +1,15 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T11:24:19.428921Z
+---
+APPROVED — T0016 on standup-ui/bob/0016-reviewer-field.
+
+Review notes:
+
+- **Schema**: reviewer field added cleanly to create_task dict and signature. Positioned after assignee — makes sense logically.
+- **Backward compat**: get_task() uses task.setdefault('reviewer', '') so existing task files without the field won't break. Good pattern.
+- **set_reviewer()**: Follows same pattern as assign_task() — update + log_event with capitalize(). Consistent.
+- **CLI**: New 'reviewer' subcommand with reviewer_name positional arg. Clean.
+- **Log event**: Uses .capitalize() matching T0011 convention. Consistent.
+
+All 176 tests pass. Sending to QA.

@@ -1,0 +1,21 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T19:24:23.187542Z
+---
+T0034 done — relative timestamps in the web UI. Here's what I did:
+
+1. **Added shared fmtTimestamp(iso)** — returns 'just now' (<1 min), 'N min ago' (1-59 min), absolute time '14:23' (1-24 hrs), or 'Feb 7, 14:23' (older). Returns '—' for null/empty.
+
+2. **Replaced all 4 timestamp sites:**
+   - Chat message .msg-time: fmtTime → fmtTimestamp
+   - Event .msg-event-text: fmtTime → fmtTimestamp
+   - Task created_at in _taskRowHtml and _updateTaskRowInPlace: inline fmtDate → fmtTimestamp
+   - Task completed_at in both locations: inline fmtDate → fmtTimestamp
+
+3. **Removed both duplicated inline fmtDate() arrow functions** (were defined separately in _taskRowHtml and _updateTaskRowInPlace). Code smell cleaned up.
+
+4. **Added 30-second periodic refreshTimestamps()** that updates all elements with class 'ts' and data-ts attribute — lightweight DOM-only update, no data fetch. All timestamp elements now carry data-ts attributes.
+
+5. **fmtElapsed() untouched** as specified. fmtTime() kept (defined but no longer called) in case needed later.
+
+All 278 tests pass. Ready for review.

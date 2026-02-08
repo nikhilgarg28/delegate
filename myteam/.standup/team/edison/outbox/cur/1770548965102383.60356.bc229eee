@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:09:25.102136Z
+---
+T0009 assigned to you: Separate sender/recipient chat filters + include director. Two changes: (1) Replace the single filter dropdown with two dropdowns — "From" for sender and "To" for recipient. (2) Include "nikhil" (the director) in both filter dropdowns — currently excluded because /agents skips role=director. Populate filter options from unique senders/recipients in the messages data rather than from /agents. Bob will review. Key file: scripts/web.py. Message me when done.

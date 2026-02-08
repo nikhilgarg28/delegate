@@ -1,0 +1,28 @@
+id: 29
+title: Charter variant system
+description: "Build the mechanism to define, load, and apply charter variants for\
+  \ eval runs.\n\nA charter variant is a directory of .md files that override the\
+  \ default charter templates. Structure:\n  scripts/charter/variants/<variant-name>/\n\
+  \    constitution.md  (optional \u2014 only include files that differ from default)\n\
+  \    task-management.md\n    etc.\n\nImplement in scripts/eval.py (new file, follow\
+  \ existing module pattern \u2014 public functions + argparse CLI + logging):\n\n\
+  1. load_variant(variant_name) -> dict of {filename: content} \u2014 reads a variant\
+  \ directory, falls back to default charter for any missing files\n2. bootstrap_with_variant(root,\
+  \ variant_name, manager, director, agents) \u2014 wraps existing bootstrap() then\
+  \ overwrites charter files with the variant's versions\n3. list_variants() -> list\
+  \ of available variant names\n\nCreate 2 sample variants to demonstrate the system:\n\
+  - variants/ship-fast/: relaxed constitution (skip tests for glue code, shorter reviews,\
+  \ higher risk tolerance)\n- variants/quality-first/: strict constitution (mandatory\
+  \ tests for everything, thorough reviews, no shortcuts)\n\nAdd tests in tests/test_eval.py\
+  \ covering load_variant() and bootstrap_with_variant().\n\nCode lives in /Users/nikhil/dev/standup/.\
+  \ The existing bootstrap function is in scripts/bootstrap.py \u2014 import and wrap\
+  \ it, don't duplicate.\nMessage edison when done."
+status: done
+assignee: alice
+reviewer: ''
+project: eval-harness
+priority: high
+created_at: '2026-02-08T18:00:45.528047Z'
+updated_at: '2026-02-08T19:17:57.212232Z'
+completed_at: '2026-02-08T19:17:57.210127Z'
+depends_on: []

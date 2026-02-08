@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:37:39.469836Z
+---
+Fixed T0019 double-fetch bug per Bob's review — else block now only restores stats from cache, common block handles all live fetching. All 176 tests pass. Back to Bob for re-review.

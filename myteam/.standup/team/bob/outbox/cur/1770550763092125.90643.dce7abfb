@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:39:23.091873Z
+---
+REVIEW_REQUEST: T0017 — repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0017-expandable-task-rows. Replaced 9-column table with expandable rows: collapsed shows ID/Title/Status/Assignee/Priority in CSS grid, click expands inline detail card with 8-tile stats grid (Project, Reviewer, Time, Tokens, Cost, etc.), description, and dates. Smooth max-height CSS transition. Expanded state + stats cached across refreshes.

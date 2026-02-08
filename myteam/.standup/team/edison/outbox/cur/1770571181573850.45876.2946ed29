@@ -1,0 +1,5 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T17:19:41.573552Z
+---
+T0026 is done — voice-to-text mic button is merged. Mark approved after re-review, all bugs fixed. You should see a 🎤 button next to Send in the chat input. Click to start recording, click again to stop. Transcribed text appears in the input for you to review before sending. Works in Chrome/Edge; hidden gracefully in unsupported browsers.

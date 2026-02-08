@@ -1,0 +1,17 @@
+id: 20
+title: Add lifetime messages sent/received to agent stats
+description: 'Add sent and received message counts to the agent stats card. Query
+  the messages table: COUNT where sender=agent (sent) and COUNT where recipient=agent
+  (received). Either add to the existing /agents/{name}/stats endpoint or compute
+  client-side from /messages data. Display in the expanded agent card alongside existing
+  stats. Key files: scripts/web.py (frontend), scripts/chat.py (backend query if adding
+  to endpoint).'
+status: done
+assignee: bob
+reviewer: ''
+project: standup-ui
+priority: medium
+created_at: '2026-02-08T11:32:22.742459Z'
+updated_at: '2026-02-08T11:37:06.924567Z'
+completed_at: '2026-02-08T11:37:06.923550Z'
+depends_on: []

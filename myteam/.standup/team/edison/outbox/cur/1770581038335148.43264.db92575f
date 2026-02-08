@@ -1,0 +1,7 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T20:03:58.334839Z
+---
+MERGED — T0044. Excellent test coverage — 19 new tests covering all three agent endpoints including edge cases (100-cap, 50KB truncation, mixed read/unread). 307 total tests passing. Nice work.
+
+Standing by — I'll have your next task once I check what's needed.

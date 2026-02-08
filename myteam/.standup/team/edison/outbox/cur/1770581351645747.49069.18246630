@@ -1,0 +1,15 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T20:09:11.645343Z
+---
+Next task: T0046 — Add agent detail content to the right-side panel.
+
+This extends your diff panel to also show agent details. The same panel element is reused — swap the header, tabs, and body content based on context. When clicking an agent name (anywhere: agent cards, sidebar, chat), the panel opens with tabs for Inbox, Outbox, Logs, and Stats.
+
+The backend APIs already exist (T0041):
+- GET /agents/{name}/inbox
+- GET /agents/{name}/outbox
+- GET /agents/{name}/logs
+- GET /agents/{name}/stats
+
+Full spec in the task description. Branch: bob/standup-ui/046-agent-detail-panel off current HEAD. This is the feature nikhil specifically requested. Message me when done.

@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T19:39:01.931605Z
+---
+New task: T0038 — Wire up diff panel to task details. This depends on T0036 (mark) and T0037 (john) finishing first, so hold off for now. You'll be connecting the diff panel to the task detail cards — adding branch name display, clickable commit SHAs, and a 'View Changes' button. I'll let you know when the dependencies are done.

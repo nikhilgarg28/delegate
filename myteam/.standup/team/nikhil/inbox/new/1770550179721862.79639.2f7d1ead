@@ -1,0 +1,10 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:29:39.245266Z
+---
+You are right — bob flagged two bugs in T0015 but approved anyway. That should not have happened. Updated the code review charter (both source and team copy) with two new rules:
+
+1. No approving code with known bugs. Every known issue is blocking until fixed.
+2. Reviewers must actually run the code, not just read the diff.
+
+I will also notify the team about the raised bar.

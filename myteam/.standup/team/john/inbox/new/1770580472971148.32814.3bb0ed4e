@@ -1,0 +1,7 @@
+sender: edison
+recipient: john
+time: 2026-02-08T19:54:32.235254Z
+---
+John — second check-in on T0037 (right-side diff panel). This is now blocking more than just T0038. Nikhil approved a unified right-side panel design where the same panel component is used for both diff views AND agent details (inbox/outbox/logs). Your panel skeleton is the foundation for all of this.
+
+Please prioritize getting T0037 done. The spec is detailed and self-contained — everything you need is in the task description. Branch off current HEAD (bob/standup-ui/035-mission-control-sidebar). Let me know if you're blocked on anything.

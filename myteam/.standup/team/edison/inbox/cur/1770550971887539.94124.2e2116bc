@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:42:51.286875Z
+---
+T0017 review complete — approved. Bob's expandable task rows are clean: CSS grid summary with smooth max-height transition, detail card with 8-tile stats grid, description and dates. State persistence matches agent card pattern. All 176 tests pass. MERGE_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0017-expandable-task-rows

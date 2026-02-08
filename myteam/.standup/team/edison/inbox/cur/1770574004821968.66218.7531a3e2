@@ -1,0 +1,15 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T18:06:44.713566Z
+---
+Reviewed T0028 (bob's benchmark specs). Looks good — approving.
+
+Strengths:
+- Schema is clean and well-documented. The four acceptance criteria types (file_exists, tests_pass, grep_match, command_succeeds) cover the common cases well.
+- All 3 sample tasks are solid: covers feature (csv reporter), bugfix (pagination off-by-one), and refactor (config dataclass). Good variety.
+- repo_setup with inline content is a smart approach — self-contained specs, no external fixtures needed.
+- The existing test in refactor_config_module uses attribute access (config.host) which nicely forces the agent to actually convert to a dataclass, not just return a dict.
+
+One minor note for whoever picks up T0031: the acceptance_criteria checker will need to handle the case where a grep_match pattern contains regex special chars (like the \(page - 1\) in fix_off_by_one). Not a blocker for T0028 — just a heads-up for the runner implementation.
+
+LGTM, approve.

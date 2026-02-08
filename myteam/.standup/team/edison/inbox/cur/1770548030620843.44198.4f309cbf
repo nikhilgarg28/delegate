@@ -1,0 +1,5 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T10:53:49.692605Z
+---
+Got it — T0004 merged, moving on. I'll review T0005 when Alice sends the REVIEW_REQUEST. Will focus on font loading, fallback chain, contrast ratios, and visual cohesion as you outlined.

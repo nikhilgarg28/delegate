@@ -1,0 +1,49 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T17:53:59.944583Z
+---
+Good points — three threads here:
+
+**1. Manager interactivity / director simulation**
+
+I'd lean toward having Claude act as a simulated director rather than disabling manager questions entirely. Here's why:
+
+- Disabling manager questions changes the charter behavior itself — you'd be testing 'charter + no clarification allowed' rather than just the charter. That's a confounding variable.
+- A simulated director (a separate Claude instance with a fixed persona + the task spec) keeps the interaction pattern realistic. The manager asks questions, the sim-director answers based on the task brief. This tests how well the charter guides the team through a realistic workflow.
+- The sim-director prompt can be standardized: 'You are a director. Here is the task spec. Answer questions from the manager based only on this spec. Do not volunteer extra information.' That keeps it consistent across runs.
+- Cost is minimal — the sim-director would only fire when the manager sends a message, and responses are short.
+
+**2. Code quality evaluation — three tiers**
+
+**Tier 1: Automated (cheapest, most objective)**
+- Tests pass/fail (we already have this via QA)
+- Linting score (run ruff/flake8/eslint on the diff, count violations)
+- Type checking (mypy/pyright error count)
+- Code complexity (radon for cyclomatic complexity on changed functions)
+- Diff size (lines added/removed/changed — smaller is often better for same outcome)
+- These are all scriptable and deterministic. Build them into the harness runner.
+
+**Tier 2: LLM-as-judge (moderate cost, decent signal)**
+- Feed each task's git diff + the task spec to a separate Claude instance acting as a code reviewer
+- Use a structured rubric: correctness (1-5), readability (1-5), idiomatic style (1-5), test quality (1-5), over-engineering (1-5)
+- The judge prompt is fixed across all runs, so bias is consistent even if not zero
+- This is the sweet spot — captures things linting can't (naming quality, architectural fit, unnecessary complexity) without requiring your manual review
+- Run the judge 2-3 times per diff and average to reduce noise
+
+**Tier 3: Human review (most expensive, highest signal)**
+- Your manual scoring, but structured: same rubric as tier 2, score each diff blind (don't know which charter variant produced it)
+- Only worth doing on a small sample to validate that the LLM-judge correlates with your judgment
+- If LLM-judge and human scores correlate well on 10-15 diffs, you can trust the LLM-judge for the full suite
+
+**My recommendation:** Build tier 1 into the harness from day one (it's just a few shell commands). Add tier 2 (LLM-as-judge) as a post-processing step. Use tier 3 sparingly to calibrate.
+
+**3. Putting it together — revised harness architecture**
+
+- Bootstrap fresh team with charter variant
+- Sim-director seeds tasks from benchmark suite
+- Sim-director answers manager questions from task spec
+- Agents work, QA reviews, tasks complete (or timeout)
+- Post-run: collect metrics from db.sqlite + run tier 1 automated checks on git diffs + run tier 2 LLM-judge on diffs
+- Output: scorecard per variant
+
+Want me to start scoping this into a project with tasks?

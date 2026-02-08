@@ -1,0 +1,19 @@
+id: 17
+title: 'Expandable task rows: collapsed summary + expanded detail card'
+description: "Redesign the Tasks table with expandable rows. Collapsed row (5 columns):\
+  \ ID, Title, Status, Assignee, Priority. Click to expand inline into a detail card\
+  \ showing: Reviewer, Project, Time, Tokens (in/out), Cost, Description, Created/Completed\
+  \ dates. Click again or click another row to collapse. Smooth CSS transition (max-height\
+  \ or similar). The expanded card should use a subtle background and border to distinguish\
+  \ from the table. Filters (T0012) should remain above the table. Key file: scripts/web.py\
+  \ \u2014 rewrite loadTasks() and add CSS for expanded state. Depends on T0016 (reviewer\
+  \ field) being available."
+status: done
+assignee: bob
+project: standup-ui
+priority: high
+created_at: '2026-02-08T11:21:56.828314Z'
+updated_at: '2026-02-08T11:42:57.221303Z'
+completed_at: '2026-02-08T11:42:57.220156Z'
+depends_on: []
+reviewer: ''

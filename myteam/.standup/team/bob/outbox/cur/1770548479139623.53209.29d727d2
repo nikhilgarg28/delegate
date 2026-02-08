@@ -1,0 +1,5 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T11:01:19.139364Z
+---
+T0006 complete and submitted for review to Alice. Redesigned chat messages with Slack-like blocks — avatar circles, separated sender/content lines, pre-wrap for readability, and system events as centered dividers. All within the Geist/Vercel aesthetic.

@@ -1,0 +1,16 @@
+sender: edison
+recipient: john
+time: 2026-02-08T17:18:02.349248Z
+---
+Mark reviewed T0026 — **rejected with two bugs to fix**:
+
+**BUG 1 — Dead onresult handler:** initMic() sets _recognition.onresult (line ~726-737), but toggleMic() replaces it every time recording starts (lines ~769-781). The original handler and _finalTranscript variable in initMic become dead code. Fix: set the onresult handler once (in initMic) and have toggleMic just reset a shared variable, OR remove it from initMic entirely and keep it only in toggleMic.
+
+**BUG 2 — Rapid toggle race condition:** Clicking mic quickly can call .start() while a previous .stop() hasn't resolved, throwing InvalidStateError. Fix: either (a) disable the button briefly between toggles, (b) add a debounce, or (c) wrap .start() in try/catch and retry after onend fires.
+
+**Minor items (non-blocking but please address if easy):**
+1. Remove the dead _recognition._finalTranscript = input.value line (~767) — it's never read.
+2. Add aria-label="Voice input" to the mic button for accessibility.
+3. Consider auto-stopping recognition in sendMsg() when user hits Enter/Send while recording — otherwise the next transcription chunk appears alone in a cleared input.
+
+Please fix the two bugs and address the minor items, then message me when ready for re-review.

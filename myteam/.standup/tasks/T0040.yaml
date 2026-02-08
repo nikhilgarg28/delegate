@@ -1,0 +1,55 @@
+id: 40
+title: Add system-default light/dark theme support
+description: "Replace the hardcoded dark theme with a system-default light/dark theme\
+  \ using CSS prefers-color-scheme media query. The UI should automatically match\
+  \ the user's OS setting.\n\n## Approach\n\nUse CSS custom properties (variables)\
+  \ defined at the :root level, with a @media (prefers-color-scheme: dark) override.\
+  \ This is the cleanest approach \u2014 define all colors as variables once, override\
+  \ them for dark mode, and reference variables throughout.\n\n## CSS Variable Structure\n\
+  \nDefine these variables on :root (light mode defaults) and override in @media (prefers-color-scheme:\
+  \ dark):\n\n### Backgrounds\n--bg-body: light=#ffffff, dark=#0a0a0b\n--bg-surface:\
+  \ light=#f8f8f8, dark=#111113\n--bg-sidebar: light=#f3f3f5, dark=#0d0d0f\n--bg-hover:\
+  \ light=rgba(0,0,0,0.03), dark=rgba(255,255,255,0.02)\n--bg-active: light=rgba(0,0,0,0.06),\
+  \ dark=rgba(255,255,255,0.08)\n--bg-input: light=#ffffff, dark=#111113\n\n### Text\n\
+  --text-primary: light=#1a1a1a, dark=#ededed\n--text-secondary: light=#6b6b6b, dark=#a1a1a1\n\
+  --text-muted: light=#999999, dark=#555\n--text-faint: light=#bbbbbb, dark=#444\n\
+  \n### Borders\n--border-default: light=rgba(0,0,0,0.08), dark=rgba(255,255,255,0.08)\n\
+  --border-subtle: light=rgba(0,0,0,0.04), dark=rgba(255,255,255,0.04)\n--border-input:\
+  \ light=rgba(0,0,0,0.15), dark=rgba(255,255,255,0.1)\n--border-focus: light=rgba(0,0,0,0.3),\
+  \ dark=rgba(255,255,255,0.25)\n\n### Accents (same in both themes)\n--accent-blue:\
+  \ #60a5fa\n--accent-green: #22c55e (status dot working)\n--accent-green-glow: rgba(34,197,94,0.4)\n\
+  \n### Status badges (same in both themes \u2014 they use semi-transparent backgrounds)\n\
+  Keep the existing badge colors as-is \u2014 rgba(52,211,153,0.12) etc. work well\
+  \ on both light and dark.\n\n### Button (invert for light)\n--btn-bg: light=#1a1a1a,\
+  \ dark=#fafafa\n--btn-text: light=#ffffff, dark=#0a0a0b\n--btn-hover: light=#333333,\
+  \ dark=#d4d4d4\n\n### Scrollbar\n--scrollbar-thumb: light=rgba(0,0,0,0.12), dark=rgba(255,255,255,0.1)\n\
+  --scrollbar-hover: light=rgba(0,0,0,0.2), dark=rgba(255,255,255,0.18)\n\n## Implementation\
+  \ Steps\n\n1. Add :root { } block at the top of <style> with all light-mode variable\
+  \ definitions\n2. Add @media (prefers-color-scheme: dark) { :root { } } block with\
+  \ dark overrides\n3. Replace ALL hardcoded color values in CSS with var(--name)\
+  \ references\n4. The avatar color palette (_avatarColors in JS) should stay as-is\
+  \ \u2014 those colors are vibrant enough for both themes\n5. The status badge colors\
+  \ (badge-open, badge-in_progress, badge-review, badge-done) use semi-transparent\
+  \ backgrounds that work on both themes \u2014 keep them\n6. For inline styles in\
+  \ JS (e.g., color:#444 in loading placeholders), replace with CSS classes or use\
+  \ var() references\n\n## Important Notes\n\n- Do NOT add a manual toggle. Use ONLY\
+  \ prefers-color-scheme to match system setting.\n- The sidebar dots (.dot-working\
+  \ green, .dot-queued blue, .dot-offline) should work in both themes \u2014 green/blue\
+  \ are fine on both, but the gray offline dot (#333) needs to be lighter in light\
+  \ mode. Add --dot-offline: light=#ccc, dark=#333.\n- Test that the msg-avatar circles\
+  \ (colored backgrounds with white text) remain readable in light mode.\n- The chat-input\
+  \ button (currently white bg on dark) should invert for light mode (dark bg on light).\n\
+  \nAll changes in scripts/web.py.\nBranch convention: alice/standup-ui/040-light-dark-theme\n\
+  Code lives in /Users/nikhil/dev/standup/.\nMessage edison when done."
+status: done
+assignee: mark
+reviewer: ''
+project: standup-ui
+priority: high
+created_at: '2026-02-08T19:49:38.439346Z'
+updated_at: '2026-02-08T20:43:15.984316Z'
+completed_at: '2026-02-08T20:43:15.981266Z'
+depends_on: []
+branch: mark/standup-ui/040-light-dark-theme
+commits:
+- 0b367d7

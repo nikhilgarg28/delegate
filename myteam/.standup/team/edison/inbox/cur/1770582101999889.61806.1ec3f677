@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T20:21:41.766303Z
+---
+I'm confused - here is how I imagine this. There is a ground truth project repo (in our case inside ~/dev/standup. Then each agent inside ~/dev/standup/myteam/.standup have their own clone of the repo which is totally independent from the main repo? Agent begins by checking out main of origin, makes a local branch, does work on it and eventually raises PR via QA agent who merges the branch in main of origin. Is that not what we are doing? If so, what's the fix? Can you please make the fix both in ~/dev/standup as well as your copy of the scripts/charter inside myteam

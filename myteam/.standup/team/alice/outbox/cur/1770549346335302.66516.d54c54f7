@@ -1,0 +1,7 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:15:46.335069Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/alice/0011-capitalize-log-events
+
+T0011: Capitalize statuses, names, and priorities in task.py log_event calls. Bob reviewed and approved. Three one-line fixes in scripts/task.py + two test updates in tests/test_task.py. All 176 tests pass. Ready to merge.

@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:23:49.704347Z
+---
+Bob finished T0016 (reviewer field on tasks). Please review when you can — T0017 (expandable task rows) depends on it.

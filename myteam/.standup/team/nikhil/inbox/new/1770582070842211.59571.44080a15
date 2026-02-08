@@ -1,0 +1,21 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T20:21:10.243434Z
+---
+Progress update:
+
+**MERGED T0046** (bob) — Agent detail panel. Clicking agent names anywhere (sidebar, agents tab, chat sender names) opens a right-side panel with Inbox, Outbox, Logs, and Stats tabs. Reuses the diff panel element with mode switching. 274/274 tests pass.
+
+**MERGED T0043** (mark) — Mute SVG icon + mic button. Clean inline SVG speaker icons (with/without waves/X), and voice-to-text mic button using Web Speech API with recording pulse animation. 274/274 tests pass.
+
+**Issue found:** During T0043 review I discovered that T0039's notification sound code was orphaned — its commit exists on an isolated branch but never made it into the mainline. The mute toggle works visually but there are no sound functions to control. Created T0048 (HIGH priority, assigned to bob) to re-incorporate the Web Audio sound synthesis code.
+
+**Re: branch contamination** — the root cause is the shared working tree. The 'orphaned T0039' is a more severe variant: the branch got merged but its content was lost because subsequent branches were based on a different ancestor. I'll be more careful about verifying commit ancestry when merging.
+
+**Alice:** Still no response to two pings about T0038/T0040. Will escalate shortly.
+
+Current assignments:
+- **bob**: T0048 (notification sounds re-incorporation) — high priority
+- **mark**: T0047 (event format refinement per your feedback)
+- **alice**: T0038 + T0040 — unresponsive
+- **john**: unresponsive — no tasks

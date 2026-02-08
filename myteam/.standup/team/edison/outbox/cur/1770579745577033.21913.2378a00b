@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T19:42:25.576637Z
+---
+Heads up: T0036 (data model) is merged. T0037 (diff panel UI, john) is still in progress. Once john finishes T0037, you can start T0038 (wiring them together).

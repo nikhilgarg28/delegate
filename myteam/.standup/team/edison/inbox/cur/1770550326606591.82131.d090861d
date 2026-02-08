@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T11:32:06.324771Z
+---
+Couple more things - on agents page, when I expand a row inline, it flickers - are we doing lots of page reloads or something? Can that be fixed? Also, can we please add number of lifetime messages received/sent for each agent?

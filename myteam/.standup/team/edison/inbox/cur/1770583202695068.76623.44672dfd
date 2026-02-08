@@ -1,0 +1,35 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T20:40:01.760190Z
+---
+T0040 ready for review — commit 0b367d7 on branch mark/standup-ui/040-light-dark-theme.
+
+Summary of changes (scripts/web.py only, 172 insertions / 103 deletions):
+
+1. Added :root { } block with 32 light-mode CSS variable definitions (backgrounds, text, borders, accents, buttons, scrollbar, diff colors, etc.)
+
+2. Added @media (prefers-color-scheme: dark) { :root { } } block with all dark-mode overrides matching the original hardcoded dark theme
+
+3. Replaced ~103 hardcoded hex/rgba color values across ALL CSS sections with var() references:
+   - Body, header, sidebar (bg, text, borders, stat rows, agent/task lists)
+   - Tabs (inactive, hover, active states)
+   - Task panel (rows, detail grid, labels, values, descriptions, dates, VCS branch pills)
+   - Chat (log bg, messages, events, input, select, send button, placeholder)
+   - Agents (cards, stats grid, status dots)
+   - Filters (selects, checkboxes, labels)
+   - Diff panel (panel bg, header, tabs, file headers, hunks, add/del/ctx lines, gutter, file list, backdrop)
+   - Agent panel (messages, logs, stats)
+   - Mute toggle, mic button, scrollbar
+
+4. Replaced inline JS style colors (loading placeholders, empty states) with var() references
+
+5. Key theme decisions per spec:
+   - No manual toggle — system prefers-color-scheme only
+   - Avatar palette (_avatarColors) unchanged — vibrant on both themes
+   - Badge colors (open/in_progress/review) unchanged — semi-transparent works on both
+   - badge-done uses var(--bg-active)/var(--text-muted) for both themes
+   - --dot-offline: #ccc (light) / #333 (dark)
+   - Send button inverts: dark bg on light / white bg on dark
+   - Diff add/del colors adapted: darker greens/reds for light, pastels for dark
+
+274/274 tests pass.

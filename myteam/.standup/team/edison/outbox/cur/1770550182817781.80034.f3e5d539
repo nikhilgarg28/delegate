@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:29:42.817516Z
+---
+Charter update: code review standards raised. Two new rules — (1) no approving with known bugs, every issue is blocking until fixed, (2) actually run the code during review, do not just read the diff. The T0015 approval with known bugs should not have happened. Please re-read .standup/charter/code-review.md.

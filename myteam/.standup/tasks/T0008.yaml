@@ -1,0 +1,21 @@
+id: 8
+title: 'Fix chat auto-scroll: only scroll to bottom when user is near bottom'
+description: "Currently loadChat() unconditionally does log.scrollTop = log.scrollHeight\
+  \ (web.py line 391) on every 2-second refresh. This yanks the user back to the bottom\
+  \ even when they are scrolled up reading older messages.\n\nFix: Before updating\
+  \ innerHTML, check if the user is already near the bottom (e.g. within 100px). Only\
+  \ auto-scroll after the update if they were near the bottom. Something like:\n\n\
+  \  const log = document.getElementById(\"chatLog\");\n  const wasNearBottom = log.scrollHeight\
+  \ - log.scrollTop - log.clientHeight < 100;\n  // ... update innerHTML ...\n  if\
+  \ (wasNearBottom) log.scrollTop = log.scrollHeight;\n\nThis is a 3-line change in\
+  \ the loadChat() function in scripts/web.py (around line 385-391). Check the measurement\
+  \ BEFORE updating innerHTML, apply scroll AFTER.\n\nKey file: scripts/web.py line\
+  \ 385-391 in the loadChat() JS function."
+status: done
+assignee: bob
+project: standup-ui
+priority: high
+created_at: '2026-02-08T11:04:00.094048Z'
+updated_at: '2026-02-08T11:16:18.081473Z'
+completed_at: '2026-02-08T11:16:18.080272Z'
+depends_on: []

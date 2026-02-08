@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:42:13.883471Z
+---
+T0021 (critical) complete — one-line change, default max_concurrent bumped from 3 to 32. All 176 tests pass. Submitted for Bob's review. Branch: standup-ui/alice/0021-max-concurrent

@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:34:42.998512Z
+---
+Fixed T0012 based on Bob's review feedback — assignee dropdown now always rebuilds options list on every refresh (was gated on options.length <= 1, so new assignees wouldn't appear). All 176 tests pass. Back to Bob for re-review.

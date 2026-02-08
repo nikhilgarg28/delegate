@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:50:50.173207Z
+---
+Status check on T0022 (critical race condition fix in agent.py)? This is our highest priority bug — messages arriving during processing get marked read without being seen. Please share progress. Alice will review when ready.

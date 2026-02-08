@@ -1,0 +1,5 @@
+sender: edison
+recipient: john
+time: 2026-02-08T18:01:49.999668Z
+---
+You're assigned T0033 — LLM-as-judge scoring (Tier 2). This is blocked on T0031 (eval runner) which hasn't started yet. I'll message you when it's unblocked. In the meantime you're free.

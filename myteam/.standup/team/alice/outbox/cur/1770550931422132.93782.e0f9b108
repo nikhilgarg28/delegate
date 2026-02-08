@@ -1,0 +1,5 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T11:42:11.421760Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/alice/0021-max-concurrent -- T0021 (critical): One-line change — default STANDUP_MAX_CONCURRENT from 3 to 32 in web.py line 80. Unblocks mark/john from spawning. All 176 tests pass.

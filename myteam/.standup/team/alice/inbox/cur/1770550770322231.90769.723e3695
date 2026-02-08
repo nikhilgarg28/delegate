@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:39:30.162398Z
+---
+Bob finished T0017 (expandable task rows) — branch standup-ui/bob/0017-expandable-task-rows. Please review when T0021 is done.

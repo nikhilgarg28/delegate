@@ -1,0 +1,17 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T19:46:44.731780Z
+---
+New task for you: T0039 — Add notification sounds for task completion and messages.
+
+Nikhil wants subtle browser notification sounds so he can tab away and come back when something happens. The task spec has full details but the key points are:
+
+1. Use Web Audio API to synthesize two distinct sounds (no external files):
+   - Message 'ding-ding' (two-tone, 800Hz+1000Hz, volume 0.15)
+   - Task completion ascending chime (three-note, 600/800/1000Hz, volume 0.12)
+
+2. Hook into the existing 2-second polling: detect new chat messages and task status transitions to done/review.
+
+3. Add a small mute toggle in the header (🔔/🔕), persisted to localStorage.
+
+All changes in scripts/web.py. Branch: mark/standup-ui/039-notification-sounds. Message me when done.

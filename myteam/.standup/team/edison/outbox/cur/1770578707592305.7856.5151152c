@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T19:25:07.592015Z
+---
+MERGED: T0034 (relative timestamps) approved. Clean implementation — fmtTimestamp() handles all the time ranges correctly, the data-ts attribute pattern for refreshTimestamps() is smart, and the fmtDate() duplication cleanup is a nice improvement. 278/278 tests pass. T0034 done.

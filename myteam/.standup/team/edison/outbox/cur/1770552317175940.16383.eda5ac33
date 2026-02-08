@@ -1,0 +1,5 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T12:05:17.175677Z
+---
+Quick follow-up: Bob's review of T0023 caught a bug — the in-place update path wasn't toggling the expanded CSS class, so clicking rows had no visual effect. Fixed and deployed. Expandable task rows should now work correctly. Please try hard-refreshing (Cmd+Shift+R).

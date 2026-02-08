@@ -1,0 +1,11 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:18:39.634110Z
+---
+Two options:
+
+1. Add a "Between" toggle next to From/To. When toggled on, the two dropdowns change meaning to "Person A" and "Person B" — shows all messages where either is sender and the other is recipient. Simple toggle, reuses the same dropdowns.
+
+2. Replace From/To with a mode switcher: "Directed" (current From→To) vs "Conversation" (between two people). Cleaner but slightly more complex UI.
+
+I lean toward option 1 — a small toggle/checkbox labeled "Between" that swaps the filter logic. Minimal UI change, easy to understand. Thoughts?

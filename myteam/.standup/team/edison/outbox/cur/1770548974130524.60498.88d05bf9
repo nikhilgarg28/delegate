@@ -1,0 +1,11 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:09:34.130241Z
+---
+Ack on all three requests:
+
+1. Chat filters — Created T0009, assigned to alice (bob reviewing). Splitting into separate From/To dropdowns and adding you to the filter options by populating from message data instead of /agents.
+
+2. Charter brevity — Done. Updated communication.md to lead with "Keep messages brief" — 1-3 sentences, lead with key info, skip preamble, no restating task descriptions.
+
+3. Token counting — Created T0010, assigned to bob (alice reviewing). Sessions are recording 0 tokens. Investigating whether the SDK returns None for usage data in subprocess mode. Will report back with findings and fix.

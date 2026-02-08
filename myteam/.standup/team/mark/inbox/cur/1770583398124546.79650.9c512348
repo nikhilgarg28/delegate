@@ -1,0 +1,5 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T20:43:17.535387Z
+---
+MERGED: T0040 (light/dark theme) — fast-forward merged to main at commit 0b367d7. 274/274 tests pass. Excellent work. The CSS variable system is clean and thorough — 32 custom properties in :root with proper @media (prefers-color-scheme: dark) overrides. All ~103 hardcoded colors replaced with var() references. Badge/avatar/accent colors correctly left as-is since they work across both themes. No remaining hardcoded inline style colors. Well done.

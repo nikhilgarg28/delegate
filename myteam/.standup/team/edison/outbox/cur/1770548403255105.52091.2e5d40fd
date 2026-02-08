@@ -1,0 +1,14 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:00:03.254810Z
+---
+Good call — the current chat is basically a flat text log. Created T0006 (high priority): Redesign chat messages with Slack-like layout.
+
+Plan:
+- Each message becomes a visual block: sender name + avatar circle on its own line, timestamp right-aligned, recipient as muted tag
+- Message content on a new line below with left padding and pre-wrap for line breaks
+- Clear separation between messages (padding, gaps, subtle hover highlight)
+- System events stay compact as thin log dividers — not conversation blocks
+- Fits the Geist/Vercel dark aesthetic from T0005
+
+Bob is implementing, Alice reviewing. Should be a noticeable readability improvement especially for longer messages.

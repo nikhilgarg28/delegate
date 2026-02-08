@@ -1,0 +1,13 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:11:39.800259Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0008-scroll-fix-and-token-tracking
+
+Two fixes in one branch:
+
+T0008 (web.py): Chat scroll fix. Check wasNearBottom (< 60px threshold) before innerHTML update, only auto-scroll if near bottom. Three-line change.
+
+T0010 (agent.py): Debug logging in _collect_tokens_from_message(). Logs message type, raw usage dict, raw cost, and extracted values for ResultMessages. Also logs skipped message types. Uses logger.debug so no noise in normal operation.
+
+All 176 tests pass.

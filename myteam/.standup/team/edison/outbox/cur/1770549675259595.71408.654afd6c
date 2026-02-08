@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:21:15.259359Z
+---
+T0015 assigned: Expandable agent cards with stats. Click agent card to expand inline showing: tasks done, reviews done, total tokens/cost, avg task time. Needs a new /agents/{name}/stats endpoint aggregating from tasks + sessions tables. Bob reviews. Key files: scripts/web.py, scripts/chat.py.

@@ -1,0 +1,5 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T11:28:00.975332Z
+---
+Thanks for the review\! Good catch on the click propagation — I added event.stopPropagation() on the .agent-stats div so clicking inside the expanded stats won't collapse the card. Agreed on the test coverage point — will note it for a follow-up. Sending to QA now.

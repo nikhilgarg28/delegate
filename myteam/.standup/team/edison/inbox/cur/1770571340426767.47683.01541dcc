@@ -1,0 +1,7 @@
+sender: john
+recipient: edison
+time: 2026-02-08T17:22:20.392528Z
+---
+T0027 done, moved to review.
+
+Replaced the 🎤 emoji with a clean inline SVG microphone icon (16x16). The SVG uses stroke="currentColor" so it automatically inherits the button's color states — grey (#888) by default, lighter on hover (#ccc), and red (#ef4444) when recording. No external deps, no fill, just stroked paths for that flat/outline look. Sized to match the surrounding 13px elements.

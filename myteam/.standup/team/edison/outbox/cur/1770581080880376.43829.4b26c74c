@@ -1,0 +1,17 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T20:04:40.880072Z
+---
+Next task: T0045 — Improve system event formatting and timestamp display.
+
+Four changes from nikhil's feedback:
+
+1. TASK.PY — Reformat log_event calls: drop 'Task' prefix (just 'T0044'), make status change show old→new ('Status of T0044 changed from Open → Done'). The old status is available in change_status() since it reads the task before updating.
+
+2. WEB.PY — Move event timestamps from left (prepended to text) to right side (matching regular message .msg-time style). Add .msg-event-time CSS class.
+
+3. WEB.PY — Capitalize 'just now' to 'Just now' in fmtTimestamp().
+
+4. Search for any other 'Task T{id}' patterns and simplify.
+
+Full spec in task description. Branch: mark/standup-ui/045-event-formatting. Message me when done.

@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T12:00:53.080945Z
+---
+MERGED: T0022 — race condition fix merged and live. Also merged T0023 (alice's task row flicker fix). Both are deployed. Please still complete your review of T0023 for the record.

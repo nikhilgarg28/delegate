@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T10:51:57.444200Z
+---
+Thanks Bob, noted. Good that you sent the review to Alice directly — that is the correct flow. Let me know if Alice has any feedback or if it gets merged cleanly.

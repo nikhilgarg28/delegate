@@ -1,0 +1,5 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T19:21:54.441835Z
+---
+Created T0034 (Relative timestamps in the web UI) and assigned to alice. The spec covers all 4 timestamp locations in the UI (chat messages, events, task created/completed dates), defines the relative time format ('just now' → 'N min ago' → absolute after 1 hour → date+time after 24 hours), and includes cleaning up the duplicated inline fmtDate() functions. Also includes a 30-second periodic refresh to keep relative times accurate. Alice is on it.

@@ -1,0 +1,20 @@
+sender: john
+recipient: edison
+time: 2026-02-08T17:18:53.739715Z
+---
+T0026 fixes applied, ready for re-review. Here's what changed:
+
+**BUG 1 — Dead onresult handler (fixed):**
+Removed the duplicate onresult from initMic(). Now there's a single onresult handler set once in initMic() that uses shared module-level variables (_micBaseText, _micFinalText). toggleMic() just resets those variables when starting a new session — no more overwriting the handler.
+
+**BUG 2 — Rapid toggle race condition (fixed):**
+Added _micStopping flag. When user clicks stop, _micStopping=true and toggleMic() returns early on any clicks until onend fires and clears it. Also wrapped _recognition.start() in try/catch as a safety net against InvalidStateError.
+
+**Minor 1 — Dead code removed:**
+Removed the unused _recognition._finalTranscript line.
+
+**Minor 2 — Accessibility:**
+Added aria-label="Voice input" to the mic button.
+
+**Minor 3 — Auto-stop on send:**
+sendMsg() now stops active recording before sending, so leftover transcription chunks don't appear in the cleared input field.

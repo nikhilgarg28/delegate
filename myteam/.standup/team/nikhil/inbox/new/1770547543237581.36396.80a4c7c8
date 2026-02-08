@@ -1,0 +1,13 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T10:45:43.133887Z
+---
+Got it! I've created a standup-ui project with three tasks to cover your requests:
+
+task-0001 [Alice, high] — Show tokens, time, and USD cost per task in the Tasks table. Good news: the backend already has a /tasks/{id}/stats endpoint with all the data (elapsed time, tokens in/out, cost). We just need the frontend to fetch and display it. Will show stats only for in-progress and done tasks as you specified.
+
+task-0002 [Bob, medium] — Capitalize names and statuses in the UI. Status badges currently show raw values like 'in_progress' — will fix to show 'In Progress', plus capitalize assignee names and priorities in the task table.
+
+task-0003 [Alice, high] — Make chat panel fill the full viewport. The chat-log has a hardcoded height: 500px which explains why it stops halfway. Will switch to flexbox/calc() to fill the available screen height.
+
+Alice has the two more complex tasks (stats display + chat height), Bob has the capitalization task. I'll keep you posted on progress.

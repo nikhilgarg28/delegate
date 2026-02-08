@@ -1,0 +1,13 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T19:39:10.652218Z
+---
+Diff-views project kicked off with 3 tasks, branch convention updated to <user>/<project>/<task> as requested:
+
+- T0036 (mark) — Data model: add branch/commits to task schema, new /tasks/{id}/diff API, update branch convention in code-review.md to user-first namespace
+- T0037 (john) — Diff panel UI: right-side slide-out panel with syntax-highlighted inline diffs, file list, backdrop, keyboard support
+- T0038 (alice, blocked on T0036+T0037) — Integration: wire commit SHAs and 'View Changes' button into task detail cards
+
+T0036 and T0037 can run in parallel. T0038 connects them once both are done.
+
+Also still in flight: T0035 (bob) — the Mission Control sidebar. Four agents working across two projects.

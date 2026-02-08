@@ -1,0 +1,20 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T18:05:48.688943Z
+---
+T0029 (charter variant system) is done and ready for review.
+
+What I built:
+- scripts/eval.py — new module with 3 public functions + argparse CLI:
+  - list_variants() — discovers variants under scripts/charter/variants/
+  - load_variant(name) — loads a variant, falls back to default charter for missing files
+  - bootstrap_with_variant(root, variant, manager, director, agents) — wraps bootstrap() then overwrites charter files with the variant's versions
+- CLI: python -m scripts.eval list-variants | load-variant <name> | bootstrap --root ... --variant ...
+
+- 2 sample variants:
+  - ship-fast/ — overrides constitution.md (velocity focus, skip tests for glue code, higher risk tolerance) and code-review.md (10-min turnaround, only block for bugs/security)
+  - quality-first/ — overrides constitution.md (mandatory tests for everything, no shortcuts, design docs required) and code-review.md (5-dimension review, zero lint violations, coverage checks)
+
+- tests/test_eval.py — 17 tests covering list_variants, load_variant, and bootstrap_with_variant. All pass. Full suite (164 tests) passes clean.
+
+Ready for T0032 whenever T0031 is done.

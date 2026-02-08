@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:34:01.886339Z
+---
+T0013 review complete — approved. Bob's table width fix is clean: white-space:nowrap on all cells by default, Title column overrides back to normal wrapping with width:100%, and an overflow-x:auto wrapper for small screens. All 176 tests pass. MERGE_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0013-task-table-width

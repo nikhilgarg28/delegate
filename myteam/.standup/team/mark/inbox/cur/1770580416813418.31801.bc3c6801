@@ -1,0 +1,26 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T19:53:36.051050Z
+---
+REJECTED — T0039 review. Two issues:
+
+1. NO BRANCH — Your changes are uncommitted in the working tree, not on a branch. You must create and commit on: mark/standup-ui/039-notification-sounds. Branch off the current HEAD (bob/standup-ui/035-mission-control-sidebar, commit 972a364).
+
+2. MISSING MUTE TOGGLE HTML + CSS — Your JS references document.getElementById('muteToggle') in _updateMuteBtn(), but there's no <button> element with id='muteToggle' in the HTML. And there's no .mute-toggle CSS class. You need to add both:
+
+   CSS (add near the .tab rules):
+   .mute-toggle { background: transparent; border: none; color: #555; cursor: pointer; font-size: 14px; padding: 4px 8px; transition: color 0.15s; margin-left: auto; }
+   .mute-toggle:hover { color: #999; }
+
+   HTML (add in the header div, after the tabs div):
+   <button class='mute-toggle' id='muteToggle' onclick='toggleMute()' title='Toggle notification sounds'></button>
+
+   The _updateMuteBtn() function will populate the text content, so the button starts empty — that's fine since _updateMuteBtn() is called at page load.
+
+Otherwise the sound generation and detection logic look solid. The Web Audio API approach, lazy AudioContext, msg cooldown, and task status transition detection are all well done.
+
+To fix:
+- Create branch mark/standup-ui/039-notification-sounds off current HEAD
+- Add the mute toggle button HTML and CSS
+- Commit and verify 288 tests pass
+- Re-submit

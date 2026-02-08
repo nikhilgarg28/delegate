@@ -1,0 +1,20 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T20:17:51.961717Z
+---
+T0043 done — Replace mute emoji with SVG icon and add voice-to-text mic button.
+
+Branch: mark/standup-ui/043-mute-icon-and-mic
+Commit: 3507297
+
+Changes in scripts/web.py (87 lines added):
+
+1. CSS: Added .mute-toggle with display:flex, align-items:center, justify-content:center, line-height:1 for proper SVG centering. Added .mic-btn, .mic-btn:hover, .mic-btn.recording styles with pulsing red animation (@keyframes mic-pulse).
+
+2. HTML: Added mute toggle button in header (after tabs, with margin-left:auto). Added mic button in chat-input bar between text input and Send button, starts with display:none.
+
+3. JS — Mute toggle: _updateMuteBtn() uses innerHTML with SVG markup instead of textContent with emoji. Unmuted = speaker with sound waves, muted = speaker with X. State persisted in localStorage.
+
+4. JS — Voice-to-text: initMic() IIFE checks for SpeechRecognition support, shows mic button only if available. toggleMic() starts/stops continuous recognition with interim results. Results append to text input preserving existing text. Auto-stops recording on sendMsg(). Error handling ignores 'aborted' and 'no-speech'.
+
+All 274 tests pass. Ready for review.

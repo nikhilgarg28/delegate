@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T11:18:29.423886Z
+---
+One more request related to filters on chat UI -  I also want an option to be able to see all messages between X and Y (irrespective of who sender is). What's the best way to fit this in the UI pattern?

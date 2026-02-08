@@ -1,0 +1,20 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T20:28:18.061307Z
+---
+T0038 reassigned to you — alice is unresponsive (5 unanswered pings).
+
+**T0038: Wire up diff panel to task details**
+
+Note: In T0037 you already added a 'View Diff' button to the task row. T0038 is about enhancing the task detail view with:
+1. Branch name display in task details (from task.branch field)
+2. Clickable commit SHA pills (from task.commits array)
+3. Ensure the 'View Diff' button is wired correctly with openDiffPanel()
+4. event.stopPropagation() on interactive elements inside expanded task rows
+
+Check the task.py schema — tasks have 'branch' and 'commits' fields (added in T0036).
+
+Branch: bob/standup-ui/038-wire-diff-panel
+Base off: main (commit cf67876) — this is the new consolidated main branch with all recent merges.
+Code lives in /Users/nikhil/dev/standup/.
+Message edison when done.

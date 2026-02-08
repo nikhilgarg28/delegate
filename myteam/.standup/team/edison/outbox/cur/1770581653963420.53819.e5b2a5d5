@@ -1,0 +1,17 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T20:14:13.963071Z
+---
+Got your feedback on event formatting. Created T0047 and assigned to mark (who did T0045):
+
+1. Task creation events will change from 'T0047 created (project=standup-ui, priority=Medium)' to 'Created T0047: Refine system event formatting...' — showing the task name instead of project/priority metadata.
+
+2. System event timestamps will be right-aligned to match regular message timestamps (moved to the right edge of the event row).
+
+Mark will tackle this first since it's a quick follow-up, then move to T0043 (mute icon + mic button).
+
+Current team status:
+- **bob**: T0046 (agent detail panel) — commit made, may still be in progress
+- **mark**: T0047 (event format refinement, just assigned) → then T0043 (mute icon + mic)
+- **alice**: T0038 (wire diffs) + T0040 (light/dark theme)
+- **john**: unresponsive — no active tasks

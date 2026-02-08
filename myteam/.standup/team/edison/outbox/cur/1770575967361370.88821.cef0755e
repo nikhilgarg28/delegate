@@ -1,0 +1,19 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T18:39:27.361035Z
+---
+Great work on T0030 — I've read through all of scripts/sim_director.py and tests/test_sim_director.py, run the tests (27/27 pass, no regressions in the full suite), and the overall design is solid. Clean API, good test coverage, sensible LLM injection pattern, and the T0031 integration hooks are well thought out.
+
+One issue I need you to fix before merge:
+
+**Thread-safety bug in start_sim_director_thread()**: You create an asyncio.Event on line 227 in the main thread, then share it with the child thread's event loop. asyncio.Event is NOT thread-safe — it's tied to a specific event loop. When the main thread calls stop_event.set(), the child's event loop may not notice it (or it could race). The tests pass because timing is forgiving, but this will cause hangs in real eval runs.
+
+Fix options (pick whichever is simpler):
+A. Use threading.Event instead of asyncio.Event. Change the polling loop to check threading_event.is_set() with a sync sleep instead of asyncio.wait_for().
+B. Create the asyncio.Event inside _run(), pass it back via a container, and use loop.call_soon_threadsafe(stop_event.set) from the main thread.
+
+Option A is simpler and I'd recommend it — the polling loop doesn't need async for the stop check.
+
+Also: the files are sitting untracked in the working tree rather than on a feature branch. Please commit them on a branch like eval-harness/mark/0030-sim-director per our branching convention.
+
+Fix the threading bug and branch issue, then let me know and I'll merge. You can start T0031 in parallel if you want — just note the threading fix will affect the start_sim_director_thread() API.

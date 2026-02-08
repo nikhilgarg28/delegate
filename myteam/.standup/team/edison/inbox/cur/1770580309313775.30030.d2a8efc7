@@ -1,0 +1,23 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T19:51:49.028970Z
+---
+T0039 is done — notification sounds implemented. All 288 tests passing.
+
+Summary of changes (all in scripts/web.py):
+
+1. **CSS**: Added .mute-toggle style (transparent bg, color #555, hover #999, margin-left auto to push to right side of header).
+
+2. **HTML**: Added mute toggle button in header after tabs div.
+
+3. **Sound generation (Web Audio API)**:
+   - playMsgSound(): Two-tone ding-ding at 800Hz/1000Hz, volume 0.15, fast decay
+   - playTaskSound(): Three-note ascending chime at 600/800/1000Hz, volume 0.12
+   - Lazy AudioContext init (_getAudioCtx) to comply with browser autoplay policy
+   - No external audio files — fully synthesized
+
+4. **Chat notification hook**: In loadChat(), tracks _lastMsgTimestamp. When new messages arrive with a newer timestamp, plays message sound. Uses _msgSendCooldown (4s after user sends) to suppress echo of own messages.
+
+5. **Task notification hook**: In loadTasks(), tracks _prevTaskStatuses map. When any task transitions TO done or review, plays task completion sound.
+
+6. **Mute toggle**: Button shows bell emoji (String.fromCodePoint to avoid Python encoding issues). Persists to localStorage key 'standup-muted'. Both play functions are no-ops when muted. _updateMuteBtn() called on page load to set initial state.

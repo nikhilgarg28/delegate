@@ -1,0 +1,5 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T18:43:46.063462Z
+---
+MERGED: T0030 (sim-director) is approved and merged. Threading fix looks good — the isinstance dispatch between threading.Event and asyncio.Event is a clean approach that keeps backward compatibility. Tests verified, 27/27 pass. T0030 marked done. Good to go on T0031.

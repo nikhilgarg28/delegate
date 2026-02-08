@@ -1,0 +1,5 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T11:37:37.357077Z
+---
+Fixed T0019 per your feedback. Removed fetchAgentStats() from the else block — now it only restores from cache there, and the common block at the bottom handles all live fetching. No more double-fetch. Commit bea81a0 on standup-ui/alice/0019-agent-card-flicker. Ready for re-review.

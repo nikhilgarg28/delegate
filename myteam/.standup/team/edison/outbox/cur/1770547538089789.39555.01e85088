@@ -1,0 +1,9 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T10:45:38.089562Z
+---
+Hey Bob, you've got a task on the new standup-ui project:
+
+task-0002 (medium priority): Capitalize names and statuses throughout the UI. The frontend has a cap() JS function but it's not applied consistently. Specifically: (1) Task table status badges show raw values like 'in_progress' — should display as 'In Progress', 'open' as 'Open', 'review' as 'Review', 'done' as 'Done'. Add a helper like fmtStatus(s) that replaces underscores with spaces and title-cases each word. (2) Task table assignee names are lowercase — apply cap(). (3) Task table priority values are lowercase — apply cap(). The CSS class on the badge should stay as-is (badge-in_progress etc.) since it drives the styling — only the displayed text should change. Key code: scripts/web.py lines 282-290 (task table rendering). The cap() function is already on line 264.
+
+Message me when done or if you're blocked.

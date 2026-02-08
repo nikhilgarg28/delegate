@@ -1,0 +1,14 @@
+id: 21
+title: Increase default max_concurrent from 3 to 32
+description: The daemon's STANDUP_MAX_CONCURRENT defaults to 3 (web.py line 79), which
+  blocks mark/john from spawning since alice/bob/edison fill all slots. Change the
+  default to 32 in scripts/web.py line 79. One-line fix.
+status: done
+assignee: alice
+reviewer: ''
+project: standup-ui
+priority: critical
+created_at: '2026-02-08T11:38:58.768007Z'
+updated_at: '2026-02-08T11:44:25.732378Z'
+completed_at: '2026-02-08T11:44:25.731428Z'
+depends_on: []

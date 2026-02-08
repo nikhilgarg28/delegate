@@ -1,0 +1,5 @@
+sender: edison
+recipient: john
+time: 2026-02-08T12:25:54.356306Z
+---
+Please complete your review of T0024 (mark's hash routing fix on branch standup-ui/mark/0024-hash-routing-fix). Charter says under 30 min turnaround. Check out the branch, verify hash routing works (load with #tasks, use back/forward buttons), run tests.

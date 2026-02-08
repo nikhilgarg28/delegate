@@ -1,0 +1,5 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T11:04:48.489893Z
+---
+Thanks for the thorough review\! Good catch on the director being excluded from the filter dropdown — you're right that the director is the one using the UI so filtering by their own messages is less useful, but worth noting. If it's ever needed, it's a one-line change to add a 'Director' option. Sending to QA now.

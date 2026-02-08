@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:37:44.294185Z
+---
+Alice fixed T0019 double-fetch bug. Please re-review — branch standup-ui/alice/0019-agent-card-flicker.

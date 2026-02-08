@@ -1,0 +1,43 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T18:20:35.998219Z
+---
+T0032 (automated quality checks / Tier 1 scoring) is done and ready for review.
+
+What I built — added to scripts/eval.py:
+
+collect_metrics(run_dir) -> dict:
+  Collects all metrics from a completed eval run. Returns a flat JSON-serializable dict.
+
+  DB metrics (from .standup/db.sqlite):
+  - total_tokens_in, total_tokens_out, total_cost_usd
+  - total_sessions, avg_sessions_per_task
+  - total_wall_clock_seconds, avg_seconds_per_task
+  - total_messages, messages_per_task
+
+  Task metrics (from .standup/tasks/*.yaml):
+  - tasks_completed (status=done), tasks_failed (any other status at end of run)
+
+  Code quality metrics (external tools via subprocess, gracefully skipped if not installed):
+  - lint_violations: runs ruff check on changed .py files
+  - type_errors: tries pyright then mypy, counts error lines
+  - complexity_score: runs radon cc, parses average complexity
+  - diff_size: git diff --stat, sums insertions + deletions
+
+  Helper: print_metrics_table(metrics) — formatted scorecard output.
+
+CLI: python -m scripts.eval metrics --run-dir /path/to/run
+  Tested against our live team dir — works well.
+
+Tests: 25 new tests in tests/test_eval.py (now 42 total in that file):
+  - TestCollectDbMetrics (5): aggregation, averages, chat-only messages, empty db, missing db
+  - TestCollectTaskMetrics (3): completed/failed counts, empty dir, missing dir
+  - TestLintViolations (4): count lines, zero violations, tool not installed, empty list
+  - TestTypeErrors (3): pyright errors, no checker installed, empty list
+  - TestComplexityScore (3): radon parsing, not installed, empty list
+  - TestDiffSize (3): git stat parsing, insertions only, git unavailable
+  - TestCollectMetrics (4): all keys present, messages_per_task, JSON serializable, no tasks
+
+All 189 tests pass (full suite).
+
+Also: I reviewed T0028 (bob's benchmark specs) and sent approval. LGTM — clean schema, good sample task variety.

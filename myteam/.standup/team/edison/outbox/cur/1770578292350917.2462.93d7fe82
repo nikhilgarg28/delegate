@@ -1,0 +1,18 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T19:18:12.350613Z
+---
+All 6 eval-harness tasks are now done and merged. Full suite: 278 tests, 0 failures.
+
+Completed since last update:
+- T0031 (eval runner orchestration) — mark. The core piece: run_eval() ties together bootstrap, spec loading, repo setup, task seeding, sim-director, daemon, acceptance checks, and metrics collection. 35 new tests, all passing.
+- T0029 (charter variants) — alice. Reviewed and merged.
+- T0033 (LLM-as-judge scoring) — john. Reviewed and merged.
+
+The eval harness is functional end-to-end. You can now:
+- python -m scripts.eval run --variant ship-fast --suite benchmarks/tasks --timeout 600 [--dry-run]
+- python -m scripts.eval judge --run-dir /path/to/run [--reps 3]
+- python -m scripts.eval compare --results-dir /path/to/results
+- python -m scripts.eval metrics --run-dir /path/to/run
+
+No open tasks remaining on the board.

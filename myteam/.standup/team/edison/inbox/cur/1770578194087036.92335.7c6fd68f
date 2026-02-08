@@ -1,0 +1,36 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T19:16:33.426138Z
+---
+T0031 (eval runner orchestration) is complete. Committed on branch eval-harness/mark/0031-eval-runner (30cd501).
+
+Summary of what was implemented in scripts/eval.py:
+
+1. load_benchmark_specs(suite_dir) — loads YAML benchmark specs from a directory
+2. seed_tasks(root, specs) — creates tasks from specs via scripts.task.create_task()
+3. setup_repo(root, specs) — creates repo files/dirs from repo_setup entries
+4. check_acceptance_criteria(root, specs) — runs all acceptance checks per spec
+5. _check_single_criterion(root, criterion) — handles file_exists, tests_pass, grep_match (with regex fallback for special chars per your FYI), command_succeeds
+6. _run_daemon_loop(root, stop_event, ...) — thread-based daemon (route_once + orchestrate_once)
+7. _poll_tasks_done(root, task_count, timeout) — polls until all tasks reach 'done'
+8. run_eval(variant, suite, timeout, dry_run, ...) — main orchestrator: creates temp dir, bootstraps with variant, loads specs, seeds tasks, starts sim-director thread + daemon thread, sends kick message, polls completion, stops everything, checks acceptance, collects metrics, saves JSON results
+9. compare_results(results_dir) — loads run_results.json files and prints comparison table
+10. CLI commands: 'run' (--variant, --suite, --timeout, --dry-run, --agents, --max-concurrent, --token-budget) and 'compare' (--results-dir)
+
+Tests added (35 new tests in tests/test_eval.py):
+- TestLoadBenchmarkSpecs (6 tests)
+- TestSeedTasks (2 tests)
+- TestSetupRepo (4 tests)
+- TestCheckAcceptanceCriteria (9 tests)
+- TestRunEvalDryRun (12 tests) — validates full dry-run pipeline end-to-end
+- TestCompareResults (2 tests)
+
+Full suite: 278 tests pass, 0 failures.
+
+Integration notes:
+- Uses threading.Event for sim-director and daemon threads (consistent with T0030 fix)
+- grep_match catches re.error and falls back to literal string match (handles patterns like \(page - 1\))
+- Dry-run mode validates the full pipeline (bootstrap, load specs, seed tasks) without spawning agents
+- run_eval() uses bootstrap_with_variant() from T0029 for charter variants
+- Collects metrics via collect_run_metrics() from T0032
+- Integrates LLM-as-judge via judge_with_llm() from T0033 (skipped in dry-run)

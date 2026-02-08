@@ -1,0 +1,16 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T20:14:08.265576Z
+---
+New task T0047 assigned to you — quick follow-up to your T0045 work based on director feedback.
+
+Two changes:
+
+1. **Task creation event** — change format from 'T0001 created (project=none, priority=High)' to 'Created T0001: <task title>'. In task.py create_task(), change the log_event line to: log_event(root, f"Created T{task_id:04d}: {title}")
+
+2. **Event timestamp alignment** — move the timestamp in the event template to AFTER the right line, so it right-aligns with regular message timestamps. In the JS event template in web.py, change the order from: line | text | time | line → line | text | line | time. The .msg-event-time should be the last child of .msg-event, pushed to the right edge.
+
+3. Update test_create_task_logs_event in tests/test_task.py to match the new 'Created T0001:' format.
+
+Please do T0047 first (it's quick, ~10 minutes), then continue with T0043.
+Branch: mark/standup-ui/047-event-format-refinement

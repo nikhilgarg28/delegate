@@ -1,0 +1,35 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T10:55:31.953907Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/alice/0001-task-stats-and-chat-height
+
+T0005 (visual refresh — Geist font + improved aesthetics) is ready for review. Summary:
+
+**Font**: Switched to Geist Sans via fontsource CDN (weights 400, 500, 600). Fallback chain: 'Geist Sans', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif. Added -webkit-font-smoothing: antialiased.
+
+**Color palette overhaul** (Vercel/Linear dark mode aesthetic):
+- Background: #0f1117 → #0a0a0b (deeper black)
+- Surface: #1a1d28 → #111113 (subtle card backgrounds)
+- Borders: solid hex colors → rgba(255,255,255,0.06-0.12) for subtle transparency
+- Text hierarchy: #ededed primary, #a1a1a1 secondary, #555 tertiary, #444 muted
+- Send button: blue (#3b82f6) → white-on-dark (#fafafa on #0a0a0b) — Vercel style
+
+**Typography refinements**:
+- Body: 14px, line-height 1.5, letter-spacing -0.01em
+- Chat messages: 13px, line-height 1.6, tabular-nums on timestamps
+- Table headers: 11px, letter-spacing 0.06em
+- Header h1: 16px, letter-spacing -0.02em (tighter, more refined)
+
+**Interactive polish**:
+- Tabs: hover/active states with rgba backgrounds + 0.15s transitions
+- Table rows: subtle hover highlight
+- Agent cards: border hover brightening + transition
+- Input focus: border-color brightens to rgba(255,255,255,0.25)
+- Placeholder text styling
+- Active dot: green glow via box-shadow
+- Custom WebKit scrollbar (thin, translucent)
+
+**Structural**: Badges → 6px border-radius (less pill-shaped, more Linear-like). Badge colors use rgba for subtlety. All form elements inherit font-family.
+
+All 14 web UI tests pass (176 total). No JS or HTML structure changes — purely CSS + font CDN links.

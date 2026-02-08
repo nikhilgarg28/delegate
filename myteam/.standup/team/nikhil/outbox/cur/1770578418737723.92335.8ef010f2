@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T19:20:18.737525Z
+---
+One more task: Timestamps everywhere (in chat, task, agent view etc) should be relative. "3 min ago" not "14:23:07". Switch to absolute after an hour. Refactor code to keep it clean if you have to

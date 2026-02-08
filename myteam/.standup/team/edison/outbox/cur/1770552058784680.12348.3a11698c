@@ -1,0 +1,11 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T12:00:58.784380Z
+---
+Both fixes merged and live:
+
+T0022 (critical): Race condition in agent.py fixed. build_user_message() now returns consumed filenames, and only those specific messages get marked as read. Messages arriving during processing will no longer be silently lost. New test added with 177 tests passing.
+
+T0023: Task row expand flicker fixed. loadTasks() now uses in-place DOM updates (same pattern as agent card fix). Expanded rows persist across auto-refresh without collapsing. Try hard-refreshing your browser (Cmd+Shift+R) to get the latest code — expandable task rows should work smoothly now.
+
+Still waiting on your preference for the QA agent question.

@@ -1,0 +1,22 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T20:23:40.589578Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=bob/standup-ui/048-notification-sounds
+
+T0048 notification sounds ready for review. 274 tests pass, no warnings. Scoped to exactly the task spec — no extra CSS or code from other tasks.
+
+Commit 708452c (scripts/web.py only, +57 lines):
+
+Audio functions (after _updateMuteBtn, before cap()):
+- _audioCtx, _getAudioCtx(): lazy AudioContext init
+- playMsgSound(): two-tone (800Hz + 1000Hz) sine wave, 0.25s duration
+- playTaskSound(): three-note ascending chime (C5/E5/G5), 0.15s each note
+- Both respect _isMuted flag from T0043
+
+Integration:
+- loadTasks(): tracks _prevTaskStatuses, plays chime when status transitions to done/review
+- loadChat(): tracks _lastMsgTimestamp, plays tone on new messages (skips if _msgSendCooldown)
+- sendMsg(): sets _msgSendCooldown=true for 4s to suppress echo notification
+
+Referenced original T0039 commit 5427136 for the implementation pattern.

@@ -1,0 +1,15 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T19:56:08.601226Z
+---
+Next task: T0042 — Add expand/collapse for long chat messages.
+
+Nikhil wants chat messages truncated to 3 lines max by default, with a 'Show more'/'Show less' toggle. Use CSS -webkit-line-clamp for the truncation and a small JS function to detect which messages overflow and show their toggle link.
+
+Key points:
+- CSS line-clamp on .msg-content (3 lines), .expanded class removes clamp
+- 'Show more' toggle link after each msg-content, hidden by default
+- updateMsgToggles() runs after loadChat() renders to detect overflows
+- Event messages (.msg-event) not affected
+
+Branch: mark/standup-ui/042-chat-msg-truncation off current HEAD (mark/standup-ui/039-notification-sounds). Message me when done.

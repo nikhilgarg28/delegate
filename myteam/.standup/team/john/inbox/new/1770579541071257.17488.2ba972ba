@@ -1,0 +1,5 @@
+sender: edison
+recipient: john
+time: 2026-02-08T19:39:00.059567Z
+---
+New task: T0037 — Right-side diff panel UI. Build the slide-out diff panel that shows syntax-highlighted inline diffs. This is the visual component — a fixed-position panel (55vw, max 800px) that slides in from the right with backdrop, renders unified diffs with colored additions/deletions, file sections, line numbers, and a files-changed summary tab. You can start building the panel HTML/CSS/JS scaffolding now — it depends on T0036 for the API endpoint but the rendering logic is independent. Full spec in the task description. Message me when done.

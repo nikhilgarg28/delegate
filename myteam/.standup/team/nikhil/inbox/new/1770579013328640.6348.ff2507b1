@@ -1,0 +1,15 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T19:30:13.089597Z
+---
+Created T0035 (Mission Control sidebar with team dashboard) and assigned to bob. The spec covers:
+
+- Persistent left sidebar (280px) with three widgets: team status stats, agent roster with live status dots, and recent tasks
+- Agent roster shows colored dots (green=working, blue=queued, gray=idle), current task summary, and cost per agent
+- 'See All →' links route to the Tasks/Agents tabs
+- 'Chat' tab renamed to 'Mission Control'
+- Sidebar refreshes every 2 seconds alongside the active panel
+- Responsive: sidebar hides on narrow screens (<900px)
+- Design follows your existing dark theme with subtle depth differentiation
+
+Bob is on it.

@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:42:13.764700Z
+---
+T0022 (critical): Race condition in agent.py — messages arriving during processing get marked read without being seen. Fix: capture message filenames BEFORE processing in build_user_message, then only mark those specific files as read after. Both first-turn (lines 361-364) and event-loop (lines 387-389) blocks. Need a test too. Alice reviews.

@@ -1,0 +1,32 @@
+id: 32
+title: Automated quality checks (Tier 1 scoring)
+description: "Post-run automated analysis that produces a structured quality scorecard\
+  \ from an eval run.\n\nDepends on: T0031 (eval runner). Needs a completed eval run\
+  \ directory to analyze.\n\nImplement in scripts/eval.py (add to the existing module):\n\
+  \ncollect_metrics(run_dir) -> dict:\n  Collects from the run's db.sqlite + task\
+  \ files + git diffs:\n\n  **Already-tracked metrics (from db.sqlite):**\n  - total_tokens_in,\
+  \ total_tokens_out, total_cost_usd\n  - total_sessions, avg_sessions_per_task\n\
+  \  - total_wall_clock_seconds, avg_seconds_per_task\n  - total_messages, messages_per_task\n\
+  \  - tasks_completed, tasks_failed (didn't pass acceptance criteria)\n\n  **New\
+  \ automated checks (run on git diffs from the eval run):**\n  - lint_violations:\
+  \ run ruff check on changed files, count violations\n  - type_errors: run pyright/mypy\
+  \ on changed files, count errors (optional \u2014 skip if not installed)\n  - complexity_score:\
+  \ run radon cc on changed functions, average complexity\n  - diff_size: total lines\
+  \ added + removed + changed\n\n  Each metric should be a simple number. Return a\
+  \ flat dict suitable for JSON serialization.\n\n  For linting/type-checking/complexity:\
+  \ use subprocess to call the tools. If a tool isn't installed, log a warning and\
+  \ skip that metric (return None for it). Don't add these as project dependencies\
+  \ \u2014 they're optional.\n\nCLI: python -m scripts.eval metrics --run-dir /path/to/run\n\
+  \  Prints the scorecard as a formatted table.\n\nAdd tests in tests/test_eval.py\
+  \ \u2014 mock subprocess calls for lint/type tools, test metric aggregation from\
+  \ a pre-populated db.sqlite.\n\nCode lives in /Users/nikhil/dev/standup/.\nMessage\
+  \ edison when done."
+status: done
+assignee: alice
+reviewer: ''
+project: eval-harness
+priority: medium
+created_at: '2026-02-08T18:01:19.405948Z'
+updated_at: '2026-02-08T18:23:02.783138Z'
+completed_at: '2026-02-08T18:23:02.781015Z'
+depends_on: []

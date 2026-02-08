@@ -1,0 +1,7 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:50:17.551219Z
+---
+Investigated the expandable task rows issue. The code IS deployed and the server is serving the expandable row HTML/JS. The bug is that auto-refresh (every 2s) rebuilds the entire task table innerHTML, which creates fresh DOM elements. Even though the expanded class is applied, the CSS max-height transition restarts from 0 each time — so the expanded detail collapses and re-expands every 2s, making it look broken. Same class of bug we fixed for agent cards (T0019). Need to do in-place DOM updates for tasks too. Creating a task now.
+
+Regarding QA agent: our charter references a QA role for code review, but we don't currently have a QA agent on the team. The review requests go to whichever agent I assign as reviewer. Options: (1) create a dedicated QA agent, (2) keep using regular agents as reviewers (current approach), or (3) remove QA references from charter. What's your preference?

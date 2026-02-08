@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:28:45.227583Z
+---
+Reassigning T0012 to you — mark/john haven't spawned yet. Add filter dropdowns (Status, Priority, Assignee) above the task table, matching chat filter style. Client-side filtering in loadTasks(). Bob reviews. Key file: scripts/web.py.

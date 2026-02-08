@@ -1,0 +1,7 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:28:03.692742Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/alice/0015-expandable-agent-cards
+
+T0015: Expandable agent cards with stats. Bob approved. I addressed his feedback — added event.stopPropagation() on the stats div to prevent unintended card collapse when clicking inside expanded stats. Two commits on the branch. All 176 tests pass. Ready to merge.

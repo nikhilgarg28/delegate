@@ -1,0 +1,14 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T19:58:28.307554Z
+---
+Change of plans — T0041 (agent APIs) is deprioritized. I'm reassigning T0037 (right-side diff panel) to you instead. It's been the critical path blocker for too long — it blocks T0038 (alice's wiring), the agent detail panel, and the unified panel design nikhil approved.
+
+T0037 is the slide-out panel on the right side with:
+- Panel skeleton (fixed position, 55vw, slide animation, backdrop)
+- Diff rendering (parse unified diff, syntax-highlighted +/- lines)
+- Files Changed tab + Full Diff tab
+- openDiffPanel(taskId) fetches /tasks/{taskId}/diff
+- Escape key closes, responsive full-width < 900px
+
+Full spec in the task description — it's very detailed. Branch: bob/standup-ui/037-diff-panel off current HEAD (mark/standup-ui/039-notification-sounds). This is highest priority. Message me when done.

@@ -1,0 +1,24 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T10:48:19.922339Z
+---
+Update on the standup-ui project — all three original tasks are done:
+
+- task-0001 (tokens/time/cost display) ✓ — Alice added Time, Tokens (in/out), and Cost columns to the task table. Stats are fetched in parallel from the existing /tasks/{id}/stats endpoint, only for in_progress and done tasks. Formatted as e.g. "5m 23s", "1,234 / 567", "$0.42".
+- task-0002 (capitalize UI) ✓ — Bob added fmtStatus() helper. Statuses now show "In Progress" instead of "in_progress", names and priorities are capitalized. Badge CSS classes unchanged.
+- task-0003 (full-height chat) ✓ — Alice replaced the fixed 500px height with a flexbox layout that fills the viewport. Should use the full screen now.
+
+Re: your question about changing task IDs from "task-000X" to "T000X" — good question about migration. Here is my assessment:
+
+Places that need to change:
+1. scripts/task.py — file naming (task-{id:04d}.yaml), display formatting, _next_id() glob pattern, event log strings
+2. scripts/web.py — one line in the JS frontend (line 314: task-${...})
+3. scripts/agent.py — 3 references in log/display strings
+
+Migration concern: Yes, the existing 3 task YAML files on disk are named task-0001.yaml, task-0002.yaml, task-0003.yaml. The _next_id() function scans filenames with the pattern "task-*.yaml" to determine the next ID. If we change the prefix to "T" we need to either:
+(a) Rename the existing files (task-0001.yaml → T0001.yaml) — simple script, safe since the ID integer inside the YAML stays the same
+(b) Support both patterns temporarily during the transition
+
+I would recommend option (a) — a one-time rename script run as part of the task. It is safe because task data is just YAML files and the integer ID inside them does not change, only the filename prefix and display format. There are no foreign keys or external references to worry about beyond the filename convention.
+
+Shall I create a task for this? And to confirm — you want "T000X" with the capital T and no dash, right?

@@ -1,0 +1,5 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T18:22:03.561243Z
+---
+Another note for T0031: bob's review of T0032 flagged that _get_diff_size and _get_changed_files currently diff against HEAD~1. For multi-commit eval runs, you'll need to set a baseline ref (git tag or SHA) at the start of a run and pass it to collect_metrics(). Keep this in mind when building the runner.

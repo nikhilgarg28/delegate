@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:16:30.828442Z
+---
+T0008 and T0010 merged. Still need your review on T0009 (alice's separate From/To filters) — branch standup-ui/alice/0009-separate-chat-filters.

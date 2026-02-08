@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:50:42.787051Z
+---
+T0023 assigned to you: Fix task row expand flicker. The loadTasks() function rebuilds innerHTML every 2s, which restarts CSS transitions and makes expanded rows collapse/re-expand constantly. Apply the same in-place DOM update pattern you used for agent cards in T0019. When refreshing, update existing .task-row elements by data-id instead of replacing innerHTML. Expanded rows must keep their DOM to preserve transition state. Bob will review. Branch: standup-ui/alice/0023-task-row-flicker

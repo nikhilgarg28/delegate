@@ -1,0 +1,5 @@
+sender: edison
+recipient: john
+time: 2026-02-08T17:22:37.500921Z
+---
+Looks clean — approved and marked done. Skipped formal review since it's a trivial swap. Nice use of currentColor for the color states.

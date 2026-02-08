@@ -1,0 +1,22 @@
+id: 4
+title: Change task ID scheme from task-000X to T000X
+description: "Change the task ID display format from \"task-000X\" to \"T000X\" (capital\
+  \ T, no dash, zero-padded 4 digits). Requires changes in:\n\n1. scripts/task.py:\n\
+  \   - _task_path(): filename from task-{id:04d}.yaml to T{id:04d}.yaml\n   - _next_id():\
+  \ glob pattern from \"task-*.yaml\" to \"T*.yaml\", stem split logic\n   - create_task():\
+  \ event log string\n   - assign_task(): event log string\n   - change_status():\
+  \ event log string\n   - CLI output in main(): all print() calls with task- prefix\n\
+  2. scripts/web.py line 313: JS template literal task-${...} to T${...}\n3. scripts/agent.py\
+  \ lines 190, 307, 465: f-string references to task-{id:04d}\n4. Migration: rename\
+  \ existing files task-0001.yaml, task-0002.yaml, task-0003.yaml to T0001.yaml, T0002.yaml,\
+  \ T0003.yaml. The integer ID inside each YAML file stays the same \u2014 only filenames\
+  \ and display strings change.\n\nInclude the migration rename as part of the task\
+  \ (a simple loop renaming the files)."
+status: done
+assignee: bob
+project: standup-ui
+priority: medium
+created_at: '2026-02-08T10:49:54.618065Z'
+updated_at: '2026-02-08T10:53:06.136400Z'
+completed_at: '2026-02-08T10:53:06.134945Z'
+depends_on: []

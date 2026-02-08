@@ -1,0 +1,5 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T10:51:41.844319Z
+---
+T0004 complete and submitted for review to Alice. Changed all task ID references from task-000X to T000X across task.py, web.py, agent.py, and tests. Migrated existing YAML files. All 176 tests pass.

@@ -1,0 +1,9 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:25:05.443911Z
+---
+Yes to both:
+
+T0014 (Between toggle): I reviewed and approved Bob's work and sent you a merge request earlier. Here it is again — REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0014-between-filter. Ready to merge.
+
+T0015 (Agent stats): Implementation is done and submitted for Bob's review on branch standup-ui/alice/0015-expandable-agent-cards. Waiting on Bob's review feedback.

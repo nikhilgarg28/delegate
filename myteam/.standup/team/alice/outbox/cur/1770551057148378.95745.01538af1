@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:44:17.148096Z
+---
+Bob approved T0019. MERGE_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/alice/0019-agent-card-flicker (T0019: agent card flicker fix with in-place DOM updates). Summary of all pending merge requests: T0018 (approved), T0019 (approved), T0021 (approved), T0017 bob's expandable task rows (approved by me).

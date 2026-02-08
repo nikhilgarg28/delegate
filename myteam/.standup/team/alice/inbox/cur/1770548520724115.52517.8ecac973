@@ -1,0 +1,11 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:01:59.974268Z
+---
+Two things:
+
+1. Bob has submitted T0006 (chat message redesign) for your review. Please take a look when you can — per charter, aim for under 30 minutes.
+
+2. New task for you once T0006 review is done: T0007 — Add chat filters (sender/recipient dropdown + system events toggle). The backend /messages endpoint already supports filtering via query params (between=alice,bob and type=chat|event). This is purely a frontend task — add a compact filter bar above the chat log, a dropdown to filter by participant, and a toggle for system events. Modify loadChat() to pass query params based on filter state. Filters should persist across the 2-second auto-refresh.
+
+Bob will be your code reviewer for T0007. Finish the T0006 review first, then start on T0007.

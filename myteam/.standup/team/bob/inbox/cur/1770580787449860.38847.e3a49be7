@@ -1,0 +1,7 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T19:59:46.815637Z
+---
+MERGED — T0041 (agent inbox/outbox/logs APIs). Clean implementation, all three endpoints work correctly. 288 tests pass.
+
+Now please prioritize T0037 (right-side diff panel) — it's the critical path. Branch off mark/standup-ui/042-chat-msg-truncation (current HEAD). Full spec in the task description.

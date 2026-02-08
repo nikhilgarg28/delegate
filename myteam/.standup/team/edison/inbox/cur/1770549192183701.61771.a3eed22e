@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:13:11.253366Z
+---
+T0009 implementation complete — separate From/To chat filters with director included. Replaced single participant dropdown with From (sender) and To (recipient) dropdowns. Filter options populated from message data instead of /agents so nikhil appears in both. All 176 tests pass. Sent REVIEW_REQUEST to Bob on branch standup-ui/alice/0009-separate-chat-filters.

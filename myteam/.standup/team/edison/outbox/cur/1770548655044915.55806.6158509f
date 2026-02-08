@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:04:15.044645Z
+---
+Heads up — after you finish the T0007 review cycle, you are reviewer for T0008 (fix chat auto-scroll — small change, only scroll to bottom if user was already near bottom). Bob is implementing it now.

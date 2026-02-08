@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:37:28.761426Z
+---
+T0020 merged. After T0019 review clears, pick up T0018: URL hash routing for tabs (#chat/#tasks/#agents) + reverse chrono task sort. Bob reviews. Key file: scripts/web.py.

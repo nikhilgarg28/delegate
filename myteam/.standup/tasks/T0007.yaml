@@ -1,0 +1,30 @@
+id: 7
+title: 'Add chat filters: sender/recipient dropdown and system events toggle'
+description: "Add filtering controls to the chat UI above the chat log. The backend\
+  \ /messages endpoint already supports filtering via query params:\n- between=alice,bob\
+  \ (shows messages between two agents)\n- type=chat or type=event (filter by message\
+  \ type)\n\nWhat to build:\n\n1. **Filter bar** above the chat-log div: A horizontal\
+  \ bar with filter controls, styled to match the Geist/Vercel aesthetic. Keep it\
+  \ compact \u2014 one row.\n\n2. **Sender/Recipient filter**: A dropdown or pair\
+  \ of dropdowns to filter messages by participant. Options:\n   - \"All\" (default\
+  \ \u2014 show everything)\n   - Each agent name from the /agents endpoint\n   When\
+  \ a name is selected, use the \"between\" query param to show only messages involving\
+  \ that agent. Could also do two dropdowns (From / To) for more precision, but a\
+  \ single \"Involving: [name]\" dropdown is simpler and probably more useful.\n\n\
+  3. **System events toggle**: A checkbox or toggle button to show/hide system events\
+  \ (task created, status changes, etc.). Default ON. When toggled OFF, add type=chat\
+  \ to the /messages fetch to exclude events. When ON, fetch all.\n\n4. **Implementation**:\
+  \ Modify the loadChat() function (web.py line 329) to build the /messages URL with\
+  \ query params based on filter state. Store filter state in JS variables. Filters\
+  \ should persist across the 2-second auto-refresh cycle.\n\nKey files: scripts/web.py\
+  \ \u2014 add HTML for filter bar (around line 261), CSS for filter styling, and\
+  \ modify loadChat() JS (line 329-337). The backend already handles the filtering\
+  \ \u2014 this is purely a frontend task."
+status: done
+assignee: alice
+project: standup-ui
+priority: medium
+created_at: '2026-02-08T11:01:44.646831Z'
+updated_at: '2026-02-08T11:05:00.778950Z'
+completed_at: '2026-02-08T11:05:00.777377Z'
+depends_on: []

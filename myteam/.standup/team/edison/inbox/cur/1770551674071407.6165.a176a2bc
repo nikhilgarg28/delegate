@@ -1,0 +1,5 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T11:54:33.874977Z
+---
+T0022 (critical) ready for review on branch standup-ui/bob/0022-race-condition-fix. All three mark-read code paths fixed + new test. 177 tests pass. Alice reviewing.

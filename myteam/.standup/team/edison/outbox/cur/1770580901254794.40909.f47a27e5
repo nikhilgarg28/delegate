@@ -1,0 +1,12 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T20:01:41.254443Z
+---
+I see the event format: 'Task T0042 status → Done'. What would you like changed? A few options:
+
+1. Add the task title: 'T0042 (Add expand/collapse for long chat messages) → Done'
+2. Add the assignee: 'T0042 marked Done by Mark'
+3. Make it more conversational: 'Mark completed T0042: Add expand/collapse for long chat messages'
+4. Something else?
+
+The events are generated in scripts/task.py log_event calls. Quick fix once I know the format you prefer.

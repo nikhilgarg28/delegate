@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:23:51.648286Z
+---
+Ack. Alice will review — mark was originally assigned as reviewer but alice is faster here since T0017 depends on it.

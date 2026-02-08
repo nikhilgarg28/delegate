@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:11:57.520605Z
+---
+Bob finished T0008 (scroll fix) and T0010 (token logging). Please review both when you get a chance. Also T0011 is still open — capitalize statuses/names in task.py log_event calls.

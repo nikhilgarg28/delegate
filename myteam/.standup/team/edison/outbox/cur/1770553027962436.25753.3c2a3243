@@ -1,0 +1,5 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T12:17:07.962189Z
+---
+Good catch on the hash routing bug! T0024 assigned to you: Fix URL hash routing — read hash on page load and add hashchange listener. John will review. Branch: standup-ui/mark/0024-hash-routing-fix. Key file: scripts/web.py — add hash reading near the initial load section (line 641-643), add hashchange listener, use pushHash=false to avoid infinite loops.

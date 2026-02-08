@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:44:04.473562Z
+---
+REVIEW_RESPONSE for T0019: Approved. Fix is correct — else block now only restores from cache, common block handles all fetching. No more double requests.

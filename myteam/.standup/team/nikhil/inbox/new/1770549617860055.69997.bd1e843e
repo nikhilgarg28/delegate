@@ -1,0 +1,11 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:20:17.764536Z
+---
+Apologies — I missed that message. You are right: the charter specifies a QA agent for merging branches, but we never set one up. Agents have been sending REVIEW_REQUESTs to QA that go nowhere, and I have been marking tasks done manually.
+
+Two options:
+1. Create a QA agent that handles branch merges, runs tests, and sends MERGED/REJECTED.
+2. Remove the QA step from the charter and have the reviewer merge directly.
+
+Which do you prefer? If option 1, should I set up a new agent for it?

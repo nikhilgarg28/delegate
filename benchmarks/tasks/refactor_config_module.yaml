@@ -1,0 +1,72 @@
+title: Refactor config module to use dataclass
+description: |
+  The existing `src/config.py` uses a plain dictionary to hold application
+  settings. Refactor it to use a frozen dataclass `AppConfig` with typed fields
+  while keeping the `load_config(path)` public API working.
+
+  Requirements:
+  1. Replace the dict-based config with a `@dataclass(frozen=True)` named
+     `AppConfig` that has fields: `host: str`, `port: int`, `debug: bool`,
+     `log_level: str`.
+  2. `load_config(path: str) -> AppConfig` must read a JSON file and return an
+     `AppConfig` instance (instead of a raw dict).
+  3. Add a `default_config() -> AppConfig` function that returns sensible
+     defaults (host="localhost", port=8000, debug=False, log_level="info").
+  4. All existing tests must continue to pass, plus add at least one new test
+     for `default_config()`.
+
+repo_setup:
+  - path: src/__init__.py
+    content: ""
+  - path: src/config.py
+    content: |
+      """Application configuration."""
+      import json
+
+
+      def load_config(path: str) -> dict:
+          """Load config from a JSON file."""
+          with open(path) as f:
+              return json.load(f)
+  - path: tests/__init__.py
+    content: ""
+  - path: tests/test_config.py
+    content: |
+      import json
+      import tempfile
+      from pathlib import Path
+
+      from src.config import load_config
+
+
+      def test_load_config_reads_json():
+          data = {"host": "0.0.0.0", "port": 9000, "debug": True, "log_level": "debug"}
+          with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+              json.dump(data, f)
+              f.flush()
+              config = load_config(f.name)
+          assert config.host == "0.0.0.0"
+          assert config.port == 9000
+          assert config.debug is True
+          assert config.log_level == "debug"
+
+acceptance_criteria:
+  - grep_match:
+      path: src/config.py
+      pattern: "@dataclass"
+  - grep_match:
+      path: src/config.py
+      pattern: "class AppConfig"
+  - grep_match:
+      path: src/config.py
+      pattern: "def default_config"
+  - grep_match:
+      path: src/config.py
+      pattern: "def load_config"
+  - tests_pass:
+      command: "pytest tests/test_config.py -v"
+
+timeout_seconds: 300
+tags:
+  - backend
+  - refactor

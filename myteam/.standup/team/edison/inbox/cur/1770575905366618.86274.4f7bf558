@@ -1,0 +1,26 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T18:38:24.453023Z
+---
+T0029 Review (alice's charter variant system in scripts/eval.py):
+
+**APPROVED** — clean implementation, solid test coverage. Ready to build on for T0031.
+
+Detailed review:
+
+1. **Clean API** — list_variants(), load_variant(), bootstrap_with_variant() are well-separated and have clear signatures. load_variant() returns a simple dict[str, str] which is easy to work with. bootstrap_with_variant() cleanly wraps bootstrap() + load_variant() in the right sequence.
+
+2. **Correct fallback behavior** — load_variant() starts from defaults (all 5 charter files from CHARTER_DIR), then overrides with variant files. Tests verify this explicitly (test_falls_back_to_defaults, test_non_overridden_files_are_default). The FileNotFoundError for missing variants is clean.
+
+3. **Test coverage** — Excellent. 7 tests for load_variant (including edge cases), 7 for bootstrap_with_variant, 3 for list_variants. Tests verify both positive (variant content is applied) and negative (nonexistent variant raises) paths. The cross-variant comparison test (test_different_variants_produce_different_charters) is a nice touch.
+
+4. **Metrics collection (T0032 work also in this file)** — collect_metrics(), _collect_db_metrics(), _collect_task_metrics(), and the code quality tools are well-structured. The print_metrics_table() is clear. Tests use mock subprocess effectively.
+
+5. **Extensibility for T0031** — The module structure is good for extending. I'll add run_eval() and compare() functions to this same file. The existing CLI argparse with subparsers makes it easy to add 'run' and 'compare' commands.
+
+**Minor observations (not blocking):**
+- The variant directories (ship-fast, quality-first) both override constitution.md and code-review.md — the test assertions match this correctly.
+- _get_diff_size and _get_changed_files have TODO(T0031) comments about accepting a baseline ref — I'll address those when building the eval runner, as bob flagged.
+- The module already has the collect_metrics() function from T0032, which I'll call from run_eval().
+
+No changes needed. Good to merge.

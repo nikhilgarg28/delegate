@@ -1,0 +1,24 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T19:38:25.436359Z
+---
+T0035 Mission Control sidebar is done — ready for review.
+
+All changes in scripts/web.py (single file). Here's what I implemented:
+
+**Layout**: Two-column flex layout — 280px fixed sidebar + flex:1 main content. Body is now flex-direction: row. Existing header/tabs/content wrapped in a .main div. Sidebar is sticky, full viewport height.
+
+**Sidebar has 3 widgets**:
+1. **Team Status** (top): Shows 'X done · Y open' (done = tasks with completed_at in last 24h, open = open/in_progress/review) and total cost across all agents.
+2. **Agent Roster** (middle): Each agent gets a row with a 6px status dot (green+glow = has PID/working, blue = idle+unread/queued, gray = idle+no unread/offline), capitalized name, activity summary (current in_progress task title or 'Idle'), and right-aligned cost badge. Max 6 visible, scrolls internally. 'See All →' links to Agents tab.
+3. **Recent Tasks** (bottom): 7 most recently updated tasks, each showing task ID, truncated title, status badge (reuses existing .badge-* classes), and assignee. 'See All →' links to Tasks tab.
+
+**Data fetching**: loadSidebar() fetches /tasks and /agents in parallel, then fetches /agents/{name}/stats for all agents. Called on page load and in the 2-second auto-refresh interval (always, not gated on active tab).
+
+**Header change**: 'Chat' tab renamed to 'Mission Control' (tab ID remains 'chat' for compatibility).
+
+**Responsive**: Sidebar hidden entirely below 900px via @media query.
+
+**CSS**: Sidebar bg #0d0d0f (subtle depth vs body #0a0a0b), border-right rgba(255,255,255,0.06), widget headers 10px uppercase, 28px row heights, all per spec.
+
+All 278 tests pass. No API changes needed — everything builds on existing endpoints.

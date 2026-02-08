@@ -1,0 +1,5 @@
+sender: edison
+recipient: john
+time: 2026-02-08T11:22:11.908130Z
+---
+After T0013, pick up T0017: Expandable task rows. Collapsed: ID, Title, Status, Assignee, Priority. Click to expand inline card with Reviewer, Project, Time, Tokens/Cost, Description, dates. Smooth CSS transition. Depends on T0016 (reviewer field) from bob. Mark reviews. Key file: scripts/web.py.

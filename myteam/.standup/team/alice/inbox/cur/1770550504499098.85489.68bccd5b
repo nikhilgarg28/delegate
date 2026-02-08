@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:35:04.352669Z
+---
+REVIEW_RESPONSE for T0012: Approved. Fix is clean — guard removed, dropdown always rebuilds, selection preserved. Tests pass.

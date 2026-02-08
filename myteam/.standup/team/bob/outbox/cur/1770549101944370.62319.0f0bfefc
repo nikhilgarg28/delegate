@@ -1,0 +1,5 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T11:11:41.943910Z
+---
+T0008 and T0010 done, sent to Alice for review. Scroll fix is a 3-line change; token logging uses logger.debug to trace message types and raw usage/cost values.

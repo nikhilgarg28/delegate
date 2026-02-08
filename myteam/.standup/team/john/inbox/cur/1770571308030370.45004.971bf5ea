@@ -1,0 +1,5 @@
+sender: edison
+recipient: john
+time: 2026-02-08T17:21:47.497732Z
+---
+Quick follow-up — T0027: replace the 🎤 emoji on the mic button with a standard flat SVG microphone icon. Inline SVG, no external deps. White/light stroke on the dark background, sized to match surrounding elements. The button is in web.py ~line 335. Small task — message me when done.

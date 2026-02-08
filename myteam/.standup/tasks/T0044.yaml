@@ -1,0 +1,39 @@
+id: 44
+title: Add tests for agent inbox, outbox, and logs API endpoints
+description: "Add tests for the three new API endpoints added in T0041. These endpoints\
+  \ currently have no test coverage.\n\n## Test File\n\nAdd tests to tests/test_web_ui.py\
+  \ (the existing web UI test file). If that file doesn't have a FastAPI test client\
+  \ fixture, create one using FastAPI's TestClient.\n\n## Setup\n\nUse the existing\
+  \ bootstrap fixture to create a team with agents. For inbox/outbox tests, use the\
+  \ mailbox functions (send, deliver) to create test messages. For logs tests, create\
+  \ worklog files in the agent's logs directory.\n\n## Tests Needed\n\n### GET /agents/{name}/inbox\n\
+  1. Returns empty list for agent with no inbox messages\n2. Returns messages with\
+  \ correct fields (sender, time, body, read)\n3. Unread messages have read=false,\
+  \ read messages have read=true\n4. Messages are sorted newest first\n5. Returns\
+  \ 404 for nonexistent agent\n6. Caps at 100 messages (create 101, verify only 100\
+  \ returned)\n\n### GET /agents/{name}/outbox  \n1. Returns empty list for agent\
+  \ with no outbox messages\n2. Returns messages with correct fields (recipient, time,\
+  \ body, routed)\n3. Pending messages have routed=false, routed messages have routed=true\n\
+  4. Messages are sorted newest first\n5. Returns 404 for nonexistent agent\n\n###\
+  \ GET /agents/{name}/logs\n1. Returns empty sessions for agent with no logs\n2.\
+  \ Returns worklog content correctly\n3. Multiple sessions returned in reverse order\
+  \ (latest first)\n4. Returns 404 for nonexistent agent\n5. Large files are truncated\
+  \ to 50KB\n\n## Implementation Notes\n\n- Use httpx.AsyncClient or starlette.testclient.TestClient\
+  \ with the FastAPI app\n- Import create_app from scripts.web\n- Use tmp_path and\
+  \ bootstrap to set up test team directories\n- Use deliver() from scripts.mailbox\
+  \ to place messages directly in inbox\n- Use send() to place messages in outbox\n\
+  - Use mark_inbox_read() to move messages from new/ to cur/ for testing read status\n\
+  - Create worklog files by writing directly to .standup/team/{name}/logs/\n\nAll\
+  \ changes in tests/test_web_ui.py.\nBranch: mark/standup-ui/044-agent-api-tests\n\
+  Code lives in /Users/nikhil/dev/standup/.\nMessage edison when done."
+status: done
+assignee: mark
+reviewer: ''
+project: standup-ui
+priority: medium
+created_at: '2026-02-08T20:00:36.970206Z'
+updated_at: '2026-02-08T20:03:54.073941Z'
+completed_at: '2026-02-08T20:03:54.071364Z'
+depends_on: []
+branch: ''
+commits: []

@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T19:21:51.314665Z
+---
+New task: T0034 — Relative timestamps in the web UI. All timestamps should show as relative ('3 min ago') and switch to absolute after 1 hour. Affects chat messages, events, and task created/completed dates. The task description has the full spec including which functions to replace and where. Clean up the duplicated inline fmtDate() while you're at it. Message me when done.

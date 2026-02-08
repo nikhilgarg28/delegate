@@ -1,0 +1,39 @@
+id: 34
+title: Relative timestamps in the web UI
+description: "All timestamps in the web UI should display as relative times (e.g.\
+  \ '3 min ago', 'just now', '45 min ago') and switch to absolute format after 1 hour\
+  \ (e.g. '14:23' for today, 'Feb 7, 14:23' for older).\n\nThis affects 4 timestamp\
+  \ locations in scripts/web.py:\n\n1. **Chat/event message timestamps** \u2014 currently\
+  \ use fmtTime() (line ~369), which returns '14:32:45' via toLocaleTimeString().\
+  \ These appear in .msg-time (chat messages) and .msg-event-text (system events).\n\
+  \n2. **Task created_at date** \u2014 currently use an inline fmtDate() arrow function\
+  \ (defined separately in _taskRowHtml ~line 407 and _updateTaskRowInPlace ~line\
+  \ 440). Shows full toLocaleString().\n\n3. **Task completed_at date** \u2014 same\
+  \ inline fmtDate(), same two locations.\n\nImplementation:\n\n1. Create a single\
+  \ shared fmtTimestamp(iso) function that:\n   - Returns 'just now' for < 1 minute\n\
+  \   - Returns 'N min ago' for 1-59 minutes\n   - Returns the absolute time ('14:23')\
+  \ for 1-24 hours ago\n   - Returns date + time ('Feb 7, 14:23') for older than 24\
+  \ hours\n   - Returns '\u2014' for null/empty input\n\n2. Replace all 4 timestamp\
+  \ rendering sites to use fmtTimestamp():\n   - fmtTime(m.timestamp) in chat messages\
+  \ and events \u2192 fmtTimestamp(m.timestamp)\n   - fmtDate(t.created_at) in both\
+  \ _taskRowHtml and _updateTaskRowInPlace \u2192 fmtTimestamp(t.created_at)\n   -\
+  \ fmtDate(t.completed_at) in both locations \u2192 fmtTimestamp(t.completed_at)\n\
+  \n3. Remove the duplicated inline fmtDate() arrow functions (lines ~407 and ~440)\
+  \ \u2014 they're defined twice, which is a code smell. The new shared fmtTimestamp()\
+  \ replaces them.\n\n4. Add a periodic refresh so relative times stay accurate: call\
+  \ a lightweight update function every 30 seconds that re-renders visible timestamps\
+  \ without doing a full data fetch.\n\n5. Do NOT change fmtElapsed(sec) \u2014 that\
+  \ formats durations (e.g. '5m 32s'), not timestamps.\n\nNote: fmtTime() can be kept\
+  \ if it's used elsewhere, but all user-facing timestamp displays should go through\
+  \ fmtTimestamp().\n\nCode lives in /Users/nikhil/dev/standup/. The entire UI is\
+  \ in scripts/web.py (single-file HTML+JS). Study the existing fmtTime(), fmtElapsed(),\
+  \ and the inline fmtDate() functions.\nMessage edison when done."
+status: done
+assignee: alice
+reviewer: ''
+project: standup-ui
+priority: high
+created_at: '2026-02-08T19:21:40.074868Z'
+updated_at: '2026-02-08T19:25:03.440658Z'
+completed_at: '2026-02-08T19:25:03.438198Z'
+depends_on: []

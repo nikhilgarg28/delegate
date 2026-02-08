@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T10:43:28.302757Z
+---
+New project to improve standup itself - start showing tokens, time, usd for each task (in progress or done). Also please capitalize names/statuses in tasks or other parts of the UI. Finally, chat box only reaches vertically halfway on my screen - why? Can we make it full screen please?

@@ -1,0 +1,22 @@
+id: 24
+title: 'Fix URL hash routing: read hash on load + listen for hashchange'
+description: "Bug found by Mark: T0018 added hash writing (switchTab sets window.location.hash)\
+  \ but never reads it back. Two issues:\n\n1. On page load, the initial tab is always\
+  \ 'chat' regardless of URL hash. If user navigates to /#tasks, it should open the\
+  \ tasks tab.\n2. No hashchange event listener, so browser back/forward buttons don't\
+  \ switch tabs.\n\nFix in scripts/web.py:\n- On page load (near line 642), read window.location.hash\
+  \ and call switchTab() with the matching tab name if valid (chat/tasks/agents).\
+  \ Default to 'chat' if no hash.\n- Add window.addEventListener('hashchange', ...)\
+  \ to switch tabs when hash changes (e.g. browser back/forward).\n- Make sure switchTab\
+  \ doesn't re-set the hash when called from hashchange (avoid infinite loop) \u2014\
+  \ use the existing pushHash parameter.\n\nKey file: scripts/web.py \u2014 initial\
+  \ load section (line 641-643) and switchTab function (line 369-378)."
+status: done
+assignee: mark
+reviewer: john
+project: standup-ui
+priority: medium
+created_at: '2026-02-08T12:16:55.963303Z'
+updated_at: '2026-02-08T12:26:56.740118Z'
+completed_at: '2026-02-08T12:26:56.738772Z'
+depends_on: []

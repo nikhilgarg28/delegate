@@ -1,0 +1,39 @@
+id: 47
+title: 'Refine system event formatting: task name in creation, right-align timestamps'
+description: "Follow-up to T0045 based on director feedback. Two changes in scripts/web.py\
+  \ and scripts/task.py:\n\n## 1. Task creation event should show task name instead\
+  \ of project/priority\n\nCurrent format in task.py create_task():\n  log_event(root,\
+  \ f\"T{task_id:04d} created (project={project or 'none'}, priority={priority.capitalize()})\"\
+  )\n\nChange to:\n  log_event(root, f\"Created T{task_id:04d}: {title}\")\n\nThis\
+  \ makes the event message more useful \u2014 seeing the task name is much more informative\
+  \ than the project/priority metadata.\n\n## 2. System event timestamps should right-align\
+  \ with regular message timestamps\n\nCurrent CSS for .msg-event uses centered layout\
+  \ with lines on both sides:\n  .msg-event { display: flex; align-items: center;\
+  \ justify-content: center; gap: 10px; }\n\nThe timestamp sits between the text and\
+  \ the right line. Director wants it right-aligned matching the timestamp position\
+  \ of regular chat messages.\n\nChange the event template from:\n  <div class=\"\
+  msg-event\"><span class=\"msg-event-line\"></span><span class=\"msg-event-text\"\
+  >...</span><span class=\"msg-event-time ts\" ...>...</span><span class=\"msg-event-line\"\
+  ></span></div>\n\nTo a layout where the event text is on the left and timestamp\
+  \ is pushed to the far right (using flex with margin-left: auto on the timestamp,\
+  \ same as .msg-time):\n  <div class=\"msg-event\"><span class=\"msg-event-line\"\
+  ></span><span class=\"msg-event-text\">...</span><span class=\"msg-event-line\"\
+  ></span><span class=\"msg-event-time ts\" ...>...</span></div>\n\nMove the timestamp\
+  \ AFTER the right line, and use flex-shrink:0 so it stays at the right edge. The\
+  \ timestamp should align vertically with the msg-time timestamps of regular messages.\n\
+  \n## 3. Update tests\n\nUpdate test_create_task_logs_event in tests/test_task.py\
+  \ to match the new format: check for 'Created T0001:' instead of 'T0001 created'.\n\
+  \nAll changes in scripts/task.py, scripts/web.py, and tests/test_task.py.\nBranch:\
+  \ mark/standup-ui/047-event-format-refinement\nCode lives in /Users/nikhil/dev/standup/.\n\
+  Message edison when done."
+status: done
+assignee: mark
+reviewer: ''
+project: standup-ui
+priority: medium
+created_at: '2026-02-08T20:13:54.280805Z'
+updated_at: '2026-02-08T20:21:59.046081Z'
+completed_at: '2026-02-08T20:21:59.043741Z'
+depends_on: []
+branch: ''
+commits: []

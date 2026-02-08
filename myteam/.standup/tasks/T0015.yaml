@@ -1,0 +1,19 @@
+id: 15
+title: Expandable agent cards with stats
+description: 'Click an agent card to expand inline and show stats: tasks completed,
+  tasks reviewed, total tokens (in/out), total cost USD, average time per task. Needs:
+  (1) New /agents/{name}/stats API endpoint in web.py that aggregates from tasks (count
+  done where assignee=name, count done where reviewer=name) and sessions (sum tokens,
+  sum cost, avg duration). (2) Frontend: click agent card to toggle expanded section
+  below with stats grid. Click again or click another to collapse. Match the expandable
+  row pattern being built for tasks. Key files: scripts/web.py (endpoint + frontend),
+  scripts/chat.py (session queries).'
+status: done
+assignee: alice
+project: standup-ui
+priority: medium
+created_at: '2026-02-08T11:21:09.329789Z'
+updated_at: '2026-02-08T11:27:30.898934Z'
+completed_at: '2026-02-08T11:27:30.897778Z'
+depends_on: []
+reviewer: ''

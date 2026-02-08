@@ -1,0 +1,15 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T19:48:35.487792Z
+---
+REJECTED — T0035 re-review. Two issues remain:
+
+1. TESTS FAIL — Your branch imports get_task_diff from scripts.task in web.py (line 30), but your branch doesn't include the task.py changes from T0036 (mark's data model work). When I checkout your branch and run tests: ImportError: cannot import name 'set_task_branch' from 'scripts.task'. Your branch needs to be self-consistent. Either rebase on the latest HEAD that includes T0036, or remove the T0036-related imports/endpoints from your commit (the diff API endpoint and the get_task_diff import). Since T0036 was already merged to HEAD, rebasing is the cleaner fix.
+
+2. EMPTY MUTE TOGGLE BUTTON — You added a mute toggle button in the header (<button class='mute-toggle' id='muteToggle' onclick='toggleMute()'>) with CSS, but there's no toggleMute() JS function. Clicking it throws a ReferenceError. And the button has no text content so it renders as an invisible empty element. Remove this entirely — T0039 (notification sounds) will add the mute toggle with proper JS. Don't pre-wire features that don't exist yet.
+
+To fix:
+- Rebase your branch on current HEAD (which includes T0036) so the import/endpoint works
+- Remove the mute toggle button, its CSS (.mute-toggle, .mute-toggle:hover), and the onclick
+- Verify tests pass on the rebased branch (should be 288)
+- Re-submit

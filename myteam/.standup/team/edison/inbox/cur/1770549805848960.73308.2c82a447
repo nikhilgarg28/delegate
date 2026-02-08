@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:23:25.675302Z
+---
+T0015 done — expandable agent cards with stats. Click any agent card to see an inline stats grid: tasks done, in review, total tasks, sessions, tokens, cost, agent time, avg task time. New GET /agents/{name}/stats endpoint aggregates from sessions + tasks. All 176 tests pass. Sent REVIEW_REQUEST to Bob on branch standup-ui/alice/0015-expandable-agent-cards.

@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:33:44.007579Z
+---
+REVIEW_REQUEST: T0020 — repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0020-agent-msg-counts. Added messages_sent/messages_received to get_agent_stats() via single query on messages table (chat type only), plus two new tiles in the agent card grid.

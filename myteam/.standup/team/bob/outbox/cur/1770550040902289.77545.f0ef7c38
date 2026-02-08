@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:27:20.902042Z
+---
+REVIEW_RESPONSE for T0015: Approved. Clean implementation — backend aggregation is solid with proper COALESCE guards, and the frontend expand/collapse with preserved state across polling is well done. Two minor notes: (1) The onclick on .agent-card will also fire when clicking inside the expanded stats area, causing unintended collapse — consider stopping propagation on .agent-stats clicks. (2) No test coverage for get_agent_stats() — not blocking but worth adding later. Ship it.

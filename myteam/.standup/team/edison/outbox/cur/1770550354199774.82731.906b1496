@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:32:34.199499Z
+---
+T0019 assigned: Fix agent card flicker. The 2s auto-refresh rebuilds innerHTML and collapses expanded cards. Fix by tracking expandedAgent and re-expanding after DOM rebuild. Bob reviews. Key file: scripts/web.py loadAgents() + setInterval.

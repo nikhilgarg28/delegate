@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:54:13.740490Z
+---
+T0023 complete and submitted for Bob's review. Applied the same in-place DOM update pattern from T0019: extracted _taskRowHtml() and _updateTaskRowInPlace(), compare task IDs on refresh, update existing DOM in-place when list is unchanged. CSS transitions preserved, no flicker. All 62 web/task/chat tests pass. Note: test_agent.py has 11 pre-existing failures (likely from external agent.py changes). Branch: standup-ui/alice/0023-task-row-flicker

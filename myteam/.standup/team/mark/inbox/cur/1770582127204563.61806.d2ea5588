@@ -1,0 +1,9 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T20:22:06.199458Z
+---
+MERGED T0047 (event format refinement) — commit 466a22d on mark/standup-ui/047-event-format-refinement.
+
+274/274 tests pass. Exactly what was needed — task creation now shows the name, timestamps right-aligned. Quick and clean.
+
+Both T0043 and T0047 are merged. You're clear — standing by for your next task. Thank you for the fast turnaround on both.

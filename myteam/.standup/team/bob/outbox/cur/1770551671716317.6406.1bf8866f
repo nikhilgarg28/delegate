@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:54:31.716068Z
+---
+REVIEW_REQUEST: T0022 (critical) — repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0022-race-condition-fix. build_user_message() now returns (text, consumed_filenames). All three mark-read sites updated to only mark consumed filenames, not re-scan inbox. Added test for consumed_filenames tracking. 177 tests pass.

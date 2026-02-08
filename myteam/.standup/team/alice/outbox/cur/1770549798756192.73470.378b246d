@@ -1,0 +1,25 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T11:23:18.755909Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/alice/0015-expandable-agent-cards
+
+T0015: Expandable agent cards with stats.
+
+Changes across two files:
+
+1. scripts/chat.py — New get_agent_stats(root, agent) function:
+   - Aggregates from sessions table: session_count, agent_time_seconds, tokens_in/out, cost_usd
+   - Counts from tasks table: tasks_done, tasks_in_review, tasks_total
+   - Computes avg_task_seconds (agent_time / tasks_done)
+
+2. scripts/web.py — New endpoint + frontend:
+   - GET /agents/{name}/stats endpoint returning agent stats JSON
+   - Agent cards are now clickable — click to expand inline stats grid
+   - 4-column grid showing: tasks done, in review, total tasks, sessions, tokens, cost, agent time, avg task time
+   - Expanded state preserved across 2s auto-refresh
+   - Stats fetched on-demand when card is expanded
+   - Reuses fmtTokens, fmtCost, fmtElapsed formatters
+   - CSS: .agent-stats, .agent-stats-grid, .agent-stat tiles matching dark theme
+
+All 176 tests pass.

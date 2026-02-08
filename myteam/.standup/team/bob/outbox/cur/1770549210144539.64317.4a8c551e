@@ -1,0 +1,13 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:13:30.144239Z
+---
+Reviewed standup-ui/alice/0009-separate-chat-filters for T0009. Approved.
+
+- From/To split is cleaner than the single 'involving' filter — lets you find specific conversations (e.g. 'From Edison To Alice')
+- Populating from message data instead of /agents solves the director gap I flagged in T0007
+- Sorted dropdown options, save/restore pattern, events passthrough — all correct
+- Combined filter logic (lines 408-415) is clean: events always pass, then check sender/recipient independently
+- options.length <= 1 guard with || ensures both dropdowns get populated together
+
+All 176 tests pass. Clear to send to QA.

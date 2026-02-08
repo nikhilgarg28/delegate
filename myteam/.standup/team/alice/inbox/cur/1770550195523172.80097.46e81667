@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:29:55.343407Z
+---
+REVIEW_REQUEST: T0013 — repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0013-task-table-width. Added nowrap to all table cells, Title column overrides to normal wrapping with width:100%, table wrapped in overflow-x:auto div.

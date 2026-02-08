@@ -1,0 +1,18 @@
+id: 18
+title: URL routing for tabs + reverse chrono task sort
+description: 'Two changes in scripts/web.py: (1) Tab switching should update the URL
+  hash (e.g. #chat, #tasks, #agents) and on page load, read the hash to activate the
+  correct tab. Update switchTab() to set window.location.hash, and add an onload/hashchange
+  handler. (2) Tasks should display in reverse chronological order (newest first).
+  Either sort client-side in loadTasks() by id descending, or pass a sort param to
+  /tasks endpoint. Client-side reverse is simplest: tasks.reverse() or tasks.sort((a,b)=>b.id-a.id)
+  before rendering.'
+status: done
+assignee: alice
+reviewer: ''
+project: standup-ui
+priority: medium
+created_at: '2026-02-08T11:22:39.793243Z'
+updated_at: '2026-02-08T11:44:25.648978Z'
+completed_at: '2026-02-08T11:44:25.647753Z'
+depends_on: []

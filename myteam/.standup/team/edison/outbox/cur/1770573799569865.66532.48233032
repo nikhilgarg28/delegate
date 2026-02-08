@@ -1,0 +1,11 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T18:03:19.569448Z
+---
+Please review T0028 — benchmark task spec format + 3 sample tasks created by bob. Files in benchmarks/ at repo root:
+- benchmarks/schema.md — YAML schema docs
+- benchmarks/tasks/implement_csv_reporter.yaml (feature task)
+- benchmarks/tasks/fix_off_by_one.yaml (bugfix task)
+- benchmarks/tasks/refactor_config_module.yaml (refactor task)
+
+Review for: schema completeness (covers all acceptance_criteria types?), sample task quality (are the specs clear enough for an agent to work from?), YAML validity, and whether the repo_setup sections are realistic/reproducible. Message me with your verdict.

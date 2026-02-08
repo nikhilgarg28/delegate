@@ -1,0 +1,24 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T10:51:38.385571Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0004-task-id-scheme
+
+T0004 is ready for review. Summary of changes:
+
+1. scripts/task.py:
+   - _task_path(): filename pattern task-{id:04d}.yaml → T{id:04d}.yaml
+   - _next_id(): glob pattern task-*.yaml → T*.yaml, stem parsing updated (f.stem[1:] instead of f.stem.split('-')[1])
+   - All event log strings (create_task, assign_task, change_status) use T{id:04d}
+   - All CLI print() output in main() uses T{id:04d}
+   - list_tasks() glob updated to T*.yaml
+
+2. scripts/web.py line 314: JS template literal changed from task-${...} to T${...}
+
+3. scripts/agent.py lines 190, 307, 465: f-string references changed from task-{id:04d} to T{id:04d}
+
+4. tests/test_task.py: file path assertion updated to match new T{id:04d}.yaml pattern
+
+5. Migration: renamed all existing task files (task-0001.yaml through task-0004.yaml → T0001.yaml through T0004.yaml). Integer IDs inside YAML unchanged.
+
+All 176 tests pass. No remaining task-{...} references in scripts/.

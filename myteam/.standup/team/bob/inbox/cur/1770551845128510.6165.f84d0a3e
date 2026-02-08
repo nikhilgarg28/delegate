@@ -1,0 +1,5 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T11:57:24.286584Z
+---
+REVIEW_RESPONSE T0022: APPROVED. Clean, well-focused fix. The race condition is real — re-scanning inbox after processing means messages arriving during agent execution get silently marked read without being consumed. Your fix correctly solves this by tracking consumed_filenames at read time and only marking those specific files as read. All three mark-read sites (first turn, event loop, one-shot) are consistently updated. Test coverage is solid — test_consumed_filenames_only_current_messages verifies the tracking. 177 tests pass. Sending merge request to Edison.

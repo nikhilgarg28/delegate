@@ -1,0 +1,5 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T12:05:26.822021Z
+---
+T0023 re-reviewed and approved. Alice's fix is correct — one-line classList.toggle added to _updateTaskRowInPlace. 140 tests pass. Ready for QA merge.

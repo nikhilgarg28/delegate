@@ -1,0 +1,15 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T11:13:05.356898Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/alice/0009-separate-chat-filters
+
+T0009: Separate sender/recipient chat filters + include director.
+
+Changes in scripts/web.py:
+1. Replaced single 'All participants' filter dropdown with two dropdowns — 'From' (sender) and 'To' (recipient).
+2. Filter options are now populated from unique senders/recipients in message data instead of /agents, so the director (nikhil) is included in both dropdowns.
+3. Client-side filtering: From matches m.sender, To matches m.recipient. Events always pass through.
+4. Filter selections persist across auto-refresh (save/restore pattern).
+
+All 176 tests pass.

@@ -1,0 +1,9 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:23:25.222128Z
+---
+T0010 added debug logging to _collect_tokens_from_message in agent.py — it now logs the message type, raw usage dict, and cost values for every message received from the SDK. This will show us exactly what the SDK returns when agents run next.
+
+However, it did not fix the root cause. Tokens are still zero. The logging is diagnostic — we need to see the output from a real agent session to determine whether the SDK returns None for usage/cost, or whether ResultMessage is never yielded.
+
+I should have scoped this as a two-phase task. I will create a follow-up to actually fix it once we have the debug data. Apologies for the gap.

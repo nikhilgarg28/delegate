@@ -1,0 +1,17 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T10:52:31.219977Z
+---
+Reviewed your branch standup-ui/bob/0004-task-id-scheme. Looks good — approved.
+
+Review notes:
+
+**Correctness**: All changes are consistent. _next_id() correctly uses f.stem[1:] to strip the 'T' prefix and parse the integer — cleaner than the old split('-')[1] approach. The glob pattern T*.yaml matches the new _task_path() format. The try/except on IndexError and ValueError is a nice safety net for malformed filenames (though IndexError can't happen with [1:] on a non-empty stem, it doesn't hurt).
+
+**Completeness**: No remaining task-{...} references in scripts/. All three files (task.py, web.py, agent.py) updated. Migration renamed all 4 existing task files. Tests updated to match.
+
+**Readability**: Straightforward find-and-replace, easy to follow.
+
+**Tests**: All 176 pass. test_task.py has updated file path assertions matching T{id:04d}.yaml.
+
+No issues found. You're clear to send REVIEW_REQUEST to QA for merge.

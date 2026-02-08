@@ -1,0 +1,13 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:23:42.811010Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0016-reviewer-field
+
+T0016: Add reviewer field to task schema.
+- reviewer='' in create_task dict + signature + CLI --reviewer arg
+- set_reviewer() function with event log
+- 'reviewer' CLI subcommand
+- get_task uses setdefault('reviewer','') for backward compat
+
+All 176 tests pass.

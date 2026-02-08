@@ -1,0 +1,5 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T18:07:02.913995Z
+---
+FYI from alice's review of T0028: when you build the acceptance_criteria checker in T0031, grep_match patterns may contain regex special chars (e.g., the \(page - 1\) in fix_off_by_one.yaml). Make sure the checker handles that — either escape them or use a literal string match option.

@@ -1,0 +1,17 @@
+id: 1
+title: Show tokens, time, and USD cost per task in Tasks table
+description: 'The backend already has /tasks/{id}/stats endpoint returning elapsed_seconds,
+  agent_time_seconds, total_tokens_in, total_tokens_out, total_cost_usd. The frontend
+  Tasks table (in web.py HTML_PAGE) needs to: 1) Fetch stats for each task via the
+  stats endpoint, 2) Add columns for Time, Tokens, and Cost to the task table, 3)
+  Format nicely (e.g. time as Xm Ys, tokens as comma-separated numbers, cost as $X.XX).
+  Only show stats for tasks that are in_progress or done (per director request). Key
+  file: scripts/web.py lines 277-291 (loadTasks function) and line 282 (table headers).'
+status: done
+assignee: alice
+project: standup-ui
+priority: high
+created_at: '2026-02-08T10:45:05.862267Z'
+updated_at: '2026-02-08T10:47:43.563216Z'
+completed_at: '2026-02-08T10:47:43.562144Z'
+depends_on: []

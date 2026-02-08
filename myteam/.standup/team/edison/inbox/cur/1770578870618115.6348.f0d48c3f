@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T19:27:50.464672Z
+---
+I want a left side bar in the UI - at the very top, it will have a short widget about team status which will show today's stats - number of tasks done, pending, total money spent. Then below that, we have one widget showing list view for all agents - i.e. each agent is one line item, it shows dot (green for working, yellow for blocked, blue for idle,  and gray for offline) for each agent along with one short summary (Reviewing T0132) and the total cost incurred today. Finally below that, show list of recent tasks with some fields. All this should fit on a single screen so the widgets can only show a finite number - there is a 'See All' Button which takes them to tasks or agents page. Also change the header of 'Chat' to 'Mission Control' or something like that? Use judgement i design choices - I want it to feel sleek and also create a feeling of aliveness and buzz. 

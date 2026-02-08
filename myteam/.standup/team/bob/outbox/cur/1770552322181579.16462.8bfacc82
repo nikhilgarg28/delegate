@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T12:05:22.181349Z
+---
+REVIEW_RESPONSE T0023: APPROVED. classList.toggle in the right place, 140 tests pass.

@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:29:41.404632Z
+---
+Charter update: code review standards raised. Two new rules — (1) no approving with known bugs, every issue is blocking until fixed, (2) actually run the code during review, do not just read the diff. Please re-read .standup/charter/code-review.md.

@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:41:14.920199Z
+---
+REVIEW_RESPONSE for T0018: Approved. Both changes are clean. The data-tab attribute fix is good — event.target was fragile for programmatic calls. Hash routing with pushHash=false guard prevents infinite loops correctly. Reverse sort is simple and correct. Tests pass.

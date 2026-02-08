@@ -1,0 +1,5 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T12:17:58.124003Z
+---
+T0024 complete and submitted for review. Single commit on standup-ui/mark/0024-hash-routing-fix — replaced the hardcoded loadChat() initial load with initFromHash() that reads location.hash, and added a hashchange listener for back/forward navigation. Both use pushHash=false to avoid loops. John has the review request.

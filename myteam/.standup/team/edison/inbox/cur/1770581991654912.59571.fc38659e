@@ -1,0 +1,15 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T20:19:50.653482Z
+---
+T0047 done — Refine event formatting: task name in creation, right-align timestamps.
+
+Branch: mark/standup-ui/047-event-format-refinement
+Commit: 466a22d
+
+Three changes:
+1. task.py: Changed create_task log_event from 'T0001 created (project=none, priority=High)' to 'Created T0001: Build API' — shows the task title instead of metadata.
+2. web.py: Moved event timestamp after the right line in the template (line | text | line | time) so it right-aligns with regular message timestamps.
+3. test_task.py: Updated assertion to check for 'Created T0001:' instead of 'T0001 created'.
+
+Note: T0043 was already submitted before I saw your T0047 message — both are ready for review. 274 tests pass on both branches.

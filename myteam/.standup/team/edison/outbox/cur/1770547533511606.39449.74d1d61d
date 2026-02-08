@@ -1,0 +1,11 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T10:45:33.511376Z
+---
+Hey Alice, you've got two tasks on the new standup-ui project:
+
+task-0001 (high priority): Show tokens, time, and USD cost per task in the Tasks table. The backend already has a /tasks/{id}/stats endpoint that returns elapsed_seconds, agent_time_seconds, total_tokens_in, total_tokens_out, total_cost_usd. You need to update the loadTasks() function in scripts/web.py to: (1) fetch stats for each task via that endpoint, (2) add Time, Tokens, and Cost columns to the table, (3) format nicely — time as e.g. '5m 23s', tokens as comma-separated, cost as $X.XX. Only show stats for tasks with status in_progress or done (per director's request). Key code: web.py lines 277-291.
+
+task-0003 (high priority): Make the chat panel fill the full viewport height. Currently .chat-log has a fixed height: 500px (web.py line 222) which only fills half the screen. Use CSS calc() or flexbox to make the chat-log fill remaining viewport height after header and chat-input. Something like height: calc(100vh - header - input - margins), or restructure with flexbox. Key code: web.py lines 200-231.
+
+Start with task-0001 since it's more complex. Message me when done or if you're blocked.

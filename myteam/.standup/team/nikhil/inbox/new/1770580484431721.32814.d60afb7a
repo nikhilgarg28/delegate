@@ -1,0 +1,19 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T19:54:43.743647Z
+---
+Glad you like it — executing now. Here's the plan:
+
+T0035 (sidebar) — MERGED just now. Sidebar is live.
+
+T0041 (new, bob) — Backend API endpoints for agent inbox/outbox/logs. Bob's starting immediately — these don't depend on the panel UI.
+
+T0037 (john) — Right-side panel skeleton + diff rendering. I've nudged john twice now — this is the critical path since both diff views and agent details will use the same panel component.
+
+T0038 (alice, blocked on T0037) — Wiring diffs to task details.
+
+T0039 (mark, fixing) — Notification sounds. Sent back for missing HTML button element. Quick fix.
+
+T0040 (alice) — Light/dark theme with prefers-color-scheme. She's working on this while waiting for T0037.
+
+After T0037 lands, I'll create the agent detail panel content task (filling the panel with inbox/outbox/logs tabs using T0041's APIs).

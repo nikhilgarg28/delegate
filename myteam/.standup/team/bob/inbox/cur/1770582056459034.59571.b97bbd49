@@ -1,0 +1,19 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T20:20:55.619282Z
+---
+New task T0048 — Re-incorporate notification sounds from orphaned T0039. HIGH priority.
+
+During T0043 review I discovered that T0039's notification sound code (commit 5427136) was orphaned and never made it into the mainline. The mute toggle exists but there are no sound functions to control.
+
+Your task: add the Web Audio API sound functions (playMsgSound, playTaskSound) and wire them into loadChat() and loadTasks(). Reference the original code at: git show 5427136:scripts/web.py
+
+Key functions to re-implement:
+- _audioCtx, _getAudioCtx() — lazy AudioContext init
+- playMsgSound() — single 880Hz sine wave, 0.25s
+- playTaskSound() — three-note ascending chime (C5, E5, G5)
+- Both check _isMuted before playing (already exists from T0043)
+- Integration: playMsgSound() on new chat messages, playTaskSound() on task completion
+
+Branch: bob/standup-ui/048-notification-sounds
+Base off: mark/standup-ui/043-mute-icon-and-mic (commit 3507297)

@@ -1,0 +1,13 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T19:46:54.640099Z
+---
+Great idea — created T0039 (notification sounds) and assigned it to mark who's available now.
+
+The plan: synthesize two subtle sounds via Web Audio API (no external files) — a soft two-tone ding for new messages, and a three-note ascending chime for task completions/review submissions. We'll hook into the existing 2-second polling loop to detect changes, and add a small 🔔/🔕 mute toggle in the header (persisted to localStorage). Default: sounds on.
+
+Status update:
+- T0035 (sidebar) — sent back to bob with fixes needed: he added an unrequested voice/mic feature (~70 lines), and the cost label says 'spent today' but shows lifetime cost. He also needs to create a proper branch. Core sidebar is solid though.
+- T0037 (diff panel) — assigned to john, still open
+- T0038 (wire up diffs) — blocked on T0037, assigned to alice
+- T0039 (notification sounds) — just assigned to mark

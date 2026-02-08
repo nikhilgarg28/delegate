@@ -1,0 +1,50 @@
+id: 45
+title: Improve system event formatting and timestamp display
+description: "Multiple formatting improvements to system events and timestamps based\
+  \ on director feedback.\n\n## 1. System Event Text (scripts/task.py)\n\nChange all\
+  \ log_event() calls to use more human-readable sentences WITHOUT the 'Task' prefix\
+  \ (just use 'TXXXX' since it's self-explanatory):\n\nCurrent \u2192 New:\n- 'Task\
+  \ created: T0044 ...' \u2192 'T0044 created: ...' (or better: keep the full detail)\n\
+  - 'Task T0044 assigned to Alice' \u2192 'T0044 assigned to Alice'  \n- 'Task T0044\
+  \ reviewer set to Bob' \u2192 'T0044 reviewer set to Bob'\n- 'Task T0044 status\
+  \ \u2192 Done' \u2192 'Status of T0044 changed from {old_status} \u2192 {new_status}'\n\
+  \nFor the status change, you need the OLD status. The change_status() function in\
+  \ task.py already reads the task before updating \u2014 capture the old status and\
+  \ include it:\n  Before: log_event(root, f'Task T{task_id:04d} status \u2192 {status...}')\
+  \  \n  After:  log_event(root, f'Status of T{task_id:04d} changed from {old_status}\
+  \ \u2192 {new_status}')\n\nFormat both old and new status with title case and replace\
+  \ underscores with spaces (e.g. 'In Progress \u2192 Done').\n\nFor task creation:\n\
+  \  Before: 'Task created: T0044 ...'\n  After: 'T0044 created (project={project},\
+  \ priority={priority})'\n\nFor assignment:\n  Before: 'Task T0044 assigned to Alice'\n\
+  \  After: 'T0044 assigned to Alice'\n\nFor reviewer:\n  Before: 'Task T0044 reviewer\
+  \ set to Bob'\n  After: 'T0044 reviewer set to Bob'\n\n## 2. Event Timestamp Position\
+  \ (scripts/web.py)\n\nCurrently, event messages prepend the timestamp on the left\
+  \ side of the event text:\n  <span class='ts' data-ts='...'>{timestamp}</span> {text}\n\
+  \nChange to put the timestamp on the right side, matching the regular message timestamp\
+  \ style:\n  - Event text on the left\n  - Timestamp in small gray text on the right\
+  \ (matching .msg-time style: color #444, font-size 11px)\n\nUpdate the event message\
+  \ HTML template in loadChat(). The event layout should be:\n  <div class='msg-event'>\n\
+  \    <span class='msg-event-line'></span>\n    <span class='msg-event-text'>{eventText}</span>\n\
+  \    <span class='msg-event-time ts' data-ts='{timestamp}'>{fmtTimestamp}</span>\n\
+  \    <span class='msg-event-line'></span>\n  </div>\n\nAdd CSS for .msg-event-time:\n\
+  \  .msg-event-time { color: #444; font-size: 11px; font-variant-numeric: tabular-nums;\
+  \ white-space: nowrap; flex-shrink: 0; }\n\n## 3. Capitalize 'Just now' (scripts/web.py)\n\
+  \nIn the fmtTimestamp() function, change:\n  if(sec<60) return 'just now';\nTo:\n\
+  \  if(sec<60) return 'Just now';\n\n## 4. Remove 'Task' prefix elsewhere\n\nSearch\
+  \ the codebase for other places that say 'Task TXXXX' or 'Task T{id}' and simplify\
+  \ to just 'TXXXX'. Check:\n- scripts/task.py (log_event calls \u2014 covered above)\n\
+  - scripts/web.py (sidebar task list, task row HTML \u2014 these already use just\
+  \ the ID like 'T0044', so should be fine)\n- Any other scripts that log events\n\
+  \nAll changes in scripts/task.py and scripts/web.py.\nBranch: mark/standup-ui/045-event-formatting\n\
+  Code lives in /Users/nikhil/dev/standup/.\nMessage edison when done."
+status: done
+assignee: mark
+reviewer: ''
+project: standup-ui
+priority: high
+created_at: '2026-02-08T20:04:30.417354Z'
+updated_at: '2026-02-08T20:09:54.161020Z'
+completed_at: '2026-02-08T20:09:54.158066Z'
+depends_on: []
+branch: ''
+commits: []

@@ -1,0 +1,56 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T19:51:58.444454Z
+---
+Great question — I've been thinking about a unified interaction pattern. Here's my proposal:
+
+## Unified Right-Side Detail Panel
+
+Instead of building separate panels for diffs and agent details, we use ONE reusable right-side slide-out panel that adapts its content based on what you clicked. This gives us consistency everywhere:
+
+- **Click agent name** (anywhere — sidebar roster, agents tab, chat message avatar) → panel slides in showing agent detail with tabs: Inbox | Outbox | Logs | Stats
+- **Click commit SHA or 'View Changes'** (in task detail) → same panel slides in showing diff view with tabs: Files Changed | Full Diff
+- **Click task ID** (in sidebar recent tasks) → could eventually show task detail in the same panel
+
+The panel is always the same component: fixed right, 55vw width, header with title + close button, tab bar, scrollable body. Only the content/tabs change based on context.
+
+## Agent Detail Panel — Tab Contents
+
+**Inbox tab**: Messages received by this agent, newest first. Each message shows sender, relative timestamp, body preview. Unread messages get a subtle blue left-border. Clicking expands to full body.
+
+**Outbox tab**: Messages sent by this agent, same format. Shows recipient instead of sender.
+
+**Logs tab**: Agent worklog entries from .standup/team/<agent>/logs/*.md. Show the latest session's turns in reverse chronological order. Each turn shows the incoming message and the agent's response — essentially a readable trace of what the agent did and why.
+
+**Stats tab**: The existing agent stats grid (tasks done, cost, tokens, time) — moved from the expandable card into the panel for more space.
+
+## Interaction Flow
+
+1. On the Agents tab, agent cards become simpler — just name, status dot, current task. No more inline expand. Clicking the card opens the right panel instead.
+2. In the sidebar agent roster, clicking an agent name opens the panel too.
+3. In chat, clicking a message sender's avatar/name opens their agent panel.
+4. Panel has a subtle slide-in animation (same as diff panel — 0.25s ease-out).
+5. Escape or clicking backdrop closes it.
+6. If you click a different agent while panel is open, it swaps content without closing/reopening.
+
+## Backend: 3 New API Endpoints
+
+GET /agents/{name}/inbox → list of messages (sender, time, body, read status)
+GET /agents/{name}/outbox → list of messages (recipient, time, body)  
+GET /agents/{name}/logs → latest worklog entries (parsed from markdown files)
+
+## Why This Works
+
+- **One interaction pattern** for all detail views (agents, diffs, eventually tasks)
+- **Consistent muscle memory**: click anything for details → panel slides in from right
+- **No layout shifts**: panel overlays, doesn't compress content
+- **Works with sidebar**: left sidebar (team dashboard) + right panel (details) + center content (main view) gives a clean three-zone layout on wide screens
+
+## Implementation Plan
+
+Since T0037 (john) is already building the diff panel skeleton, I'd extend that into the generic panel, then add agent-specific content as a follow-on task. Two phases:
+
+Phase 1: T0037 builds the generic panel + diff content (john, in progress)
+Phase 2: New task adds agent detail content + 3 backend endpoints + click handlers
+
+Want me to proceed with this approach? Or do you see it differently?

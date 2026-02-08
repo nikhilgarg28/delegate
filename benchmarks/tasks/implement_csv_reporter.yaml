@@ -1,0 +1,40 @@
+title: Implement CSV report generator
+description: |
+  Create a module `src/reporter.py` that reads a list of dictionaries and
+  writes them to a CSV file.  The module must expose:
+
+    - `generate_csv(rows: list[dict], output_path: str) -> None`
+        Writes `rows` to `output_path` as a CSV file with a header row derived
+        from the dictionary keys.
+
+    - `summarize(rows: list[dict], column: str) -> dict`
+        Returns {"count": N, "unique": U} where N is the total number of rows
+        and U is the number of unique values in `column`.
+
+  Also write a test file `tests/test_reporter.py` with at least three tests
+  covering normal output, empty input, and the summarize function.
+
+repo_setup:
+  - path: src/__init__.py
+    content: ""
+  - path: tests/__init__.py
+    content: ""
+
+acceptance_criteria:
+  - file_exists:
+      path: src/reporter.py
+  - file_exists:
+      path: tests/test_reporter.py
+  - grep_match:
+      path: src/reporter.py
+      pattern: "def generate_csv"
+  - grep_match:
+      path: src/reporter.py
+      pattern: "def summarize"
+  - tests_pass:
+      command: "pytest tests/test_reporter.py -v"
+
+timeout_seconds: 300
+tags:
+  - backend
+  - feature

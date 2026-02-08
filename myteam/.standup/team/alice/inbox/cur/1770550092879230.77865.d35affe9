@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:28:12.076150Z
+---
+T0015 was already merged. Good catch fixing the stopPropagation — noted.

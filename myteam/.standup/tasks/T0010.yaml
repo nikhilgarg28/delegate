@@ -1,0 +1,22 @@
+id: 10
+title: Fix token/cost tracking in agent sessions
+description: 'All sessions in db.sqlite show 0 tokens and 0.0 cost. The _collect_tokens_from_message
+  function in scripts/agent.py (line 242-252) looks correct for the ResultMessage
+  dataclass, but sessions end with zeros. Possible causes: 1) The Claude SDK''s ResultMessage
+  may return None for total_cost_usd and usage when run via CLI subprocess mode. 2)
+  The client.receive_response() iterator might not yield ResultMessage objects. 3)
+  The usage dict keys might differ from ''input_tokens''/''output_tokens''. Debug
+  approach: Add logging in _collect_tokens_from_message to log the actual message
+  type and attributes received. Check if ResultMessage is actually yielded by receive_response().
+  Check the actual SDK wire format. If the SDK doesn''t provide token data via the
+  Python API, consider parsing it from the CLI output or using an alternative method.
+  Key files: scripts/agent.py lines 242-252 (_collect_tokens_from_message), lines
+  346-352 (token accumulation in event loop).'
+status: done
+assignee: bob
+project: standup-ui
+priority: high
+created_at: '2026-02-08T11:09:00.780372Z'
+updated_at: '2026-02-08T11:16:18.123037Z'
+completed_at: '2026-02-08T11:16:18.121696Z'
+depends_on: []

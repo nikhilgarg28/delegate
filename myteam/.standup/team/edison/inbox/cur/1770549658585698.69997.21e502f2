@@ -1,0 +1,7 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:20:58.107993Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0014-between-filter
+
+T0014: 'Between' checkbox for chat filters. Adds a checkbox that, when checked with both From and To set, shows messages in both directions between the two participants. Clean 6-line addition to web.py. Reviewed and approved. All 176 tests pass. Ready to merge.

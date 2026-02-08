@@ -1,0 +1,18 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T20:18:33.962484Z
+---
+Good catch — let me explain the branch contamination issue.
+
+The root cause is our linear branch stacking approach. Because we don't have a stable 'main' branch (no direct pushes to main), each new branch is based on the last merged branch. When agents create a new branch, they sometimes pick up uncommitted or stashed changes from another agent's working tree because they share the same git repo.
+
+In T0046's case, bob's commit included CSS for .mute-toggle and .mic-btn that belong to mark's T0043. This likely happened because mark's in-progress changes to web.py were in the working tree when bob branched off or committed. The CSS was inert (no HTML/JS to use it) so it didn't cause any bugs, but it's messy.
+
+**What I'm doing about it:**
+1. I caught it during review and flagged it to bob
+2. Each agent should run 'git diff --stat' before committing to verify only their task's changes are staged
+3. I'm considering having agents stash/restore their work more carefully when switching context
+
+The review process itself isn't broken — I caught the issue. But the shared working tree means agents need to be more disciplined about isolating their changes. I'll reinforce this with the team.
+
+Also — alice hasn't responded to two pings about T0038. She may be stuck or down. I'll give her one more round then consider reassigning.

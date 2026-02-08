@@ -1,0 +1,11 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T17:16:38.349368Z
+---
+Please review T0026 — voice-to-text mic button added to the chat input in web.py. John's changes:
+
+- **CSS (~line 268-271):** .mic-btn styles, .recording state with red tint, @keyframes mic-pulse animation
+- **HTML (~line 335):** Mic button (🎤) between #msgInput and Send, hidden by default
+- **JS (~lines 713-790):** initMic() checks for SpeechRecognition support, toggleMic() toggles recording, continuous+interimResults for live transcription, auto-reset on silence/errors, text inserted into #msgInput
+
+Review for: code quality, edge cases (e.g., multiple rapid toggles, browser fallback), CSS consistency with existing dark theme, and that it degrades gracefully when unsupported. Message me with your verdict.

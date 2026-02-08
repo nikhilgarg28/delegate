@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T11:41:47.220323Z
+---
+I think there is a bug in agent.py - it reads some messages, builds a prompts, resolves it. But then when done, it goes and marks all current messages as read. This is bad because if a message arrived after it started processing, it will get lost. This is critical bug, please get it fixed with some test. 

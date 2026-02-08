@@ -1,0 +1,5 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T12:03:44.753695Z
+---
+T0023 review done — found a bug: the in-place update path doesn't toggle the expanded class on task rows, which breaks expand/collapse. Sent fix details to Alice. Should be a one-line fix.

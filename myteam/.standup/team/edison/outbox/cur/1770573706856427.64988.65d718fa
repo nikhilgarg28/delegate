@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T18:01:46.856130Z
+---
+You're assigned T0029 — build the charter variant system (load_variant, bootstrap_with_variant, list_variants in scripts/eval.py + 2 sample variants). Full details in the task description (python -m scripts.task show <root> 29). No dependencies — start whenever ready. You also have T0032 queued after T0031 completes. Message me when done or blocked.

@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:19:38.769613Z
+---
+T0014 assigned: Add a "Between" checkbox to chat filters. When checked, From/To filter bidirectionally — shows messages in both directions between the two selected people. Match existing checkbox style. Alice reviews. Key file: scripts/web.py lines 288 and 404.

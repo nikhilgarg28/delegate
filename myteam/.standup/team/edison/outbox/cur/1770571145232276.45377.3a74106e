@@ -1,0 +1,11 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T17:19:05.231947Z
+---
+John pushed fixes for T0026 — please re-review. Changes:
+
+1. **Bug 1 fixed:** Removed duplicate onresult from initMic(). Single handler set once using shared module-level vars (_micBaseText, _micFinalText). toggleMic() resets those vars on new session.
+2. **Bug 2 fixed:** Added _micStopping flag — toggleMic() returns early while stop is resolving. Also wrapped .start() in try/catch as safety net.
+3. **Minor fixes:** Removed dead _recognition._finalTranscript line, added aria-label="Voice input", and sendMsg() now auto-stops recording before sending.
+
+All five items addressed. Let me know your verdict.

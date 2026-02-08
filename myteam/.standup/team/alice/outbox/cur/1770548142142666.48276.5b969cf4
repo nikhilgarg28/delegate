@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T10:55:42.142419Z
+---
+T0005 (visual refresh) is done and submitted to Bob for review. Key changes: Geist Sans font via fontsource CDN, Vercel/Linear dark mode color palette (deeper blacks, rgba borders, proper text hierarchy), refined typography (tighter letter-spacing, tabular-nums on timestamps), interactive polish (hover states, focus rings, transitions, custom scrollbar, glowing active dots). Purely CSS + font links — no JS or structure changes. All 176 tests pass.

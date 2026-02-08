@@ -1,0 +1,5 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:22:13.611520Z
+---
+Design approved — created T0016 (reviewer field in task schema, bob) and T0017 (expandable task rows, john). T0017 depends on T0016. Mark cross-reviews both.

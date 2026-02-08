@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T17:53:33.325870Z
+---
+That's all solid, thanks. Right now, manager can ask follow up questions - which introduces dynamism. One option is to disable the manager interactivity for objectivity. Another option is to have claude act as director? Re: evaluation, ideally we will be able to track code quality as well - any sane way of doing that? Worst case, I can personally go via all diffs and somehow score them?

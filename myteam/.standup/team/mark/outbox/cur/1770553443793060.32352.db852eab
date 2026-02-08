@@ -1,0 +1,5 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T12:24:03.792779Z
+---
+Reviewed and merged john's T0025 (fix zero token counts). Root cause: sessions always had task_id=NULL because tasks are still 'open' when agents start — _get_current_task_id only checked in_progress. Fix adds open-status fallback + mid-session task linking. All 147 tests pass including 28 new ones. Clean implementation, no issues.

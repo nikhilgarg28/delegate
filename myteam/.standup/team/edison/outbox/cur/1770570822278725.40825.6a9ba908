@@ -1,0 +1,10 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T17:13:42.278430Z
+---
+Got it — voice-to-text in the chat box. A few quick questions before I scope this:
+
+1. **Which project does this belong to?** Should I file it under an existing project or create a new one?
+2. **Browser API approach**: The simplest path is using the browser's built-in Web Speech API (SpeechRecognition) — no server-side processing needed, works in Chrome/Edge natively. Are you okay with that, or do you want a server-side solution (e.g., Whisper) for broader browser support?
+3. **UX**: I'm thinking a microphone button next to the Send button — click to start recording, click again (or auto-stop on silence) to transcribe into the text field. Then you review/edit and hit Send as usual. Sound right?
+4. **Scope**: Just transcription into the input box (you still manually send), or do you also want a 'push-to-talk and auto-send' mode?

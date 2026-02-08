@@ -1,0 +1,14 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T19:54:54.587975Z
+---
+T0039 re-submitted. Fixed both issues:
+
+1. Created branch mark/standup-ui/039-notification-sounds off bob/standup-ui/035-mission-control-sidebar (commit 5427136).
+
+2. Re-added the mute toggle button HTML and CSS that the linter had stripped:
+   - CSS: .mute-toggle and .mute-toggle:hover rules (lines 263-264)
+   - HTML: <button class='mute-toggle' id='muteToggle'> in header after tabs (line 376)
+   - JS _updateMuteBtn() populates emoji text on page load (line 944)
+
+All 288 tests pass. REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=mark/standup-ui/039-notification-sounds

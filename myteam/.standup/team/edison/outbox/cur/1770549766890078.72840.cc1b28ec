@@ -1,0 +1,5 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T11:22:46.889831Z
+---
+After T0012, pick up T0018: Add URL hash routing for tabs (#chat, #tasks, #agents) and sort tasks reverse chrono (newest first). Update switchTab() to set location.hash, add hashchange listener. Sort tasks by id descending in loadTasks(). John reviews. Key file: scripts/web.py.

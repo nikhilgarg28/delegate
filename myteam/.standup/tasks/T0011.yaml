@@ -1,0 +1,15 @@
+id: 11
+title: Capitalize statuses and names in system event log messages
+description: "System events like 'Task T0009 status \u2192 in_progress' show raw snake_case\
+  \ status values. Fix the log_event calls in scripts/task.py to capitalize: (1) Line\
+  \ 137: format status with split('_') + capitalize + join(' '), e.g. 'In Progress'.\
+  \ (2) Line 122: capitalize assignee name. (3) Line 87: capitalize priority. Simple\
+  \ string formatting fix, 3 lines."
+status: done
+assignee: alice
+project: standup-ui
+priority: medium
+created_at: '2026-02-08T11:10:48.497875Z'
+updated_at: '2026-02-08T11:16:00.303050Z'
+completed_at: '2026-02-08T11:16:00.302090Z'
+depends_on: []

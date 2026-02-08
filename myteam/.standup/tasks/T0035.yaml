@@ -1,0 +1,62 @@
+id: 35
+title: Mission Control sidebar with team dashboard
+description: "Major UI layout change: add a persistent left sidebar with a team dashboard,\
+  \ and rename the main area from 'Chat' to 'Mission Control'.\n\nCURRENT LAYOUT:\
+  \ Single column, max-width 1000px, header with tabs (Chat/Tasks/Agents), one panel\
+  \ visible at a time.\n\nNEW LAYOUT: Two-column \u2014 persistent left sidebar (280px\
+  \ fixed) + main content area (flex: 1). The sidebar is always visible regardless\
+  \ of which tab is active. The header tabs and main panel system remain, but the\
+  \ main content shifts right.\n\n## Sidebar Structure (top to bottom, must fit one\
+  \ screen)\n\n### 1. Team Status Widget (top, compact)\nShows today's aggregate stats:\n\
+  - Tasks done today / total open \u2014 e.g. '5 done \xB7 3 open'\n- Total cost today\
+  \ \u2014 e.g. '$1.24 spent today'\nDerive from existing /tasks and /agents/{name}/stats\
+  \ APIs. 'Today' = tasks with completed_at in the last 24 hours.\n\n### 2. Agent\
+  \ Roster Widget (middle, scrollable if needed)\nOne line per agent, compact list.\
+  \ Each line shows:\n- Status dot: green (#22c55e + glow) = has PID (working), blue\
+  \ (#60a5fa) = idle + has unread (has work queued), gray (#333) = idle + no unread\
+  \ (offline/waiting). NOTE: There is no 'blocked' state in the data model \u2014\
+  \ use blue for 'has unread but not running' as a proxy for 'queued/waiting'. Yellow\
+  \ is not needed.\n- Agent name (capitalized)\n- Short activity summary: if running\
+  \ (has PID), show the current task title from /tasks filtered by assignee + status\
+  \ in_progress. If idle, show 'Idle'. E.g. 'Reviewing T0132' or 'Working on Fix pagination\
+  \ bug'.\n- Cost badge: today's cost for this agent, right-aligned, small muted text.\
+  \ From /agents/{name}/stats \u2192 total_cost_usd.\nMax 6 agents visible; if more,\
+  \ the widget scrolls internally. 'See All \u2192' link at bottom calls switchTab('agents').\n\
+  \n### 3. Recent Tasks Widget (bottom, fill remaining space)\nCompact task list,\
+  \ 5-7 most recently updated tasks (sort by updated_at desc).\nEach row shows:\n\
+  - Task ID (e.g. T0034) \u2014 muted\n- Title \u2014 truncated with ellipsis if too\
+  \ long\n- Status badge (reuse existing .badge-* classes)\n- Assignee name \u2014\
+  \ small, muted\n'See All \u2192' link at bottom calls switchTab('tasks').\n\n##\
+  \ Header Changes\n- Rename 'Chat' tab to 'Mission Control' (keep the same tab ID\
+  \ 'chat' for compatibility)\n- Keep the h1 title 'Standup'\n\n## Data Fetching\n\
+  Add a new function loadSidebar() that:\n1. Fetches /tasks (already cached by loadTasks,\
+  \ but sidebar needs its own fetch since it's always visible)\n2. Fetches /agents\n\
+  3. For each agent with a PID, fetches /agents/{name}/stats (parallel Promise.all)\n\
+  4. Renders all three widgets\n\nCall loadSidebar() on page load and in the 2-second\
+  \ auto-refresh interval (always, not gated on active tab).\n\n## CSS Notes\n- Sidebar\
+  \ background: #0d0d0f (slightly different from body #0a0a0b for subtle depth)\n\
+  - Sidebar border-right: 1px solid rgba(255,255,255,0.06)\n- Widget headers: 10px\
+  \ uppercase tracking, color #555, margin-bottom 8px\n- Widget padding: 16px\n- Widgets\
+  \ separated by: 1px solid rgba(255,255,255,0.04) horizontal divider\n- Agent roster\
+  \ items: 28px height, flex row, gap 8px\n- Status dots: 6px diameter (smaller than\
+  \ current 8px agent card dots)\n- Task rows in sidebar: ~28px, flex row with truncation\n\
+  - 'See All \u2192' links: color #60a5fa, font-size 11px, hover underline\n- Sidebar\
+  \ should be full viewport height (position: fixed or flex within body)\n- Main content\
+  \ shifts right by sidebar width\n- On narrow screens (<900px), hide sidebar entirely\
+  \ (display: none) and show the old layout\n\n## Implementation\nAll changes in scripts/web.py\
+  \ (single file). Study the existing HTML structure (lines 308-365), CSS (lines 208-306),\
+  \ and JS functions (loadTasks, loadAgents, loadChat) for patterns.\n\nThe sidebar\
+  \ HTML goes inside <body> before the existing <div class='header'>. Wrap the header\
+  \ + content in a <div class='main'> container. Body becomes: sidebar + main (flex\
+  \ row).\n\nCode lives in /Users/nikhil/dev/standup/.\nMessage edison when done."
+status: done
+assignee: bob
+reviewer: ''
+project: standup-ui
+priority: high
+created_at: '2026-02-08T19:29:58.739115Z'
+updated_at: '2026-02-08T19:53:09.639903Z'
+completed_at: '2026-02-08T19:53:09.636125Z'
+depends_on: []
+branch: ''
+commits: []

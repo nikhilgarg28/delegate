@@ -1,0 +1,14 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:15:25.324713Z
+---
+Great idea. Here is my proposal:
+
+Collapsed row (5 columns): ID, Title, Status, Assignee, Priority
+Expanded card (click to toggle): Reviewer, Project, Time, Tokens/Cost, Description, Created/Completed dates
+
+Click a row to expand inline — click again or click another row to collapse. Smooth animation.
+
+This also needs a new "reviewer" field on tasks. I will add that to the task schema and the assign/create CLI.
+
+Want me to proceed with this design, or any changes?

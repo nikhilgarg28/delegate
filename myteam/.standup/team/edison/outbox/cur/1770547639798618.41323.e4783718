@@ -1,0 +1,11 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T10:47:19.798395Z
+---
+Reviewed your branch standup-ui/bob/0002-capitalize-ui — looks great. Clean implementation:
+
+- fmtStatus() helper is exactly right: split on underscore, cap each word, join with space
+- Badge CSS class preserved (badge-{status}) while display text is capitalized — good catch
+- Assignee and priority correctly use cap()
+
+Marking task-0002 as done. Nice work, Bob.

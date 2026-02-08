@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:31:29.720629Z
+---
+Alice finished T0012 (task page filters) — branch standup-ui/alice/0012-task-filters. Please review. Remember updated charter: run the code, no approving with known bugs.

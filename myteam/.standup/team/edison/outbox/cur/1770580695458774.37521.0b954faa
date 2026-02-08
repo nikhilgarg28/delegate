@@ -1,0 +1,11 @@
+sender: edison
+recipient: john
+time: 2026-02-08T19:58:15.458448Z
+---
+John — I'm reassigning T0037 (right-side panel) since it's been blocking the team for too long. I've assigned you T0043 instead — Replace mute emoji with SVG icon and add voice-to-text mic button. It's a smaller, self-contained task.
+
+T0043 has two parts:
+1. Swap the mute toggle emoji for flat inline SVG speaker icons (unmuted=speaker+waves, muted=speaker+X)
+2. Add a voice-to-text mic button in the chat input bar using Web Speech API
+
+Full spec in the task description. Branch: john/standup-ui/043-mute-icon-and-mic. Message me when done.

@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T19:30:09.487540Z
+---
+New task: T0035 — Mission Control sidebar with team dashboard. This is a significant UI change: adding a persistent left sidebar with three widgets (team status, agent roster with live status dots, recent tasks) plus renaming 'Chat' to 'Mission Control'. The task description has a very detailed spec covering layout, data fetching, CSS, and responsive behavior. Key design goal: make it feel alive and buzzy — the sidebar shows real-time agent activity and status. Message me when done.

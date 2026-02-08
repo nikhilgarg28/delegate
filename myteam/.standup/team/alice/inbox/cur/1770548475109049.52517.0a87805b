@@ -1,0 +1,35 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:01:14.592724Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0006-chat-redesign
+
+T0006 (chat message redesign) is ready for review. Changes are CSS + JS only in scripts/web.py.
+
+**Layout (Slack-like blocks):**
+- Each message is a flex row: colored avatar circle (32px, rounded-square) + body
+- Body has a header line (sender bold, recipient muted, timestamp right-aligned) and content below
+- 2px margin between messages, 10px+12px padding inside each, 8px border-radius
+- Hover highlight (rgba white 0.02) with 0.15s transition
+
+**Avatar system:**
+- avatarColor(name) hashes the sender name to pick from an 8-color palette (rose, violet, blue, cyan, emerald, amber, red, indigo)
+- Same sender always gets the same color — consistent across sessions
+- Shows first letter uppercase as the initial
+
+**Content readability:**
+- white-space: pre-wrap for multiline messages
+- word-break: break-word to prevent overflow
+- Content in #a1a1a1 (softer than sender #ededed) — clear visual hierarchy
+- line-height 1.6 for comfortable reading
+
+**System events:**
+- Restyled as centered divider-style entries: horizontal line — timestamp + text — horizontal line
+- Muted (#444), 11px, compact padding — clearly distinct from conversation messages
+
+**Aesthetic fit:**
+- Uses same color tokens as T0005 (rgba borders, #111113 surface, #444/#555 muted text)
+- Avatar border-radius 8px matches badge/card rounding
+- No new fonts or CDN deps
+
+All 176 tests pass.

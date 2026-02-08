@@ -1,0 +1,18 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T10:50:08.825352Z
+---
+New task for you:
+
+task-0004: Change task ID scheme from "task-000X" to "T000X" (capital T, no dash, zero-padded 4 digits).
+
+Files to change:
+1. scripts/task.py — _task_path() filename pattern, _next_id() glob pattern and stem parsing, all event log strings in create_task/assign_task/change_status, all CLI print() output in main()
+2. scripts/web.py line 313 — JS template literal that formats the ID in the task table
+3. scripts/agent.py lines 190, 307, 465 — f-string references to task-{id:04d}
+
+Migration: Rename existing YAML files in .standup/tasks/ from task-XXXX.yaml to TXXXX.yaml. The integer ID inside each file stays the same. A simple rename loop is fine.
+
+Alice will be your code reviewer for this one. When done, set status to review and send a REVIEW_REQUEST to Alice (not to me).
+
+Message me if you hit any blockers.

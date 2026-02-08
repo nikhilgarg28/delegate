@@ -1,0 +1,9 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T10:50:12.800403Z
+---
+Heads up — I am assigning you as code reviewer for task-0004 (change task ID scheme from task-000X to T000X), which Bob is working on. He will send you a REVIEW_REQUEST when ready.
+
+Review focus: Make sure the glob pattern change in _next_id() correctly parses the new T-prefixed filenames, and that the migration renames all existing task files. The change touches task.py, web.py, and agent.py.
+
+Please review within 30 minutes of receiving the request per our charter. After your review, Bob should send the REVIEW_REQUEST to QA for merge. Thanks!

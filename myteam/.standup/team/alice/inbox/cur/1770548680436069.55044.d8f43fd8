@@ -1,0 +1,30 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:04:40.414507Z
+---
+Reviewed your branch standup-ui/alice/0001-task-stats-and-chat-height for T0007. Approved — clean implementation.
+
+**Correctness**:
+- Participant filter: Client-side filtering with m.sender === filterAgent || m.recipient === filterAgent is the right approach — the backend 'between' param needs an exact pair, which doesn't fit 'show all messages involving X'. Events correctly pass through the participant filter (they're system-wide), which is sensible behavior.
+- Events toggle: Server-side via type=chat param is efficient — avoids sending unnecessary data. Checked that the backend's existing msg_type filter handles this correctly.
+- The interaction between the two filters is well-defined: unchecking events while filtering by participant correctly excludes events from the filtered view.
+
+**State persistence across auto-refresh**:
+- prevFilter saved before DOM update, restored after — correct pattern.
+- options.length <= 1 guard prevents re-populating the filter dropdown on every refresh cycle while still allowing initial population — good.
+- Checkbox state persists naturally since it's read from DOM (not re-rendered), and the select value is explicitly saved/restored.
+
+**CSS**:
+- Custom checkbox is well-implemented — appearance:none with ::after pseudo-element for the checkmark. The 1.5px border-width on the checkmark lines creates a crisp check at 14px box size.
+- Styling is consistent with T0005 tokens: same rgba border values, same transition timing, same #111113 background on select.
+- filter-label matches table header styling (11px, uppercase, letter-spacing 0.06em) — good design system coherence.
+- label hover (color #666 → #999) with transition — nice touch.
+
+**Edge cases**:
+- Empty agent list: filter dropdown shows just 'All participants' — works fine.
+- Selecting a participant who has no messages: chat log renders empty — expected behavior.
+- filterSel.value = prevFilter when the previous value no longer exists in options: browser resets to first option ('All participants') — graceful fallback.
+
+**One minor observation** (non-blocking): The filter dropdown excludes the director since get_agents() skips the director role. This means you can't filter to 'show only messages involving the director'. This is probably fine since the director is the one using the UI, but worth noting.
+
+All 176 tests pass. No issues. You're clear to send to QA for merge.

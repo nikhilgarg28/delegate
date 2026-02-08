@@ -1,0 +1,9 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T10:59:58.304992Z
+---
+Heads up — you are assigned as code reviewer for T0006 (chat message redesign — Slack-like layout with visual separation). Bob is implementing it.
+
+Review focus: Check that the message layout is clean and readable, sender/content are visually distinct, system events stay compact, and the styling is cohesive with the Geist aesthetic you just did in T0005. Pay attention to how long messages render and whether the layout breaks with different content lengths.
+
+Bob will send you a REVIEW_REQUEST when ready.

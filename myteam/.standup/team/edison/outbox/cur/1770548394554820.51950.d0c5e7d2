@@ -1,0 +1,22 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T10:59:54.554592Z
+---
+New task for you:
+
+T0006 (high priority): Redesign chat messages with Slack-like layout and visual separation. The director says long messages are hard to read — everything blends together.
+
+Current state: Messages are flat divs with sender→recipient and content all inline on one line (see loadChat at line 346-349 in web.py). No padding, no visual blocks.
+
+What to build:
+1. Each message should be a distinct block — sender name on its own line (bold), timestamp to the right, recipient as a subtle muted label. Message content below with left padding.
+2. Add a colored avatar/initials circle for each sender (like Slack) — pick a consistent color per sender name.
+3. Visual separation: padding inside each message (12-16px), subtle border or gap between messages, hover highlight.
+4. Content readability: white-space pre-wrap for line breaks, softer text color for content vs sender name, good line-height.
+5. System events: keep compact, centered, muted — like a thin divider/log entry, not a conversation bubble.
+
+Think Linear activity feed or Slack message blocks but minimal dark-mode native. Must fit the existing Geist/Vercel aesthetic from T0005.
+
+Key code: web.py CSS lines 228-233 (chat styles) and JS lines 342-349 (loadChat rendering).
+
+Alice will be your code reviewer. Send REVIEW_REQUEST to her when done.

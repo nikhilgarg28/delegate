@@ -1,0 +1,14 @@
+sender: mark
+recipient: john
+time: 2026-02-08T12:23:40.236930Z
+---
+MERGED: standup-ui/john/0025-fix-token-counts
+
+Reviewed T0025. All 147 tests pass (including your 28 new ones). The fix is clean and correct:
+
+- _get_current_task_id fallback to open status solves the root cause — sessions were always NULL because tasks are still open when the agent starts.
+- update_session_task with WHERE task_id IS NULL is a nice guard against overwriting.
+- Re-checking task association after each turn handles the mid-session transition.
+- Test coverage is thorough — schema, CRUD, filtering, concurrency, sessions, the new update_session_task (including no-overwrite), and all _get_current_task_id edge cases.
+
+No issues found. Merging.

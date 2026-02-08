@@ -1,0 +1,7 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T18:20:52.176387Z
+---
+Got one for you — please review T0032 (alice's Tier 1 automated quality checks). She added collect_metrics() to scripts/eval.py that pulls DB metrics, task counts, and runs external tools (ruff, pyright/mypy, radon, git diff) with graceful fallbacks. 25 new tests.
+
+Review for: metric aggregation correctness, subprocess handling (timeouts? stderr?), graceful behavior when tools aren't installed, JSON serializability of output, and whether the metric keys align with what T0031 (eval runner) will expect. Files: scripts/eval.py (the collect_metrics section), tests/test_eval.py. Message me with your verdict.

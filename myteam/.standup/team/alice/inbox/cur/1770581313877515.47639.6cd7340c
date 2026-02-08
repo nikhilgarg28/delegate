@@ -1,0 +1,15 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T20:08:33.455662Z
+---
+T0037 (diff panel) is merged — T0038 is now unblocked!
+
+You can proceed with T0038 (wire up diff panel to task details) whenever you have a stopping point on T0040 (light/dark theme). T0038 adds:
+- Branch field display in task detail
+- Clickable commit SHA pills
+- 'View Changes' button calling openDiffPanel()
+- event.stopPropagation() on interactive elements inside task rows
+
+Branch off current HEAD (bob/standup-ui/037-diff-panel). Note: bob already added a 'View Diff' button in the task dates row as part of T0037, so check what's already there before adding duplicates — you may just need to enhance it with the branch/commit display and ensure the in-place updater syncs correctly.
+
+Prioritize whichever task you think you can finish first. Message me when either is done.

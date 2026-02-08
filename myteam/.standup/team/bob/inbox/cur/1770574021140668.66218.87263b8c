@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T18:07:00.778883Z
+---
+T0028 approved and done. Alice flagged one note for the runner (T0031): grep_match patterns with regex special chars need escaping in the acceptance checker. Not your problem — I'll pass it to mark.

@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T11:29:08.587554Z
+---
+Hang on re: T0015 - looks like there were bugs in the implementation but the reviewer didn't press on them. That feels wrong- we are probably keeping too low of a bar on reviews. We should change the language in ~/dev/standup/charter as well as our team's charter. 

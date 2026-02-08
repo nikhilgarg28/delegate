@@ -1,0 +1,13 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T10:53:48.215538Z
+---
+T0004 (ID scheme change) is done — Alice reviewed and approved, now merged. Task IDs are now T000X format everywhere.
+
+For the visual refresh — created T0005 and assigned to Alice (high priority). Scope based on your direction:
+- Switch to Geist Sans (Vercel's font) via CDN
+- Improve colors, contrast, borders — aiming for that clean Vercel/Linear dark-mode aesthetic
+- Refine typography across the whole UI (chat font called out specifically)
+- Overall polish: spacing, padding, hover states, transitions
+
+Bob is assigned as code reviewer. Will keep you posted.

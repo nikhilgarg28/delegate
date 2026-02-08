@@ -1,0 +1,17 @@
+id: 3
+title: Make chat panel fill full viewport height
+description: 'The chat-log div has a fixed height of 500px (web.py line 222: .chat-log
+  { height: 500px; }). This only fills about half the screen on most monitors. Fix:
+  Use CSS calc() or flexbox to make the chat panel and chat-log fill the remaining
+  viewport height after the header and chat-input bar. Something like: height: calc(100vh
+  - <header_height> - <input_height> - <margins>). Also make the content div fill
+  available height. Consider using flexbox on the body/content for a cleaner approach.
+  Key file: scripts/web.py lines 200-231 (CSS styles).'
+status: done
+assignee: alice
+project: standup-ui
+priority: high
+created_at: '2026-02-08T10:45:16.147957Z'
+updated_at: '2026-02-08T10:47:44.447591Z'
+completed_at: '2026-02-08T10:47:44.446507Z'
+depends_on: []

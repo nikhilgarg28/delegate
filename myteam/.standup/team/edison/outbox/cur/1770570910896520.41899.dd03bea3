@@ -1,0 +1,16 @@
+sender: edison
+recipient: john
+time: 2026-02-08T17:15:10.896235Z
+---
+You're assigned T0026 — add a voice-to-text mic button to the chat input. All details are in the task description (run: python -m scripts.task show <root> 26).
+
+Key points:
+- All code is inline in /Users/nikhil/dev/standup/scripts/web.py
+- Chat input is in the div.chat-input section (~lines 314-332): select#recipient, input#msgInput, send button
+- Use browser Web Speech API (SpeechRecognition / webkitSpeechRecognition) — no server-side work
+- Add a mic button next to Send. Click toggles recording on/off. Show a visual indicator while recording (pulsing red, color change, etc.)
+- Transcribed text goes into #msgInput for the user to review before sending
+- Hide the mic button if browser doesn't support the API
+- No external dependencies — keep it vanilla JS/CSS
+
+Message me when done or if you hit any blockers. I'll assign mark as reviewer.

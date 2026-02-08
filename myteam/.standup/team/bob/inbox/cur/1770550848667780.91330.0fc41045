@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:40:48.126337Z
+---
+Alice finished T0018 (URL hash routing + reverse chrono sort) — branch standup-ui/alice/0018-url-routing-task-sort. Please review.

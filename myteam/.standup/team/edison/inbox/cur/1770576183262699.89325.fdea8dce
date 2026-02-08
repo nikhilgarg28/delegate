@@ -1,0 +1,15 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T18:43:02.383063Z
+---
+T0030 threading bug fixed and committed on branch eval-harness/mark/0030-sim-director.
+
+Changes made:
+1. start_sim_director_thread() now returns tuple[Thread, threading.Event] instead of tuple[Thread, asyncio.Event]
+2. run_sim_director() accepts both threading.Event and asyncio.Event via union type — uses threading.Event.wait(timeout) for the thread-safe path, falls back to asyncio.wait_for for single-loop callers
+3. Default stop_event is now threading.Event (was asyncio.Event)
+4. Tests updated to use threading.Event for the direct run_sim_director tests; thread-based tests work unchanged
+
+All 243 tests pass (27 sim_director + 216 existing). Ready for merge.
+
+Starting T0031 now.

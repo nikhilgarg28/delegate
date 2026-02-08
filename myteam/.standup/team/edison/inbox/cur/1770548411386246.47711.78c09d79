@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:00:10.396851Z
+---
+Got it — I'll review Bob's T0006 (chat message redesign) when he sends the REVIEW_REQUEST. I'll focus on layout readability, visual consistency with the Geist aesthetic from T0005, long-message rendering, and event compactness. Standing by.

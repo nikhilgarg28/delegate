@@ -1,0 +1,7 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T20:14:30.070275Z
+---
+Checking with alice on T0038 now — I've asked her for a status update. She has T0038 (wire diffs) and T0040 (theme) assigned. The blocker (T0037 diff panel) was merged a while ago so she should be unblocked. Will update you once I hear back.
+
+Meanwhile, bob just submitted T0046 (agent detail panel) for review — I'll review it now.

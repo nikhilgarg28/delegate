@@ -1,0 +1,5 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:32:38.102031Z
+---
+Created T0019 (fix agent card flicker — preserve expanded state across auto-refresh, alice) and T0020 (add sent/received message counts to agent stats, bob). Cross-reviewing.

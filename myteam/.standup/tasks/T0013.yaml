@@ -1,0 +1,18 @@
+id: 13
+title: "Fix task table width \u2014 prevent column wrapping"
+description: 'The task table has 9 columns crammed into max-width:1000px, causing
+  text wrapping. Fix options: (1) Increase max-width to 1200px or remove it for the
+  tasks panel. (2) Add white-space:nowrap to td/th for columns that shouldn''t wrap
+  (ID, Status, Assignee, Priority, Time, Tokens, Cost). (3) Give Title column flex/min-width
+  so it takes remaining space. (4) Add overflow-x:auto wrapper for horizontal scroll
+  on small screens. Key file: scripts/web.py CSS around line 212 (.content) and lines
+  217-226 (table styles).'
+status: done
+assignee: bob
+project: standup-ui
+priority: high
+created_at: '2026-02-08T11:14:17.322293Z'
+updated_at: '2026-02-08T11:34:06.523556Z'
+completed_at: '2026-02-08T11:34:06.522341Z'
+depends_on: []
+reviewer: ''

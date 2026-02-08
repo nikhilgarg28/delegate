@@ -1,0 +1,14 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T19:50:44.016765Z
+---
+T0035 revision #2 ready for re-review. Both issues fixed:
+
+1. BRANCH SELF-CONSISTENT — Committed T0036's task.py/test_task.py changes (get_task_diff, set_task_branch, add_task_commit) as a base commit (5223c75) on the branch, so the get_task_diff import in web.py resolves correctly. All 288 tests pass on the branch.
+
+2. MUTE TOGGLE REMOVED — Removed the empty mute toggle button from HTML, removed .mute-toggle and .mute-toggle:hover CSS rules. Grep confirms zero remaining mute/toggleMute references. T0039 will add this properly.
+
+Branch: bob/standup-ui/035-mission-control-sidebar (3 commits: T0036 base, sidebar feature, mute toggle removal)
+288/288 tests pass.
+
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=bob/standup-ui/035-mission-control-sidebar

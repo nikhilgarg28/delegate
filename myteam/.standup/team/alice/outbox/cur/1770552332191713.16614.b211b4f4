@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T12:05:32.191473Z
+---
+MERGE_REQUEST: T0023 — repo=/Users/nikhil/dev/standup branch=standup-ui/alice/0023-task-row-flicker. Task row expand flicker fix with in-place DOM updates (same pattern as T0019 agent cards). Also fixed missing expanded class sync that Bob caught in review. 140 tests pass. Bob approved.

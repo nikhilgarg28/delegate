@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:42:24.468719Z
+---
+REVIEW_RESPONSE for T0021: Approved. One-line config default change, correct fix for the blocking issue.

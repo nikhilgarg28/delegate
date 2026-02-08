@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T12:00:11.277538Z
+---
+Please review T0023 (alice's branch standup-ui/alice/0023-task-row-flicker). This is blocking nikhil. Check out the branch, verify the in-place DOM update works, make sure expanded task rows persist across auto-refresh without flicker. Run the tests.

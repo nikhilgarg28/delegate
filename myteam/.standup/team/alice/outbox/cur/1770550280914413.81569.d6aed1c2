@@ -1,0 +1,17 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T11:31:20.914160Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/alice/0012-task-filters
+
+T0012: Add filter dropdowns (Status, Priority, Assignee) above the task table.
+
+Changes in scripts/web.py:
+1. Shared filter CSS — .chat-filters and .task-filters now share the same styles (duplicated selectors, not a new class).
+2. Static HTML filter bar with three dropdowns above the task table: Status (open/in_progress/review/done), Priority (low/medium/high/critical), Assignee (populated from task data).
+3. loadTasks() updated: fetches all tasks, populates assignee dropdown from unique assignees, applies client-side filtering before stats fetch and table render.
+4. Task table now renders into #taskTable sub-div so filters stay static above.
+5. Filter selections preserved across 2s auto-refresh.
+6. Shows 'No tasks match filters' when filters exclude everything.
+
+All 176 tests pass.

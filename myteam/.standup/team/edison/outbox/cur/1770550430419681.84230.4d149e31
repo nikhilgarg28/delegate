@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:33:50.419356Z
+---
+Bob finished T0020 (agent message counts) — branch standup-ui/bob/0020-agent-msg-counts. Please review.

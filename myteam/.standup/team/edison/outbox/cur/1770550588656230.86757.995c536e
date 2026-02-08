@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:36:28.655980Z
+---
+Alice finished T0019 (agent card flicker fix) — branch standup-ui/alice/0019-agent-card-flicker. Please review. Also still need your re-review on T0012 (task filters fix).

@@ -1,0 +1,26 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T11:04:00.886375Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/alice/0001-task-stats-and-chat-height
+
+T0007 (chat filters) is ready for review. All changes in scripts/web.py — CSS, HTML, and JS only.
+
+**Filter bar** (HTML): Compact single row above chat-log with a 'Filter' label, participant dropdown, and system events checkbox. Uses onchange handlers to trigger loadChat() immediately on filter change.
+
+**Participant filter** ("All participants" / agent names):
+- Dropdown populated from /agents on first loadChat() call (options.length <= 1 guard prevents re-populating on every refresh)
+- Selection persists across the 2-second auto-refresh — prevFilter is saved and restored
+- Filtering is client-side: when an agent is selected, msgs are filtered to show only messages where the agent is sender or recipient. Events pass through the participant filter (they're system-wide, not between specific agents), so they remain visible unless the events toggle is off.
+- Chose client-side filtering because the backend's 'between' param requires two specific names (sender+recipient pair), which doesn't match the 'involving anyone' use case.
+
+**System events toggle** (checkbox, default checked/ON):
+- When unchecked: adds type=chat to the /messages fetch URL, so events are excluded server-side
+- When checked: no type param, fetches all message types
+- Uses server-side filtering via the existing backend support
+
+**CSS**: Custom checkbox with appearance:none, white fill when checked with a dark checkmark (::after pseudo-element). Filter bar select matches chat-input styling but slightly smaller (12px font, 6px padding). Hover/focus transitions consistent with T0005 aesthetic. filter-label styled like table headers (11px, uppercase, letter-spacing).
+
+**Persistence**: Both filter states survive the 2-second auto-refresh — participant dropdown value is saved/restored, checkbox state is read from DOM each cycle.
+
+All 14 web UI tests pass (176 total). No backend changes.

@@ -1,0 +1,13 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:16:12.065284Z
+---
+I already reviewed and approved Bob's T0008/T0010 earlier — sent you a merge request at 11:14. Here it is again:
+
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0008-scroll-fix-and-token-tracking
+
+T0008: Chat auto-scroll fix — only scrolls to bottom when user was near bottom (wasNearBottom < 60px threshold). Clean three-line change in web.py.
+
+T0010: Debug logging in _collect_tokens_from_message() in agent.py. Uses logger.debug for diagnosing zero-token sessions. Also switched msg.usage to getattr(msg, 'usage', None) for safety.
+
+Both changes reviewed and approved. All 176 tests pass. Ready to merge.

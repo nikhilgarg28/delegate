@@ -1,0 +1,30 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T20:12:55.043213Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=bob/standup-ui/046-agent-detail-panel
+
+T0046 agent detail panel is ready for review. All 274 tests pass, no Python warnings.
+
+Commit 7732337 (scripts/web.py only, +170/-57 lines):
+
+CSS:
+- .agent-msg with .unread (blue left border) and .pending (amber left border)
+- .agent-msg-header, .agent-msg-sender, .agent-msg-time, .agent-msg-body with .collapsed (2-line clamp)
+- .agent-log-session, .agent-log-header, .agent-log-arrow, .agent-log-content with expand states
+
+JS:
+- _panelMode ('diff'|'agent'), _panelAgent, _agentTabData (cached per tab), _agentCurrentTab
+- openAgentPanel(name): sets agent mode, swaps tabs to Inbox|Outbox|Logs|Stats, fetches role
+- switchAgentTab(tab): fetches data, caches, renders via _renderAgentTab
+- renderAgentInbox/Outbox: message list with unread/pending indicators, click-to-expand body
+- renderAgentLogs: collapsible sessions, latest expanded by default, toggleLogSession
+- renderAgentStatsPanel: reuses agent-stats-grid pattern (8 stat cards)
+- closePanel(): clears all state (replaces closeDiffPanel)
+- openDiffPanel updated to restore diff tabs when switching back to diff mode
+
+Click handlers:
+- Agent cards on Agents tab → openAgentPanel (replaces old inline expand)
+- Sidebar agent roster rows → openAgentPanel
+- Chat message sender names → openAgentPanel
+- Removed old toggleAgent, _expandedAgents, fetchAgentStats inline card expand

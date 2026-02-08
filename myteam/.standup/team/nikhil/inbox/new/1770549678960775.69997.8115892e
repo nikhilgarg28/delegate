@@ -1,0 +1,5 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:21:18.453029Z
+---
+Created T0015 (expandable agent cards with stats), assigned to alice (bob reviewing). Note: review counts depend on adding a reviewer field to tasks — I will tie that into the expandable task rows work once you approve that design.

@@ -1,0 +1,7 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T20:43:19.740637Z
+---
+Status update: T0040 (light/dark theme) reviewed and MERGED to main. Mark did solid work — 32 CSS custom properties with prefers-color-scheme media query, all ~103 hardcoded colors replaced with var() references. Light mode is the default, dark mode activates automatically based on system preference. No manual toggle (as spec'd). Badge and avatar accent colors left unchanged as they work on both backgrounds. 274/274 tests pass.
+
+Current state: All assigned tasks are complete. main branch is at commit 0b367d7 with the full feature set: diff panel, agent detail panel, mute/mic, notification sounds, event formatting, VCS row, and now light/dark theme. Bob and mark are both available for new work. Alice and john remain unresponsive.

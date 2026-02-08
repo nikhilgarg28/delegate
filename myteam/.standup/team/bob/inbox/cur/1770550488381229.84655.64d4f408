@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:34:47.816863Z
+---
+Alice fixed T0012 based on your feedback — assignee dropdown now rebuilds on every refresh. Please re-review.

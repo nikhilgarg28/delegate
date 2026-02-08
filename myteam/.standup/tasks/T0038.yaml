@@ -1,0 +1,41 @@
+id: 38
+title: Wire up diff panel to task details
+description: "Connect the diff panel (T0037) to the task detail view so users can\
+  \ open diffs from task cards.\n\nDepends on: T0036 (data model), T0037 (diff panel\
+  \ UI).\n\n## Task Detail Changes (scripts/web.py)\n\nIn the expanded task detail\
+  \ grid (_taskRowHtml and _updateTaskRowInPlace), add:\n\n1. **Branch field**: Show\
+  \ the branch name if set. Display as a monospace pill/tag:\n   <span class='task-branch'\
+  \ title='Feature branch'>{branch}</span>\n   Style: font-family monospace, font-size\
+  \ 11px, background rgba(255,255,255,0.04), padding 2px 6px, border-radius 4px, color\
+  \ #a1a1a1\n\n2. **Commit hashes**: If commits array is non-empty, show short SHAs\
+  \ (first 7 chars) as clickable pills:\n   <span class='task-commit' onclick='openDiffPanel({taskId})'\
+  \ title='{fullSha}'>{shortSha}</span>\n   Style: font-family monospace, font-size\
+  \ 11px, cursor pointer, color #60a5fa, hover: underline\n\n3. **'View Changes' button**:\
+  \ If branch is set, show a button in the detail card:\n   <button class='btn-diff'\
+  \ onclick='openDiffPanel({taskId})'>View Changes</button>\n   Style: small secondary\
+  \ button (border: 1px solid rgba(255,255,255,0.1), background transparent, color\
+  \ #a1a1a1, font-size 12px, hover: border-color rgba(255,255,255,0.25) + color #ededed)\n\
+  \nPlace these in a new row below the existing detail grid, before the description.\n\
+  \n## Data Flow\n\nThe /tasks endpoint already returns all task fields including\
+  \ branch and commits. The _taskRowHtml function receives the full task object, so\
+  \ branch and commits are already available \u2014 just need to render them.\n\n\
+  When the user clicks a commit SHA or the 'View Changes' button:\n1. Call openDiffPanel(taskId)\
+  \ from T0037\n2. The panel fetches /tasks/{taskId}/diff and displays it\n\n## _updateTaskRowInPlace\n\
+  \nAlso update the in-place updater to sync:\n- Branch pill text\n- Commit SHA pills\
+  \ (may change if new commits arrive)\n- View Changes button visibility (show/hide\
+  \ based on branch field)\n\n## Click Propagation\n\nIMPORTANT: The commit SHAs and\
+  \ 'View Changes' button are inside the task-row which has an onclick for toggleTask().\
+  \ Add event.stopPropagation() to prevent the click from also toggling the task expansion.\n\
+  \nCode lives in /Users/nikhil/dev/standup/. All changes in scripts/web.py.\nMessage\
+  \ edison when done."
+status: done
+assignee: bob
+reviewer: ''
+project: diff-views
+priority: medium
+created_at: '2026-02-08T19:38:40.896241Z'
+updated_at: '2026-02-08T20:33:27.886702Z'
+completed_at: '2026-02-08T20:33:27.884221Z'
+depends_on: []
+branch: ''
+commits: []

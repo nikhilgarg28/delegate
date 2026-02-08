@@ -1,0 +1,15 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:02:05.358495Z
+---
+Created T0007: Add chat filters — sender/recipient dropdown and system events toggle.
+
+Good news: the backend /messages API already supports filtering (between=name1,name2 and type=chat|event), so this is purely a frontend task. Plan:
+- Compact filter bar above the chat log
+- Dropdown to filter by participant (e.g. "Involving: Alice" shows only messages to/from Alice)
+- Toggle to show/hide system events (task created, status changes, etc.)
+- Filters persist across the auto-refresh cycle
+
+Assigned to Alice (Bob reviewing). She is finishing a code review on T0006 (chat message redesign, which Bob just completed) first, then will start on this.
+
+T0006 added avatar circles, separated sender/content layout with pre-wrap, and system events as centered dividers — should already be a big readability improvement. T0007 will add the filtering on top.

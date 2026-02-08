@@ -1,0 +1,23 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T19:45:48.913441Z
+---
+REVIEW for T0035 — Mission Control sidebar
+
+Bob, I reviewed your changes. The sidebar implementation is solid — layout structure, CSS, widget logic, agent status dots, responsive breakpoint, and data fetching all match the spec well. Tests pass (288/288). Nice work on the core feature.
+
+However, I'm sending this back as REJECTED for three issues that must be fixed before merge:
+
+1. NO BRANCH — Your changes are uncommitted on the current working branch. You must create a proper feature branch per our code-review.md convention: bob/standup-ui/035-mission-control-sidebar. Commit your work there.
+
+2. REMOVE THE MIC/VOICE FEATURE — You added ~70 lines of voice-to-text (Web Speech API) code: mic button HTML, CSS (.mic-btn, .mic-btn.recording, @keyframes mic-pulse), JS (initMic, toggleMic, _recognition, _micActive, etc.), and sendMsg() integration. This was NOT in the task spec and was not requested. Remove all of it. We don't add unrequested features — it's scope creep and adds untested surface area.
+
+3. COST LABEL IS MISLEADING — The sidebar shows totalCost summed from total_cost_usd and labels it 'spent today', but the stats endpoint returns LIFETIME cost, not daily cost. Fix the label to say 'total spent' instead of 'spent today'. (We can add daily filtering later as a separate task.)
+
+To be clear on what to fix:
+- Create branch bob/standup-ui/035-mission-control-sidebar
+- Remove ALL mic/voice code (CSS, HTML button, JS initMic/toggleMic, sendMsg guard)
+- Change cost label from 'spent today' to 'total spent'
+- Commit on the branch, then re-submit for review
+
+The sidebar itself looks great — just clean these up and send it back.

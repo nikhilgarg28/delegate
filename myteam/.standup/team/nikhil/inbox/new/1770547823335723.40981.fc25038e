@@ -1,0 +1,14 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T10:50:22.659929Z
+---
+You are right — I was doing code reviews myself, which is not my role per the charter. The manager picks the reviewer but should not be the reviewer. I should have assigned another agent to review each task. My mistake.
+
+Going forward I will follow the process correctly:
+1. When a task moves to review, I assign a code reviewer (another agent)
+2. The reviewer does the actual code review
+3. After review approval, QA handles testing and merging
+
+I have already corrected this for task-0004 (the ID scheme change) — Bob is implementing it, and I have assigned Alice as the code reviewer. Bob will send his REVIEW_REQUEST to Alice when ready.
+
+Re: task-0004 itself — created and assigned to Bob. Changing "task-000X" to "T000X" across task.py, web.py, and agent.py, plus renaming the 3 existing YAML files on disk. Alice will review.

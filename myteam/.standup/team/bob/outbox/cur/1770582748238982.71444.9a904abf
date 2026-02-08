@@ -1,0 +1,19 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T20:32:28.238636Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=bob/standup-ui/038-wire-diff-panel
+
+T0038 — Wire diff panel to task detail rows.
+
+Changes (scripts/web.py only, +60/-1):
+
+1. CSS: Added .task-vcs-row (flex row), .task-branch (monospace pill, max-width 320px with ellipsis), .task-commit (blue clickable SHA pill), .btn-diff (secondary button, margin-left:auto).
+
+2. _taskRowHtml: New VCS row between detail-grid and description showing branch name, commit SHA pills (each clickable → openDiffPanel), and View Changes button. Replaced old .diff-btn from task-dates row.
+
+3. _updateTaskRowInPlace: Full VCS row sync — updates branch text, rebuilds commit pills, creates/removes VCS row dynamically based on stats cache availability.
+
+4. event.stopPropagation: Applied on .task-vcs-row div, each .task-commit button, and .btn-diff button to prevent task row collapse/expand when clicking interactive elements.
+
+274 tests passing. Single commit: 4fd7223.

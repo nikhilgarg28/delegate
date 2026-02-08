@@ -1,0 +1,48 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T17:17:50.814622Z
+---
+Review of T0026 — voice-to-text mic button (John's changes in web.py). Here's my analysis:
+
+**Overall verdict: REJECT — two bugs need fixing before merge.**
+
+---
+
+**CSS (lines 268-271): GOOD**
+- .mic-btn styles are consistent with the existing dark theme — uses the same #111113 background, rgba(255,255,255,0.1) border, 8px border-radius, and transition timing as the existing .chat-input select and .chat-input input styles.
+- .recording state uses a tasteful red tint (rgba(239,68,68,...)) that's visually distinct without clashing.
+- @keyframes mic-pulse is clean and subtle — box-shadow pulse is a nice touch.
+- The mic-btn uses display:flex for centering the emoji, which is the right call since the parent is a flex container.
+- No issues here.
+
+**HTML (line 335): GOOD**
+- Mic button placed correctly between #msgInput and Send.
+- Hidden by default (style='display:none') — good, JS reveals it only when SpeechRecognition is supported.
+- Uses HTML entity &#127908; (🎤) — fine for this inline SPA approach. No accessibility label though (see minor notes below).
+
+**JS (lines 713-788): TWO BUGS + minor notes**
+
+**BUG 1 — Dead code / stale onresult handler in initMic (lines 726-737):**
+The IIFE initMic() sets _recognition.onresult with a closure over _finalTranscript (line 725). But then toggleMic() *replaces* _recognition.onresult entirely every time recording starts (lines 769-781). This means:
+- The original onresult handler set in initMic is never used after the first toggle.
+- The _finalTranscript variable declared at line 725 becomes dead state after the first recording session.
+- This isn't a crash bug, but it's misleading dead code that will confuse future maintainers. The initMic handler should be removed, and the onresult logic should live only in toggleMic, OR (cleaner) the handler should be set once and use a shared variable that toggleMic resets.
+
+**BUG 2 — Rapid toggle race condition (lines 755-787):**
+If the user clicks the mic button rapidly (toggle on, then immediately off, then on again), _recognition.start() can be called while a previous .stop() is still resolving. The Web Speech API throws an InvalidStateError if you call .start() on a recognition object that hasn't fully stopped yet. There is no guard against this. Fix: either (a) add a debounce/cooldown, or (b) disable the button briefly between toggles, or (c) wrap .start() in a try/catch and retry after onend fires.
+
+**Minor notes (non-blocking but worth addressing):**
+1. The line _recognition._finalTranscript = input.value (line 767) sets an arbitrary property on the SpeechRecognition object that's never read anywhere. This is a no-op leftover — should be removed for clarity.
+2. No aria-label on the mic button. For accessibility, add aria-label='Voice input' alongside the title attribute.
+3. When the user hits Enter to send while recording is active, the recording continues but the input is cleared. This could cause the next transcription chunk to appear alone without the user realizing recording is still going. Consider auto-stopping recognition in sendMsg() — or at least note this as an intentional design choice.
+
+**Graceful degradation: GOOD**
+- If SpeechRecognition is unsupported, initMic() returns early, button stays display:none. No errors. This is correct.
+- Error handler properly ignores 'aborted' and 'no-speech' (expected non-error states). Other errors are logged to console. Good.
+
+**Summary:**
+- Bug 1 (dead onresult handler) — must fix. Misleading dead code.
+- Bug 2 (rapid toggle race) — must fix. Will throw in production.
+- Three minor items are non-blocking but should ideally be cleaned up.
+
+Please send back to John for a second pass on the two bugs.

@@ -1,0 +1,57 @@
+id: 46
+title: Add agent detail content to right-side panel
+description: "Extend the right-side slide-out panel (from T0037) to also display agent\
+  \ details when clicking an agent name. The panel is now a unified component used\
+  \ for both diffs and agent details.\n\n## Opening the Agent Panel\n\nfunction openAgentPanel(agentName):\n\
+  1. Set the panel title to the agent name (capitalized)\n2. Set the branch line to\
+  \ the agent's role\n3. Clear commits area\n4. Replace the diff tabs with agent tabs:\
+  \ Inbox | Outbox | Logs | Stats\n5. Fetch data and render the active tab\n6. Add\
+  \ .open to panel and backdrop\n\nThe same #diffPanel element is reused \u2014 just\
+  \ swap the header content and tabs. Add a data attribute or variable to track whether\
+  \ the panel is showing a diff or an agent (_panelMode = 'diff' | 'agent').\n\n##\
+  \ Agent Tabs\n\n### Inbox tab\nFetch GET /agents/{name}/inbox. Render as a message\
+  \ list:\n- Each message: sender (bold), relative timestamp (right-aligned, gray),\
+  \ body (truncated to 2 lines with expand)\n- Unread messages: left border 2px solid\
+  \ #60a5fa\n- Empty state: 'No messages'\n\n### Outbox tab\nFetch GET /agents/{name}/outbox.\
+  \ Same layout but show recipient instead of sender.\n- Pending messages: left border\
+  \ 2px solid #fbbf24 (amber)\n- Empty state: 'No messages'\n\n### Logs tab\nFetch\
+  \ GET /agents/{name}/logs. Render worklog sessions:\n- Each session: filename as\
+  \ header, content as preformatted monospace text\n- Collapsible sections (click\
+  \ session header to expand/collapse)\n- Latest session expanded by default, older\
+  \ ones collapsed\n- Empty state: 'No worklogs'\n\n### Stats tab\nFetch GET /agents/{name}/stats.\
+  \ Render the same stat grid as the current expandable agent cards (reuse renderAgentStats\
+  \ pattern):\n- Tasks done, In review, Total tasks, Sessions, Tokens, Cost, Agent\
+  \ time, Avg task time\n\n## Click Handlers\n\nAdd onclick handlers to open the agent\
+  \ panel from:\n1. Agent cards on the Agents tab \u2014 replace the current expand\
+  \ behavior with openAgentPanel(name)\n2. Sidebar agent roster \u2014 clicking agent\
+  \ name opens panel\n3. Chat message sender names \u2014 clicking opens the sender's\
+  \ panel\n\nAdd event.stopPropagation() where needed.\n\n## Tab Switching\n\nfunction\
+  \ switchAgentTab(tab):\n- Update active tab styling\n- Fetch and render the selected\
+  \ tab's content\n- Cache the last-fetched data to avoid re-fetching when switching\
+  \ back\n\n## Panel State Management\n\n- _panelMode: 'diff' | 'agent'\n- _panelAgent:\
+  \ current agent name (when in agent mode)\n- _agentTabData: cached data per tab\n\
+  - closeDiffPanel() already handles closing \u2014 rename or alias as closePanel()\n\
+  \n## CSS\n\nReuse existing .diff-panel-* styles. Add:\n- .agent-msg { padding: 10px\
+  \ 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }\n- .agent-msg.unread\
+  \ { border-left: 2px solid #60a5fa; }\n- .agent-msg.pending { border-left: 2px solid\
+  \ #fbbf24; }\n- .agent-msg-header { display: flex; justify-content: space-between;\
+  \ margin-bottom: 4px; }\n- .agent-msg-sender { font-weight: 500; font-size: 12px;\
+  \ color: #ededed; }\n- .agent-msg-time { font-size: 11px; color: #444; }\n- .agent-msg-body\
+  \ { font-size: 12px; color: #a1a1a1; line-height: 1.5; }\n- .agent-log-session {\
+  \ margin-bottom: 12px; }\n- .agent-log-header { cursor: pointer; padding: 8px 12px;\
+  \ background: rgba(255,255,255,0.03); border-radius: 6px; font-size: 12px; color:\
+  \ #a1a1a1; }\n- .agent-log-content { font-family: monospace; font-size: 11px; line-height:\
+  \ 1.5; color: #888; padding: 8px 12px; white-space: pre-wrap; max-height: 400px;\
+  \ overflow-y: auto; }\n\nAll changes in scripts/web.py.\nBranch: bob/standup-ui/046-agent-detail-panel\n\
+  Code lives in /Users/nikhil/dev/standup/.\nMessage edison when done."
+status: done
+assignee: bob
+reviewer: ''
+project: standup-ui
+priority: high
+created_at: '2026-02-08T20:09:02.190514Z'
+updated_at: '2026-02-08T20:16:47.716690Z'
+completed_at: '2026-02-08T20:16:47.713351Z'
+depends_on: []
+branch: ''
+commits: []

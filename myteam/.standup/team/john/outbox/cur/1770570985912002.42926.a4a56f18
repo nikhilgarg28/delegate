@@ -1,0 +1,25 @@
+sender: john
+recipient: edison
+time: 2026-02-08T17:16:25.911710Z
+---
+T0026 is done and moved to review. Here's a summary of what I implemented in web.py:
+
+**CSS (line ~268-271):**
+- Added .mic-btn styles: dark-themed button matching the input area aesthetic
+- .mic-btn.recording state: red-tinted background, red border, red icon color
+- @keyframes mic-pulse: pulsing red box-shadow animation while recording
+
+**HTML (line ~335):**
+- Added a mic button (🎤 emoji) between #msgInput and the Send button
+- Starts hidden (style="display:none") — only shown if browser supports SpeechRecognition
+
+**JS (lines ~713-790):**
+- initMic() IIFE runs on page load: checks for SpeechRecognition/webkitSpeechRecognition, shows mic button only if supported
+- Creates SpeechRecognition instance with continuous=true and interimResults=true for live transcription
+- toggleMic(): click toggles recording on/off, manages .recording CSS class for visual indicator
+- Preserves any existing text in the input field when starting a new recording session
+- onend handler: auto-resets UI when recognition stops (e.g., silence timeout)
+- onerror handler: resets UI on errors, suppresses expected errors (aborted, no-speech)
+- Transcribed text goes into #msgInput for user to review/edit before hitting Send
+
+No external dependencies, no server-side changes. Works in Chrome and Edge. Please assign a reviewer when ready.

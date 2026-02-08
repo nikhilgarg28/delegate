@@ -1,0 +1,17 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T10:51:21.823869Z
+---
+Sure, happy to improve the typography and overall aesthetics. A couple of questions before I scope the task:
+
+Currently the font stack is the standard system UI font: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif. This renders as San Francisco on Mac, Segoe UI on Windows — functional but generic.
+
+A few directions we could go:
+
+1. **Inter** — the modern go-to for clean dashboards and dev tools (used by Vercel, Linear, GitHub). Excellent readability, slightly tighter than system fonts. Would load from Google Fonts.
+2. **Geist** — Vercel's newer font, very clean and modern. Similar to Inter but with its own personality.
+3. **Keep system fonts but refine the typography** — adjust font sizes, weights, line heights, letter spacing, and overall spacing/padding to feel more polished without loading any external fonts.
+
+Also, when you say "the whole UI" — are you thinking just typography improvements (fonts, sizes, spacing), or a broader visual refresh (colors, borders, card styles, shadows, etc.)?
+
+Want to make sure we nail the vibe you are going for before sending someone off to implement it.

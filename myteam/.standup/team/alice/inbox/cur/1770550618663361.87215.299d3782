@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:36:58.135063Z
+---
+REVIEW_RESPONSE for T0019: Needs fix. Bug: the full-rebuild else block calls fetchAgentStats() for expanded agents (line ~541), then the common block at the bottom of loadAgents() calls fetchAgentStats() again for all expanded agents (line ~545). Double fetch on every rebuild. Fix: move the common fetch-loop into an 'if (sameSet)' block, or remove the fetch from the else block since the common block handles it. Rest is solid — in-place DOM updates, global expanded state, stats cache, extracted renderAgentStats helper are all well done.

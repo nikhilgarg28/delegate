@@ -1,0 +1,52 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T17:45:48.050925Z
+---
+Great idea — the system already captures most of the data we'd need. Here's my brainstorm:
+
+**What we'd be testing:**
+The charter (constitution, communication, task-management, code-review, manager) is the primary lever controlling agent behavior. Changing it changes how agents scope work, communicate, review code, escalate blockers, etc.
+
+**What we already measure (in db.sqlite + worklogs):**
+- Tokens in/out and cost per task/agent/session
+- Wall-clock time per task
+- Session count per task (how many agent wakes it took)
+- Message volume between agents
+- Task status transitions (open → in_progress → review → done)
+- QA rejection/approval rates
+- Full execution traces in worklog files
+
+**Proposed eval harness design:**
+
+1. **Benchmark task suite** — a fixed set of reproducible tasks with known-good outcomes. E.g., 'implement a REST endpoint with tests', 'fix this specific bug', 'refactor this module'. Each task has acceptance criteria we can check programmatically (tests pass, specific files exist, endpoint returns correct response, etc.).
+
+2. **Charter variants** — different versions of the charter files. Could vary one dimension at a time:
+   - Constitution: 'ship fast' vs 'quality first' vs 'minimal communication'
+   - Task scoping: half-day vs full-day vs no guidance
+   - Code review: mandatory vs optional vs skip entirely
+   - Communication: verbose reporting vs minimal vs no status updates
+
+3. **Runner** — a script that:
+   - Bootstraps a fresh team with a given charter variant
+   - Seeds the task queue with the benchmark suite
+   - Runs the daemon until all tasks reach 'done' (or timeout)
+   - Collects metrics from db.sqlite + checks acceptance criteria
+
+4. **Scorecard** — per charter variant:
+   - **Correctness**: % of tasks passing acceptance criteria
+   - **Cost efficiency**: total tokens / USD per completed task
+   - **Speed**: wall-clock time to complete the suite
+   - **Communication overhead**: messages per task
+   - **Revision rate**: how often tasks bounce back from review
+   - **Blocker frequency**: how often agents get stuck
+
+5. **Comparison report** — side-by-side table of charter variants vs metrics. Could even do statistical significance if we run each variant multiple times.
+
+**Key design decisions to make:**
+- **Determinism**: LLM outputs aren't deterministic, so we'd need multiple runs per variant to get signal. How many reps? 3-5 minimum.
+- **Task isolation**: Each run needs a clean repo/workspace. We could use temp dirs or git branches.
+- **Cost control**: Each run burns real tokens. A full suite of 5 tasks × 5 charter variants × 3 reps = 75 runs. Need a token budget cap per run.
+- **Benchmark tasks**: Do we use synthetic tasks (contrived but reproducible) or replay real tasks from our history?
+- **What to vary**: Start simple — vary one charter dimension at a time. Full factorial gets expensive fast.
+
+**My recommendation**: Start with a minimal prototype — 2-3 benchmark tasks, 2-3 charter variants, single run each. Get the harness working end-to-end first, then scale up. Want me to scope this into tasks?

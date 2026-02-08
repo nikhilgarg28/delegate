@@ -1,0 +1,32 @@
+id: 31
+title: Eval runner orchestration
+description: "The main eval runner that ties everything together. This is the core\
+  \ of the harness.\n\nDepends on: T0028 (benchmark specs), T0029 (charter variants),\
+  \ T0030 (sim-director). Do NOT start until those are done.\n\nImplement in scripts/eval.py\
+  \ (extend the module created in T0029):\n\nrun_eval(variant, suite, timeout, dry_run=False):\n\
+  \  1. Create a temp directory for the eval run\n  2. Bootstrap a fresh team using\
+  \ bootstrap_with_variant() from T0029\n  3. Load benchmark tasks from the suite\
+  \ directory (benchmarks/tasks/*.yaml)\n  4. Seed the task queue \u2014 create tasks\
+  \ via scripts.task.create_task()\n  5. Start the sim-director (from T0030) in a\
+  \ background thread\n  6. Start the daemon (router + orchestrator) \u2014 reuse\
+  \ existing run logic from scripts/run.py / scripts/web.py\n  7. Poll until all tasks\
+  \ reach 'done' status or timeout hits\n  8. Stop daemon + sim-director\n  9. Run\
+  \ acceptance criteria checks from benchmark specs\n  10. Collect raw metrics from\
+  \ db.sqlite (tokens, cost, time, sessions, messages)\n  11. Return structured results\
+  \ dict\n\nCLI: python -m scripts.eval run --variant ship-fast --suite benchmarks/tasks\
+  \ --timeout 600 [--dry-run]\n- --dry-run: validate the pipeline (bootstrap, load\
+  \ specs, seed tasks) without spawning real agents\n\nAlso add:\npython -m scripts.eval\
+  \ compare --results-dir /path/to/results\n- Loads multiple run results and prints\
+  \ a side-by-side comparison table\n\nStore run results as JSON in a results/ directory\
+  \ within the temp dir.\n\nAdd tests for the dry-run path in tests/test_eval.py.\n\
+  \nCode lives in /Users/nikhil/dev/standup/. Study scripts/run.py and scripts/orchestrator.py\
+  \ for daemon startup patterns.\nMessage edison when done."
+status: done
+assignee: mark
+reviewer: ''
+project: eval-harness
+priority: high
+created_at: '2026-02-08T18:01:08.366602Z'
+updated_at: '2026-02-08T19:17:14.318666Z'
+completed_at: '2026-02-08T19:17:14.316518Z'
+depends_on: []

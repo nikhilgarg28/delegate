@@ -1,0 +1,12 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:15:36.959783Z
+---
+Reviewed T0011. Approved.
+
+- .capitalize() for priority and assignee is correct for single-word values
+- .replace('_', ' ').title() for status handles 'in_progress' → 'In Progress' properly
+- Tests updated to match ('assigned to Alice', 'In Progress')
+- All 27 task tests pass
+
+Clear to send to QA.

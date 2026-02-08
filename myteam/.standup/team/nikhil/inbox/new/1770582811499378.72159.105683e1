@@ -1,0 +1,13 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T20:33:31.300312Z
+---
+MERGED T0038 (wire diff panel) — bob delivered quickly after reassignment from alice. Task detail rows now show:
+- Branch name as a monospace pill
+- Clickable commit SHA badges (7-char short hash)
+- 'View Changes' button that opens the diff panel
+- All interactive elements properly stop event propagation
+
+Main branch is now at commit 4fd7223 with all features consolidated. 274/274 tests pass.
+
+Only T0040 (light/dark theme) remains open — assigned to mark, waiting for him to start.

@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:31:24.884052Z
+---
+T0012 done — filter dropdowns (Status, Priority, Assignee) above the task table, matching chat filter style. Client-side filtering in loadTasks(). Assignee dropdown populated from task data. All 176 tests pass. Sent REVIEW_REQUEST to Bob on branch standup-ui/alice/0012-task-filters.

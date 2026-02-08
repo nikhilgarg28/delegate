@@ -1,0 +1,5 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T11:54:08.707042Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/alice/0023-task-row-flicker -- T0023: Fix task row expand flicker. Same pattern as T0019 agent card fix: extracted _taskRowHtml() for full rebuilds, _updateTaskRowInPlace() for in-place DOM updates. On 2s refresh, compares existing task row IDs with new filtered list; if same set in same order, updates textContent of each field without replacing DOM. Full rebuild only on first load or when task list changes. Expanded rows keep their DOM so CSS transitions aren't restarted. All 62 web/task/chat tests pass (agent tests have pre-existing failures unrelated to this change).

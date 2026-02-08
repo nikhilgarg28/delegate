@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T11:13:55.222327Z
+---
+I think the task page needs a few filters - on priority, status, assignee etc? Also the width is a bit weird there - so some fields don't fit and wrap which looks ugly. How can we fix it?

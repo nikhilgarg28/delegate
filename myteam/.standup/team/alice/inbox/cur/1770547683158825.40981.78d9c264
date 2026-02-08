@@ -1,0 +1,11 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T10:48:02.839414Z
+---
+Reviewed both your branches — great work on both tasks.
+
+task-0001 (stats display): Clean implementation. fmtElapsed/fmtTokens/fmtCost helpers handle nulls gracefully. Promise.all for parallel stats fetching is smart. Only fetching for in_progress/done as requested. Approved, marking done.
+
+task-0003 (full-height chat): Excellent flexbox approach. The chain of flex: 1 from body -> content -> panel -> chat-log with min-height: 0 at each level is exactly right for nested flex containers. flex-shrink: 0 on header and chat-input keeps them pinned. Much better than a calc() hack. Approved, marking done.
+
+Both tasks are now done. Will let you know when the next one is ready.

@@ -1,0 +1,12 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T20:10:15.447827Z
+---
+Next task: T0043 — Replace mute emoji with SVG icon and add voice-to-text mic button. Reassigned from john who's been unresponsive.
+
+Two parts:
+1. Swap the mute toggle emoji (🔔/🔕) for flat inline SVG speaker icons — update _updateMuteBtn() to use innerHTML with SVGs. Add display:flex to .mute-toggle CSS.
+
+2. Add a voice-to-text mic button in the chat input bar using Web Speech API — hidden if unsupported, pulsing red when recording, auto-stops on send.
+
+Full spec with exact SVG markup and JS code in the task description. Branch: mark/standup-ui/043-mute-icon-and-mic off current HEAD (mark/standup-ui/045-event-formatting). Message me when done.

@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T19:17:59.784746Z
+---
+MERGED: T0029 (charter variant system) approved and merged. The charter variant system is clean — load_variant with default fallback, bootstrap_with_variant wrapping bootstrap(), and both sample variants (ship-fast, quality-first) are well-differentiated. 22 tests cover the variant system thoroughly. T0029 marked done.

@@ -1,0 +1,18 @@
+id: 14
+title: Add 'Between' toggle to chat filters for bidirectional conversation view
+description: "Add a checkbox/toggle labeled 'Between' next to the From/To dropdowns.\
+  \ When toggled on, the filter logic changes: instead of matching sender===From AND\
+  \ recipient===To, it shows all messages where (sender===A AND recipient===B) OR\
+  \ (sender===B AND recipient===A). The From/To dropdown labels could change to 'Person\
+  \ A'/'Person B' when Between is active, or just keep them as-is. Key file: scripts/web.py\
+  \ \u2014 update the chat-filters HTML (around line 288) to add the toggle, and update\
+  \ the client-side filter logic in loadChat() (around line 404). Match existing checkbox\
+  \ style (.chat-filters input[type=checkbox])."
+status: done
+assignee: bob
+project: standup-ui
+priority: medium
+created_at: '2026-02-08T11:19:31.962729Z'
+updated_at: '2026-02-08T11:25:10.608688Z'
+completed_at: '2026-02-08T11:25:10.607582Z'
+depends_on: []

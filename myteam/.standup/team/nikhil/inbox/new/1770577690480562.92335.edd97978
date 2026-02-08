@@ -1,0 +1,21 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T19:08:10.220810Z
+---
+Status update on the eval-harness project:
+
+**Done (3 of 6 tasks):**
+- T0028 (benchmark specs) — done, bob
+- T0030 (sim-director) — done, mark. I reviewed it, caught a thread-safety bug (asyncio.Event shared across threads), mark fixed it, merged.
+- T0032 (automated quality checks, Tier 1) — done, alice
+
+**In review (2 tasks — I need to review these):**
+- T0029 (charter variant system) — alice, waiting for my review
+- T0033 (LLM-as-judge scoring, Tier 2) — john, waiting for my review
+
+**In progress (1 task):**
+- T0031 (eval runner orchestration) — mark, started after T0030 merged. This is the core piece that ties everything together. Depends on T0028, T0029, T0030.
+
+**No open/unassigned tasks remaining.**
+
+Next up: I'll review T0029 and T0033 now. T0031 is the critical path — once mark finishes it and I merge T0029, the eval harness will be functional end-to-end.

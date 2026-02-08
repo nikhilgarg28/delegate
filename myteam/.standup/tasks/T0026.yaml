@@ -1,0 +1,26 @@
+id: 26
+title: Add voice-to-text microphone button to chat input
+description: "Add a microphone button next to the Send button in the chat input area.\
+  \ Use the browser's Web Speech API (SpeechRecognition) for transcription \u2014\
+  \ no server-side processing needed.\n\n**Requirements:**\n- Add a mic icon/button\
+  \ to the right of the message input, before or after the Send button\n- Click to\
+  \ start recording; click again to stop (also auto-stop on silence if the API supports\
+  \ it)\n- While recording, show a visual indicator (e.g., red pulsing dot, button\
+  \ color change) so the user knows it's active\n- Transcribed text should be inserted\
+  \ into the existing #msgInput text field \u2014 user reviews/edits and hits Send\
+  \ manually\n- If the browser doesn't support SpeechRecognition, hide the mic button\
+  \ gracefully (no errors)\n- Works in Chrome and Edge (primary targets for Web Speech\
+  \ API)\n\n**Implementation notes:**\n- All UI code is inline in /Users/nikhil/dev/standup/scripts/web.py\
+  \ (single-page app with embedded HTML/JS/CSS)\n- The chat input area is around lines\
+  \ 314-332: a div.chat-input containing a select#recipient, input#msgInput, and a\
+  \ send button\n- Use the SpeechRecognition or webkitSpeechRecognition browser API\n\
+  - Keep it simple \u2014 no external dependencies"
+status: done
+assignee: john
+reviewer: ''
+project: audio-chat
+priority: high
+created_at: '2026-02-08T17:14:51.711668Z'
+updated_at: '2026-02-08T17:19:35.288841Z'
+completed_at: '2026-02-08T17:19:35.286993Z'
+depends_on: []

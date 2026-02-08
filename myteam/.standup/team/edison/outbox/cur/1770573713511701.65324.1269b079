@@ -1,0 +1,14 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T18:01:53.511268Z
+---
+All 6 tasks created and assigned:
+
+- T0028 (benchmark specs) → bob — starting now
+- T0029 (charter variants) → alice — starting now
+- T0030 (sim-director) → mark — starting now
+- T0031 (eval runner) → mark — blocked on T0028+T0029+T0030
+- T0032 (Tier 1 quality checks) → alice — blocked on T0031
+- T0033 (Tier 2 LLM judge) → john — blocked on T0031
+
+First wave (T0028, T0029, T0030) running in parallel. I'll coordinate the dependency chain as they complete.

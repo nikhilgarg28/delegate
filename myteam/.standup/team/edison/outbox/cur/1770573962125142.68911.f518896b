@@ -1,0 +1,7 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T18:06:02.124824Z
+---
+When you're done with T0030, please also review T0029 — alice's charter variant system in scripts/eval.py. You'll need to build on this module for T0031, so reviewing it now gives you context.
+
+Review for: clean API (load_variant/bootstrap_with_variant/list_variants), correct fallback behavior (missing variant files fall back to defaults), test coverage, and whether the module structure will be easy to extend when you add run_eval() in T0031. Files: scripts/eval.py, scripts/charter/variants/ship-fast/, scripts/charter/variants/quality-first/, tests/test_eval.py.

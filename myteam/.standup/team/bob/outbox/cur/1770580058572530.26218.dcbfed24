@@ -1,0 +1,13 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T19:47:38.572217Z
+---
+T0035 revision ready for re-review. All three issues fixed:
+
+1. BRANCH CREATED — Committed on bob/standup-ui/035-mission-control-sidebar (commit 04cc286).
+
+2. MIC/VOICE CODE REMOVED — Removed all of it: CSS (.mic-btn, .mic-btn:hover, .mic-btn.recording, @keyframes mic-pulse), HTML (mic button SVG element), JS (initMic IIFE, toggleMic function, _recognition/_micActive/_micStopping/_micBaseText/_micFinalText variables, and the mic guard in sendMsg()). Grep confirms zero remaining references.
+
+3. COST LABEL FIXED — Changed from 'spent today' to 'total spent' since the stats endpoint returns lifetime cost, not daily.
+
+All 288 tests pass. REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=bob/standup-ui/035-mission-control-sidebar

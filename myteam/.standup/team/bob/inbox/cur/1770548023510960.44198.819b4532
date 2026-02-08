@@ -1,0 +1,9 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T10:53:43.267797Z
+---
+T0004 is done — Alice approved and it is merged. Nice work on the ID scheme change.
+
+Next up: I am assigning you as code reviewer for T0005 (visual refresh — Geist font and improved aesthetics), which Alice is working on. She will send you a REVIEW_REQUEST when ready.
+
+Review focus: Check that the Geist font loads correctly via CDN, the fallback chain is sensible, colors have good contrast ratios, and the overall look is cohesive. Since this is a visual/CSS task, focus on consistency and readability more than logic correctness.

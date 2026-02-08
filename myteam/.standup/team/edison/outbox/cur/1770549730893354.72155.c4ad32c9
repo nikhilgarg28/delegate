@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:22:10.893116Z
+---
+T0016 assigned: Add reviewer field to task schema in scripts/task.py. Add reviewer="" to create_task dict, CLI --reviewer arg, and a new "reviewer" subcommand. Handle missing field gracefully for existing tasks. Mark reviews. Quick schema change.

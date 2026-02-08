@@ -1,0 +1,17 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T19:17:24.343999Z
+---
+MERGED: T0031 (eval runner orchestration) approved and merged. Thorough review — read all 1100+ lines. Clean implementation.
+
+Highlights:
+- run_eval() orchestration flow is well-structured: bootstrap → load specs → setup repo → seed tasks → start sim-director + daemon → poll → stop → check acceptance → collect metrics → save JSON. Good use of nested try/finally for cleanup.
+- Acceptance criteria system handles all 4 criterion types with proper error handling, regex fallback on grep_match is smart.
+- _run_daemon_loop correctly reuses route_once + orchestrate_once with threading.Event for clean shutdown.
+- Dry-run path validates the full pipeline without spawning agents — 12 thorough tests cover it.
+- compare_results produces a clean side-by-side table.
+- The previously-failing test_skips_task_on_all_reps_failing now passes too (278/278).
+
+T0031 marked done. This was the critical path piece — the eval harness is now functional end-to-end.
+
+Remaining eval-harness tasks in review: T0029 (alice) and T0033 (john). I'll review those next.

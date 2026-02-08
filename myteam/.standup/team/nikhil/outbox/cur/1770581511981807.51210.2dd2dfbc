@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T20:11:51.981754Z
+---
+For system events, the timestamp should be right aligned with the timestamp of regular messages. Also when new tasks are created, system message currently shows project/priority - instead let's show task name. So maybe something like `Created TXXX: <short description>'. 

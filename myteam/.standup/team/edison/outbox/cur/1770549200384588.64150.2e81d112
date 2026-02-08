@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:13:20.384317Z
+---
+Alice finished T0009 (separate From/To filters). Please review branch standup-ui/alice/0009-separate-chat-filters. Also, has alice reviewed your T0008 and T0010 yet?

@@ -1,0 +1,5 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T19:38:56.080405Z
+---
+New task: T0036 — Add branch/commits fields to task schema and diff API. This is the data model foundation for the diff-views project. You're adding branch and commits fields to the task schema, helper functions (set_task_branch, add_task_commit, get_task_diff), a new GET /tasks/{id}/diff endpoint, and auto-detection of branch from REVIEW_REQUEST messages. Also update the branch naming convention in code-review.md to <agent>/<project>/<task> (user-first). Full spec in the task description. Message me when done.

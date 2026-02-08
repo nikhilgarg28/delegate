@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T11:15:10.317348Z
+---
+We should also show who is the reviewer for a task? In fact, now there are so many fields, I wonder if a better interaction is one where main task page (with filters) shows a few fields only. But it's clickable and when clicked, it inline expands row into a card with few more details. Clicking out collapses it back. Thoughts?

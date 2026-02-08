@@ -1,0 +1,50 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T19:33:30.615356Z
+---
+Thought through the diff view feature. Here's my analysis and proposal:
+
+## Current State
+- Tasks have NO branch or commit fields today — they track status, assignee, description, but not git metadata.
+- Agents work on feature branches (per code-review.md: <project>/<agent>/<task-number>-<short-name>) but this isn't stored on the task.
+- Sessions link to tasks via task_id, but there's no git context recorded.
+- eval.py already has _get_full_diff() and _get_changed_files() functions, but they hardcode HEAD~1 (only useful for eval runs, not general use).
+
+## Data Model Changes Needed
+Add to task schema:
+- branch: string — feature branch name (e.g. 'standup-ui/alice/0034-relative-timestamps')
+- commits: list[string] — SHA hashes of commits on this branch
+
+These get populated:
+1. When an agent creates a branch (agent writes it to the task)
+2. When QA receives a REVIEW_REQUEST with the branch name (parse it out, update the task)
+3. When commits are made (agent updates the task's commit list)
+
+Also add a new API endpoint: GET /tasks/{id}/diff — returns the diff text for the task's branch vs main (or parent commit).
+
+## UI Design — Two Options
+
+**Option A: Right-side slide-out panel (my recommendation)**
+Click a commit hash or 'View Changes' button in the task detail → a panel slides in from the right (500-600px wide) showing the inline diff. The main content compresses or the panel overlays. Panel has a close button and a header showing the task ID + branch name. Scroll is independent from the main content.
+
+Why I like this: The sidebar (T0035) is on the left, main content in the middle. A right-side diff panel creates a natural three-zone layout: navigation → content → detail. Similar to GitHub's PR file viewer. User can see the task detail and diff simultaneously. The panel can be dismissed without losing context.
+
+**Option B: Full-tab diff view**
+Add a 4th tab 'Diffs' that shows a diff viewer. Clicking a commit hash in task detail navigates to this tab with the diff loaded. Simpler to implement, but loses the side-by-side context.
+
+**Option C: Inline in task detail**
+Expand the diff directly inside the task detail card. Problem: diffs can be very long, and the task detail card uses max-height animation — would need restructuring. Also clutters the task view.
+
+## Recommended Interaction Flow
+1. Task detail shows: branch name (clickable) + commit SHAs (short form, clickable) + 'View Diff' button
+2. Clicking any of these opens the right-side diff panel
+3. Diff panel shows: syntax-highlighted inline diff (additions green, deletions red, same dark theme), file names as collapsible headers, line numbers
+4. Panel has tabs: 'Files Changed' (file list with +/- counts) and 'Full Diff'
+5. Panel persists until explicitly closed — navigating between tasks updates it if open
+
+## Implementation Plan (3 tasks)
+T1: Data model — add branch/commits fields to task schema, add /tasks/{id}/diff endpoint, wire up branch detection from REVIEW_REQUEST messages
+T2: Diff panel UI — right-side slide-out panel with syntax-highlighted inline diff rendering (all CSS/JS in web.py)
+T3: Integration — commit hash display in task detail, click handlers, auto-update
+
+What do you think? Happy to adjust the approach. The main decision point is Option A vs B vs C for the diff view placement.

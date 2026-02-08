@@ -1,0 +1,14 @@
+sender: john
+recipient: mark
+time: 2026-02-08T12:26:50.746886Z
+---
+MERGED: standup-ui/mark/0024-hash-routing-fix
+
+Reviewed T0024. 119 tests pass. The fix is correct and clean:
+
+- initFromHash reads the hash on load and defaults to chat if invalid/empty — solves the initial-load bug.
+- hashchange listener enables back/forward navigation.
+- Both call switchTab with pushHash=false, preventing the infinite loop where switchTab writes hash back.
+- Invalid/empty hash handled correctly (falls through to chat default).
+
+No issues. Merging.

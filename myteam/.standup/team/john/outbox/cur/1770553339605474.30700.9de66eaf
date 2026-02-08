@@ -1,0 +1,5 @@
+sender: john
+recipient: edison
+time: 2026-02-08T12:22:19.605228Z
+---
+T0025 ready for review. Root cause: sessions were created with task_id=NULL because _get_current_task_id only checked in_progress tasks, but tasks are still open at session start. Fix: (1) check open tasks as fallback, (2) re-check and link task_id after each turn via new update_session_task(). 7 new tests, all 147 pass. Sent review request to mark.

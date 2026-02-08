@@ -1,0 +1,43 @@
+id: 41
+title: Add agent inbox, outbox, and logs API endpoints
+description: "Add three new API endpoints to scripts/web.py for the agent detail panel.\
+  \ These provide the data that the right-side panel will display.\n\n## Endpoints\n\
+  \n### GET /agents/{name}/inbox\nReturns all messages in the agent's inbox (both\
+  \ read and unread), newest first.\n\nResponse: list of objects:\n{\n  'sender':\
+  \ str,\n  'time': str (ISO 8601),\n  'body': str,\n  'read': bool (true if in cur/,\
+  \ false if in new/)\n}\n\nUse read_inbox(root, name, unread_only=False) from scripts/mailbox.py\
+  \ to get all messages. Each Message has .sender, .recipient, .time, .body. Determine\
+  \ read status by checking if the file is in inbox/new/ (unread) vs inbox/cur/ (read).\n\
+  \nActually, the simpler approach: call read_inbox twice \u2014 once with unread_only=True\
+  \ (these are unread), once with unread_only=False (all). The difference tells you\
+  \ which are read. Or just return all and add a 'read' field based on which list\
+  \ they came from.\n\nSort by time descending (newest first). Limit to last 100 messages.\n\
+  \n### GET /agents/{name}/outbox\nSame structure but for outbox. Returns messages\
+  \ sent by this agent.\n\nResponse: list of objects:\n{\n  'recipient': str,\n  'time':\
+  \ str (ISO 8601),\n  'body': str,\n  'routed': bool (true if in cur/, false if still\
+  \ pending in new/)\n}\n\nUse read_outbox(root, name, pending_only=False). Sort by\
+  \ time descending. Limit to 100.\n\n### GET /agents/{name}/logs\nReturns the agent's\
+  \ worklog entries from .standup/team/{name}/logs/.\n\nResponse:\n{\n  'sessions':\
+  \ [\n    {\n      'filename': str (e.g. '2.worklog.md'),\n      'content': str (full\
+  \ markdown text, truncated to last 50KB if very large)\n    }\n  ]\n}\n\nRead all\
+  \ *.worklog.md files from .standup/team/{name}/logs/, sorted by filename (numerically\
+  \ \u2014 '10.worklog.md' after '9.worklog.md'). Return in reverse order (latest\
+  \ session first).\n\nFor all three endpoints, return 404 if the agent doesn't exist\
+  \ (check .standup/team/{name}/ directory exists).\n\n## Implementation Notes\n\n\
+  - Import read_inbox and read_outbox from scripts.mailbox (already partially imported)\n\
+  - The Message dataclass has fields: sender, recipient, time, body, filename\n- For\
+  \ inbox read status: read_inbox with unread_only=True returns only unread. read_inbox\
+  \ with unread_only=False returns all. Compare to determine status.\n- Worklog files\
+  \ are plain text/markdown in .standup/team/{name}/logs/\n\nCode lives in /Users/nikhil/dev/standup/.\n\
+  Branch: bob/standup-ui/041-agent-detail-apis\nMessage edison when done."
+status: done
+assignee: bob
+reviewer: ''
+project: standup-ui
+priority: high
+created_at: '2026-02-08T19:54:14.599932Z'
+updated_at: '2026-02-08T19:59:38.948006Z'
+completed_at: '2026-02-08T19:59:38.945188Z'
+depends_on: []
+branch: ''
+commits: []

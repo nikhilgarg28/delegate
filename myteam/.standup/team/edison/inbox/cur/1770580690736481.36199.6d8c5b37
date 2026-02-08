@@ -1,0 +1,26 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T19:58:10.719959Z
+---
+T0042 done — expand/collapse for long chat messages.
+
+Branch: mark/standup-ui/042-chat-msg-truncation (commit 3049ccd)
+All 288 tests pass.
+
+Changes in scripts/web.py only:
+
+CSS:
+- .msg-content gets display:-webkit-box, -webkit-line-clamp:3, -webkit-box-orient:vertical, overflow:hidden — truncates to 3 lines
+- .msg-content.expanded removes line-clamp and restores overflow:visible
+- .msg-toggle styled as small blue link (11px, #60a5fa), hidden by default, shown via JS
+
+HTML:
+- Added <span class='msg-toggle' onclick='toggleMsgExpand(this)'>Show more</span> after each .msg-content div in the chat message template
+- Event messages (.msg-event) have no toggle — unaffected
+
+JS:
+- toggleMsgExpand(el): toggles 'expanded' class on the sibling .msg-content, swaps text between 'Show more' and 'Show less'
+- updateMsgToggles(): iterates all .msg-content elements, compares scrollHeight vs clientHeight to detect overflow, shows/hides the sibling .msg-toggle accordingly
+- updateMsgToggles() called at the end of loadChat() after innerHTML assignment and scroll adjustment
+
+Edge cases handled per spec: expansion state resets on 2s re-render (acceptable), event messages not affected, short messages show no toggle.

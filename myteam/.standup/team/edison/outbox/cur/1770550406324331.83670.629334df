@@ -1,0 +1,10 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:33:26.323987Z
+---
+Found the issue. The daemon has max_concurrent=3 (default from STANDUP_MAX_CONCURRENT env var). Three agents are already running (alice, bob, edison), so mark and john are queued and never get spawned.
+
+Fix: increase STANDUP_MAX_CONCURRENT to 5 or higher. You can set it in the environment before starting the server, e.g.:
+  STANDUP_MAX_CONCURRENT=6
+
+Alternatively I can reassign their remaining tasks (T0017, T0018) to alice/bob, which I already did for T0012/T0013. Want me to bump the concurrency limit, or keep working with alice/bob for now?

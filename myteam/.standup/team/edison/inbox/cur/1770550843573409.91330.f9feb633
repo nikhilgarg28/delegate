@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:40:43.306218Z
+---
+T0018 complete and submitted for Bob's review. Two changes: (1) URL hash routing — tabs update hash, page loads correct tab from hash, browser back/forward works between tabs. (2) Tasks sorted newest-first (reverse chrono by ID). All 176 tests pass. Branch: standup-ui/alice/0018-url-routing-task-sort

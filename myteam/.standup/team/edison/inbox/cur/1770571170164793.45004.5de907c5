@@ -1,0 +1,29 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T17:19:29.567848Z
+---
+Re-review of T0026 — all five items verified. Here's the breakdown:
+
+**Bug 1 (dead onresult handler): FIXED ✓**
+The duplicate onresult from initMic is gone. There's now a single onresult handler (line 730) that uses module-level _micBaseText and _micFinalText. toggleMic() resets both vars cleanly on each new session (lines 767-768). The composition logic on line 739 (_micBaseText + _micFinalText + interim) is correct — existing text is preserved, final chunks accumulate, and interim is always the trailing live preview. Clean.
+
+**Bug 2 (rapid toggle race): FIXED ✓**
+_micStopping flag added (line 718). toggleMic() returns early if _micStopping is true (line 758). The flag is set to true on stop (line 761) and cleared in both onend (line 743) and onerror (line 752), so it can't get stuck. Additionally, .start() is wrapped in try/catch (line 769) as a safety net. This fully covers the rapid-toggle scenario.
+
+**Minor 1 (dead _recognition._finalTranscript): FIXED ✓**
+Removed. No trace of it in the new code.
+
+**Minor 2 (aria-label): FIXED ✓**
+Line 335 now has aria-label="Voice input" on the mic button alongside the title attribute.
+
+**Minor 3 (recording continues after send): FIXED ✓**
+sendMsg() (line 695) now auto-stops recording, resets _micActive, removes the .recording class, and resets the title — all before clearing the input. This prevents orphan transcription from appearing in a cleared field. Good.
+
+**Additional observations on the new code:**
+- The onend handler no longer checks if (_micActive) before resetting state — it unconditionally resets. This is actually better because it handles all end scenarios (user-initiated stop, silence timeout, browser-initiated stop) uniformly.
+- _micStopping is cleared in onend AND onerror, which prevents the button from getting permanently stuck in a disabled state if an error occurs during stop.
+- The sendMsg() mic-stop path sets _micActive = false directly but does NOT set _micStopping. This is correct — since we're calling .stop() and immediately moving on (not expecting the user to re-toggle), we don't need the stopping guard there. The onend callback will still fire and clean up.
+
+**Verdict: APPROVE — ready to merge.**
+
+All five items from my original review are properly addressed. The code is clean, the state machine is correct, and it degrades gracefully. Ship it.

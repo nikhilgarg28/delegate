@@ -1,0 +1,60 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T17:58:18.869192Z
+---
+Here's the proposed task breakdown and code organization for the eval harness. Please review before I create tasks.
+
+**Project: eval-harness**
+
+---
+
+**Code organization:**
+
+`scripts/eval.py` — main eval harness module (follows existing pattern: public functions + argparse CLI)
+`scripts/charter/` — already has the template charters; charter variants would live alongside as directories (e.g., `scripts/charter/variants/ship-fast/`, `scripts/charter/variants/quality-first/`)
+`tests/test_eval.py` — tests for the harness
+`benchmarks/` — new top-level dir for benchmark task definitions (YAML files describing each task spec + acceptance criteria)
+
+---
+
+**Task breakdown (6 tasks, roughly half-day each):**
+
+**T1: Benchmark task spec format + sample tasks**
+Define a YAML schema for benchmark tasks: title, description, acceptance criteria (list of checks — e.g., 'file exists', 'tests pass', 'endpoint returns 200'), expected files/repos needed. Create 2-3 sample benchmark tasks. Output: `benchmarks/` directory with schema doc + sample task YAML files.
+
+**T2: Charter variant system**
+Build the mechanism to define and load charter variants. Each variant is a directory of charter .md files that override the defaults. Add a function to bootstrap a team with a specific charter variant (wraps existing bootstrap + copies variant charter files over the defaults). Output: `scripts/eval.py` with `load_variant()` and `bootstrap_with_variant()` functions, plus 2 sample variants in `scripts/charter/variants/`.
+
+**T3: Simulated director**
+Create a sim-director mode: a lightweight Claude instance that receives manager questions and answers strictly from a task brief. Integrates with the existing mailbox system — watches the director's inbox, responds via director's outbox. Configurable prompt template. Output: sim-director function in `scripts/eval.py` (or a separate `scripts/sim_director.py` if it gets complex).
+
+**T4: Eval runner (orchestration)**
+The main runner script that ties it all together: takes a charter variant + benchmark suite as input, bootstraps a fresh team in a temp dir, seeds tasks, starts the daemon with sim-director, waits for completion (or timeout), collects raw metrics from db.sqlite. Output: `run_eval()` function + CLI command `python -m scripts.eval run --variant X --suite Y --timeout 600`.
+
+**T5: Automated quality checks (Tier 1)**
+Post-run analysis: run linting (ruff), type checking (pyright/mypy), complexity analysis (radon) on the git diffs produced by each task. Parse results into structured scores. Also collect the metrics we already have (tokens, cost, time, session count, message volume, QA rejection rate). Output: `collect_metrics()` function that returns a structured scorecard dict.
+
+**T6: LLM-as-judge scoring (Tier 2)**
+Post-run step that feeds each task's git diff + task spec to a Claude instance with a fixed rubric (correctness, readability, style, test quality, over-engineering — each 1-5). Runs the judge 2-3 times and averages. Output: `judge_diff()` function + integration into the scorecard.
+
+---
+
+**Dependency order:**
+T1 and T2 can run in parallel (no deps).
+T3 depends on nothing but is needed by T4.
+T4 depends on T1, T2, T3.
+T5 depends on T4 (needs a completed run to analyze).
+T6 depends on T4 (same reason).
+T5 and T6 can run in parallel.
+
+**Assignments (proposed):**
+- T1: bob (task spec is mostly YAML schema design + sample data)
+- T2: alice (charter loading + bootstrap integration)
+- T3: mark (Python + Claude SDK integration for sim-director)
+- T4: mark (orchestration — he knows Python well and T3 feeds into this)
+- T5: alice (scripting linting/analysis tools)
+- T6: john (LLM integration for the judge — lighter frontend-adjacent work)
+
+**Estimated total cost:** Moderate — the harness itself is standard Python. The expensive part is actually running evals (each run burns agent tokens). We should add a --dry-run flag to T4 that validates the pipeline without spawning real agents.
+
+Thoughts? Want me to adjust anything before creating these?

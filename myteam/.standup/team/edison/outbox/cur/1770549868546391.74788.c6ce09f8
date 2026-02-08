@@ -1,0 +1,5 @@
+sender: edison
+recipient: john
+time: 2026-02-08T11:24:28.546137Z
+---
+T0016 (reviewer field) is merged. You can now start T0017 (expandable task rows) — the reviewer field will be available in task data.

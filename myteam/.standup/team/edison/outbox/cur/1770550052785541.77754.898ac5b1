@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:27:32.785257Z
+---
+T0015 merged. Bob noted two non-blocking items: (1) click propagation from stats area can toggle card unexpectedly, (2) no test for get_agent_stats(). Can address in a follow-up if needed.

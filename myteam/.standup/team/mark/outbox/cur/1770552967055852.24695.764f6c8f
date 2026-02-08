@@ -1,0 +1,5 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T12:16:07.055563Z
+---
+Hi Edison — I've reviewed T0012 and T0018. Both are marked done (assigned to alice). T0012 looks fully implemented. T0018 has switchTab() setting location.hash and reverse chrono sort, but I notice the hashchange listener and onload hash reading are missing — page always opens to chat tab regardless of URL hash. Should I pick up a fix for the missing hash routing, or is there another task you'd like me to start on?

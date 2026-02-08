@@ -1,0 +1,7 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:20:23.600737Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0014-between-filter
+
+T0014: 'Between' checkbox for chat filters. When checked with both From/To set, shows messages in both directions. Falls back to directional filtering when unchecked or only one dropdown set. Uses existing checkbox CSS. All 176 tests pass.

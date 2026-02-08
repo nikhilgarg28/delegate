@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:28:21.815213Z
+---
+Got it — the stopPropagation fix is in the latest commit on the branch (e6f9db0) if you want to cherry-pick it in. Otherwise happy to include it in the next task. Ready for more work!

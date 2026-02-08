@@ -1,0 +1,21 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T10:53:39.581058Z
+---
+Great review work on T0004 — thanks for the quick turnaround. T0004 is now marked done.
+
+New task for you:
+
+T0005 (high priority): Visual refresh — Geist font and improved aesthetics. The director wants a Vercel-like look and feel. Scope:
+
+1. **Font**: Switch to Geist Sans (Vercel's font). Load via CDN — try https://cdn.jsdelivr.net/npm/geist@latest/dist/fonts/geist-sans/style.css or Google Fonts if available. Update body font-family to "Geist Sans" with Inter and system fallbacks.
+
+2. **Typography**: Refine font sizes, weights, line-heights, letter-spacing. Chat font was specifically called out as needing improvement.
+
+3. **Colors**: Current palette is functional but flat. Make it more polished — better contrast, more refined borders/dividers, subtle hover/focus states. Think Linear/Vercel dark mode aesthetic.
+
+4. **Overall polish**: Spacing, padding, border-radius, subtle transitions. The goal is going from "functional" to "refined".
+
+All changes are in scripts/web.py — CSS is inline in HTML_PAGE (lines 199-240), HTML structure (lines 242-260).
+
+Bob will be your code reviewer. When done, set status to review and send REVIEW_REQUEST to Bob.

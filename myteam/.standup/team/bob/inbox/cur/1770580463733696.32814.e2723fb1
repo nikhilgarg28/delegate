@@ -1,0 +1,12 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T19:54:23.528870Z
+---
+New task: T0041 — Add agent inbox, outbox, and logs API endpoints.
+
+This is the backend for the new unified right-side agent detail panel that nikhil approved. Three new GET endpoints:
+- /agents/{name}/inbox — all messages received, with read/unread status
+- /agents/{name}/outbox — all messages sent, with routed/pending status
+- /agents/{name}/logs — worklog markdown files from .standup/team/{name}/logs/
+
+Full spec in the task description. All changes in scripts/web.py (the API layer). Branch: bob/standup-ui/041-agent-detail-apis. Message me when done.

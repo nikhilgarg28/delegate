@@ -1,0 +1,58 @@
+id: 37
+title: Right-side diff panel UI
+description: "Add a slide-out diff panel on the right side of the web UI that shows\
+  \ syntax-highlighted inline diffs for a task's branch.\n\nDepends on: T0036 (branch/commits\
+  \ fields and diff API).\n\n## Panel Structure\n\nThe diff panel is a fixed-position\
+  \ element that slides in from the right edge of the viewport. It overlays the main\
+  \ content (does NOT compress it \u2014 just overlays with a semi-transparent backdrop).\n\
+  \nHTML (add to body, after the main content wrapper):\n<div id='diffPanel' class='diff-panel'>\n\
+  \  <div class='diff-panel-header'>\n    <div class='diff-panel-title'>Changes \u2014\
+  \ T0034</div>\n    <div class='diff-panel-branch'>alice/standup-ui/0034-relative-timestamps</div>\n\
+  \    <button class='diff-panel-close' onclick='closeDiffPanel()'>\u2715</button>\n\
+  \  </div>\n  <div class='diff-panel-tabs'>\n    <button class='diff-tab active'\
+  \ onclick='switchDiffTab(\"files\")'>Files Changed</button>\n    <button class='diff-tab'\
+  \ onclick='switchDiffTab(\"diff\")'>Full Diff</button>\n  </div>\n  <div class='diff-panel-body'\
+  \ id='diffPanelBody'>\n    <!-- rendered diff content -->\n  </div>\n</div>\n<div\
+  \ id='diffBackdrop' class='diff-backdrop' onclick='closeDiffPanel()'></div>\n\n\
+  ## CSS\n\n.diff-panel:\n- position: fixed; top: 0; right: 0; bottom: 0\n- width:\
+  \ 55vw; max-width: 800px; min-width: 480px\n- background: #0d0d0f; border-left:\
+  \ 1px solid rgba(255,255,255,0.08)\n- transform: translateX(100%); transition: transform\
+  \ 0.25s ease-out\n- z-index: 100; display: flex; flex-direction: column\n- When\
+  \ .open: transform: translateX(0)\n\n.diff-backdrop:\n- position: fixed; inset:\
+  \ 0; background: rgba(0,0,0,0.5)\n- opacity: 0; pointer-events: none; transition:\
+  \ opacity 0.25s\n- When .open: opacity: 1; pointer-events: auto; z-index: 99\n\n\
+  .diff-panel-header:\n- padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.06)\n\
+  - flex-shrink: 0\n\n.diff-panel-body:\n- flex: 1; overflow-y: auto; padding: 0\n\
+  - Font: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 12px; line-height:\
+  \ 1.6\n\n## Diff Rendering (JavaScript)\n\nfunction renderDiff(diffText):\nParse\
+  \ the unified diff text and render it as styled HTML:\n- File headers (--- a/file,\
+  \ +++ b/file) \u2192 collapsible file sections with filename + line count badge\n\
+  - @@ hunk headers \u2192 gray separator with line range\n- Added lines (+) \u2192\
+  \ background: rgba(34,197,94,0.08); color: #4ade80; with '+' gutter\n- Removed lines\
+  \ (-) \u2192 background: rgba(239,68,68,0.08); color: #f87171; with '-' gutter\n\
+  - Context lines \u2192 no background; color: #666; with line number in gutter\n\
+  - Line numbers in a left gutter column (40px wide, color: #444, border-right)\n\n\
+  'Files Changed' tab:\nShow a file list with:\n- Filename (relative path)\n- +N /\
+  \ -N badges (green/red)\n- Click a filename \u2192 scroll to that file's section\
+  \ in the full diff\n\n'Full Diff' tab:\nShow the complete rendered diff with all\
+  \ file sections.\n\n## Opening the Panel\n\nfunction openDiffPanel(taskId):\n1.\
+  \ Fetch GET /tasks/{taskId}/diff\n2. Set the panel title to 'Changes \u2014 T{taskId}'\n\
+  3. Set the branch name from the response\n4. Call renderDiff(response.diff) to populate\
+  \ the body\n5. Add .open class to #diffPanel and #diffBackdrop\n6. If response.commits\
+  \ has entries, show commit SHAs as small pills in the header\n\nfunction closeDiffPanel():\n\
+  1. Remove .open class from #diffPanel and #diffBackdrop\n\n## Keyboard Support\n\
+  - Escape key closes the panel\n- Panel body scrolls independently\n\n## Responsive\n\
+  - On screens < 900px, diff panel goes full-width (width: 100vw)\n\nCode lives in\
+  \ /Users/nikhil/dev/standup/. All changes in scripts/web.py.\nMessage edison when\
+  \ done."
+status: done
+assignee: bob
+reviewer: ''
+project: diff-views
+priority: high
+created_at: '2026-02-08T19:38:22.481388Z'
+updated_at: '2026-02-08T20:08:33.385001Z'
+completed_at: '2026-02-08T20:08:33.381690Z'
+depends_on: []
+branch: ''
+commits: []

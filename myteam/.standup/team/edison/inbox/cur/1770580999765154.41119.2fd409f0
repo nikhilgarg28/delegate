@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T20:03:19.163416Z
+---
+I think we should make it bit more human readable. "Status of T0044 changed from {old} -> {new}". Note few things - full sentence, we don't add "task Txxx" but just say "Txxx" since that's self explanatory. We don't show timestamp prepended in left but that should also be shown in the right side of chat in gray as the rest of messages. Finally, 'just now' should be capitalized to 'Just now'? Not repeating 'Task TXXX" should be done everywhere in the product including other system events and agent status. 

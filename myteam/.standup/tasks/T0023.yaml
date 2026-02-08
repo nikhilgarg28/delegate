@@ -1,0 +1,28 @@
+id: 23
+title: 'Fix task row expand flicker: use in-place DOM updates instead of innerHTML
+  rebuild'
+description: "Same bug class as T0019 (agent card flicker). The loadTasks() function\
+  \ rebuilds the entire task table innerHTML every 2 seconds via auto-refresh. This\
+  \ creates fresh DOM elements each time, which restarts the CSS max-height transition\
+  \ from 0, making expanded rows appear to collapse and re-expand constantly.\n\n\
+  Fix: Update loadTasks() to do in-place DOM updates like loadAgents() does. When\
+  \ refreshing:\n1. If the task list already exists, update each task row's content\
+  \ in-place rather than replacing innerHTML\n2. Add/remove task rows as needed\n\
+  3. Preserve expanded state without restarting CSS transitions\n4. Only do full innerHTML\
+  \ rebuild on first load or when task count changes significantly\n\nKey file: scripts/web.py\
+  \ \u2014 loadTasks() function (lines 398-463). Reference the in-place update pattern\
+  \ from loadAgents() (the agent card flicker fix from T0019).\n\nThe current approach:\
+  \ el.innerHTML = '<div class=\"task-list\">' + tasks.map(...).join('') + '</div>'\
+  \ \u2014 this nukes the DOM every 2 seconds.\n\nTarget approach: On refresh, find\
+  \ existing .task-row elements by data-id, update their inner content, add new rows,\
+  \ remove stale rows. Expanded rows (with .expanded class) must keep their DOM to\
+  \ preserve CSS transition state."
+status: done
+assignee: alice
+reviewer: bob
+project: standup-ui
+priority: high
+created_at: '2026-02-08T11:50:31.347585Z'
+updated_at: '2026-02-08T12:00:44.913565Z'
+completed_at: '2026-02-08T12:00:44.911959Z'
+depends_on: []

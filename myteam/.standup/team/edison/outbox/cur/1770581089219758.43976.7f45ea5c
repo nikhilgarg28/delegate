@@ -1,0 +1,12 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T20:04:49.219455Z
+---
+Got it — created T0045 for all the formatting changes, assigned to mark:
+
+1. Event text: 'Status of T0044 changed from Open → Done' (full sentence, no 'Task' prefix, shows old→new status)
+2. Event timestamps moved to right side in gray (matching regular message style)
+3. 'Just now' capitalized
+4. 'Task' prefix removed from all system events (created, assigned, reviewer)
+
+Mark's on it now.

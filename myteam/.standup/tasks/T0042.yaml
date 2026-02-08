@@ -1,0 +1,44 @@
+id: 42
+title: Add expand/collapse for long chat messages
+description: "Truncate long chat messages in the Mission Control chat view and add\
+  \ an expand/collapse toggle.\n\n## Behavior\n\n- By default, each chat message (.msg-content)\
+  \ shows at most 3 lines of text.\n- Messages longer than 3 lines are truncated with\
+  \ CSS line-clamping and show a small 'Show more' toggle link below.\n- Clicking\
+  \ 'Show more' expands to show the full message. The link changes to 'Show less'.\n\
+  - Clicking 'Show less' collapses back to 3 lines.\n- Short messages (3 lines or\
+  \ fewer) show no toggle \u2014 they display in full as usual.\n\n## Implementation\n\
+  \n### CSS approach \u2014 use -webkit-line-clamp:\n\n.msg-content {\n  /* existing\
+  \ styles stay */\n  display: -webkit-box;\n  -webkit-line-clamp: 3;\n  -webkit-box-orient:\
+  \ vertical;\n  overflow: hidden;\n}\n\n.msg-content.expanded {\n  -webkit-line-clamp:\
+  \ unset;\n  overflow: visible;\n}\n\n.msg-toggle {\n  color: #60a5fa;\n  font-size:\
+  \ 11px;\n  cursor: pointer;\n  margin-top: 2px;\n  display: none;  /* hidden by\
+  \ default, shown via JS */\n  user-select: none;\n}\n.msg-toggle:hover { text-decoration:\
+  \ underline; }\n\n### HTML \u2014 add toggle link after msg-content:\n\nIn the message\
+  \ template (inside loadChat's map), add after the msg-content div:\n<span class='msg-toggle'\
+  \ onclick='toggleMsgExpand(this)'>Show more</span>\n\n### JavaScript:\n\nfunction\
+  \ toggleMsgExpand(el):\n  Find the sibling .msg-content (el.previousElementSibling)\n\
+  \  Toggle the 'expanded' class\n  Update text: 'Show more' \u2194 'Show less'\n\n\
+  After rendering the chat messages (in loadChat, after setting innerHTML), run a\
+  \ function to detect which messages need the toggle:\n\nfunction updateMsgToggles():\n\
+  \  For each .msg-content element:\n    If el.scrollHeight > el.clientHeight (content\
+  \ overflows the 3-line clamp):\n      Show the sibling .msg-toggle (display: inline)\n\
+  \    Else:\n      Hide the sibling .msg-toggle (display: none)\n\nCall updateMsgToggles()\
+  \ at the end of loadChat(), after the innerHTML assignment and scroll adjustment.\n\
+  \n### Edge cases:\n- Event messages (.msg-event) should NOT be truncated \u2014\
+  \ they're always short.\n- When a message is expanded and loadChat() re-renders,\
+  \ the expansion state is lost. This is acceptable since chat refreshes every 2 seconds\
+  \ and most messages will be read quickly. (If this is annoying, we can track expanded\
+  \ message IDs in a Set, but start simple.)\n\nAll changes in scripts/web.py.\nBranch:\
+  \ mark/standup-ui/042-chat-msg-truncation\nCode lives in /Users/nikhil/dev/standup/.\n\
+  Message edison when done."
+status: done
+assignee: mark
+reviewer: ''
+project: standup-ui
+priority: medium
+created_at: '2026-02-08T19:55:59.393541Z'
+updated_at: '2026-02-08T19:59:39.017322Z'
+completed_at: '2026-02-08T19:59:39.014455Z'
+depends_on: []
+branch: ''
+commits: []

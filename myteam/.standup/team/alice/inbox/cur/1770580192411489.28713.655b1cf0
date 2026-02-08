@@ -1,0 +1,16 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T19:49:51.841812Z
+---
+New task for you while T0038 is blocked: T0040 — Add system-default light/dark theme support.
+
+Nikhil wants the UI to follow the system's light/dark preference instead of being hardcoded dark. The approach: use CSS custom properties (--bg-body, --text-primary, etc.) with @media (prefers-color-scheme: dark) overrides. The task spec has the full variable list and mapping.
+
+Key points:
+- Define all colors as CSS variables in :root (light defaults), override in dark media query
+- Replace all hardcoded hex/rgba values in CSS with var() references
+- No manual toggle — system default only
+- Avatar palette and status badge colors stay as-is (they work on both themes)
+- The gray offline dot needs to go lighter in light mode
+
+All changes in scripts/web.py. Branch: alice/standup-ui/040-light-dark-theme. Message me when done.

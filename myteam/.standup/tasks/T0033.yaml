@@ -1,0 +1,32 @@
+id: 33
+title: LLM-as-judge scoring (Tier 2 scoring)
+description: "Post-run LLM-based code quality scoring. Feeds each task's git diff\
+  \ + task spec to Claude as a code reviewer with a fixed rubric.\n\nDepends on: T0031\
+  \ (eval runner). Needs a completed eval run directory to analyze.\n\nImplement in\
+  \ scripts/eval.py (add to the existing module):\n\njudge_diff(diff, task_spec, rubric=DEFAULT_RUBRIC)\
+  \ -> dict:\n  - Calls Claude with a fixed prompt: 'You are a code reviewer. Score\
+  \ this diff against the task spec using the following rubric. Return JSON only.'\n\
+  \  - Rubric dimensions (each 1-5):\n    - correctness: Does the code do what the\
+  \ spec asks?\n    - readability: Is the code clear and well-structured?\n    - style:\
+  \ Is it idiomatic for the language/framework?\n    - test_quality: Are tests meaningful\
+  \ and well-written?\n    - simplicity: Is the solution appropriately simple (5)\
+  \ or over-engineered (1)?\n  - Returns: {correctness: 4, readability: 5, style:\
+  \ 3, test_quality: 4, simplicity: 5, avg: 4.2, reasoning: '...'}\n\njudge_run(run_dir,\
+  \ reps=3) -> dict:\n  - For each task in the run, extract the git diff and task\
+  \ spec\n  - Call judge_diff() 'reps' times per task\n  - Average the scores across\
+  \ reps\n  - Return aggregated scores per task + overall averages\n\nCLI: python\
+  \ -m scripts.eval judge --run-dir /path/to/run [--reps 3]\n  Prints per-task scores\
+  \ and overall averages.\n\nUse claude-code-sdk or anthropic SDK (whichever is simpler\
+  \ for a one-shot prompt). Parse the JSON response; retry once on parse failure.\n\
+  \nAdd tests in tests/test_eval.py \u2014 mock the LLM call, test score averaging\
+  \ and aggregation logic.\n\nCode lives in /Users/nikhil/dev/standup/.\nMessage edison\
+  \ when done."
+status: done
+assignee: john
+reviewer: ''
+project: eval-harness
+priority: medium
+created_at: '2026-02-08T18:01:29.074567Z'
+updated_at: '2026-02-08T19:17:57.274809Z'
+completed_at: '2026-02-08T19:17:57.272495Z'
+depends_on: []

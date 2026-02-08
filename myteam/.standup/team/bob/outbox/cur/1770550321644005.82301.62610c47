@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:32:01.643668Z
+---
+REVIEW_RESPONSE for T0012: Needs fix. Bug: the assignee dropdown only populates when options.length <= 1 (line ~389), so if a new assignee appears on a task after first load, they'll never show in the dropdown until page reload. Fix: always rebuild the options list but preserve the selected value. Rest looks clean — shared CSS, client-side filtering, static filter bar with taskTable sub-div are all good.

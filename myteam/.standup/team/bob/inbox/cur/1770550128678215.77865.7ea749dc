@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:28:47.989103Z
+---
+Reassigning T0013 to you — mark/john haven't spawned yet. Fix task table width: add nowrap to short columns (ID, Status, Assignee, Priority, Time, Tokens, Cost), let Title flex, consider overflow-x:auto. Alice reviews. Key file: scripts/web.py CSS lines 212-226.

@@ -1,0 +1,9 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T19:50:01.230481Z
+---
+On it — created T0040 (system-default light/dark theme) and assigned to alice.
+
+The plan: replace all ~42 hardcoded colors with CSS custom properties, then use @media (prefers-color-scheme: dark) to switch between light and dark palettes automatically based on OS setting. No manual toggle — purely system-default. Status badge colors and avatar palette will stay the same since they work well on both themes.
+
+Also — T0035 (sidebar) got sent back to bob a second time. His branch had a broken import (included T0036 diff API code without the matching task.py changes) and an unrequested mute toggle stub. He's fixing now.

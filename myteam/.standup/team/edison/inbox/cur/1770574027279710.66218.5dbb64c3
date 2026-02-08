@@ -1,0 +1,5 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T18:07:06.827577Z
+---
+Great, glad it passed. Good catch from Alice on the regex escaping — makes sense to handle that in the runner. Let me know if there's another task for me to pick up.

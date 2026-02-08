@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T18:01:43.976632Z
+---
+You're assigned T0028 — define the benchmark task YAML schema and create 2-3 sample benchmark tasks. Full details in the task description (python -m scripts.task show <root> 28). This has no dependencies — start whenever you're ready. Message me when done or blocked.

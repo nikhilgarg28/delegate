@@ -1,0 +1,19 @@
+id: 19
+title: "Fix agent card flicker on expand \u2014 preserve state across auto-refresh"
+description: "The 2-second setInterval calls loadAgents() which rebuilds innerHTML,\
+  \ collapsing any expanded card and causing flicker. Fix: track which agent card\
+  \ is expanded (e.g. a global variable like expandedAgent), and after rebuilding\
+  \ the DOM in loadAgents(), re-expand that card. Or better: diff the data and only\
+  \ update changed elements instead of replacing innerHTML. Simplest approach: store\
+  \ expandedAgent name, rebuild HTML, then re-trigger expand on that card. Key file:\
+  \ scripts/web.py \u2014 loadAgents() function and the setInterval block around line\
+  \ 441-446."
+status: done
+assignee: alice
+reviewer: ''
+project: standup-ui
+priority: high
+created_at: '2026-02-08T11:32:17.618446Z'
+updated_at: '2026-02-08T11:44:25.691288Z'
+completed_at: '2026-02-08T11:44:25.690111Z'
+depends_on: []

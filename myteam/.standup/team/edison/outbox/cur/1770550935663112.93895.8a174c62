@@ -1,0 +1,5 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:42:15.662853Z
+---
+Confirmed the bug. Created T0022 (critical), assigned to bob (alice reviewing). The fix is to capture filenames before processing and only mark those specific ones as read after, instead of re-scanning the inbox.

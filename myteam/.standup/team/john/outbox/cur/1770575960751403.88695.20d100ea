@@ -1,0 +1,22 @@
+sender: john
+recipient: edison
+time: 2026-02-08T18:39:20.751044Z
+---
+T0033 (LLM-as-judge scoring) is ready for review.
+
+Branch: eval-harness/john/0033-llm-judge-scoring
+
+What I built:
+- judge_diff(diff, task_spec, rubric) — calls Claude via anthropic SDK with a fixed reviewer prompt. Scores on 5 rubric dimensions (correctness, readability, style, test_quality, simplicity, each 1-5). Retries once on JSON parse failure. Returns scores dict with avg and reasoning.
+- judge_run(run_dir, reps=3) — iterates all tasks in a run, calls judge_diff reps times per task, averages scores across reps, returns per-task + overall averages.
+- CLI: python -m scripts.eval judge --run-dir /path/to/run [--reps 3]
+- _parse_judge_response() handles markdown fences, validates score ranges, coerces floats.
+- _average_scores() aggregates across reps and tasks.
+- print_judge_results() prints a formatted scorecard.
+- Added anthropic SDK as a project dependency in pyproject.toml.
+
+Tests: 27 new tests added to tests/test_eval.py (69 total, all passing). Covers parse validation, score averaging, retry logic, judge_run aggregation, edge cases (empty/missing dirs, all-reps-failing).
+
+Note: judge_run currently uses the full repo diff for all tasks (per-task diffs depend on T0031 eval runner). Added TODO comments for when T0031 provides per-task diff support.
+
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=eval-harness/john/0033-llm-judge-scoring

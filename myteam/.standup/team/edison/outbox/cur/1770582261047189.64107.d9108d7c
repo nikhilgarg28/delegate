@@ -1,0 +1,26 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T20:24:21.046866Z
+---
+You're exactly right — here's what's happening and the fix.
+
+**Current problem:**
+All agents share a single git working tree at /Users/nikhil/dev/standup. There's no 'main' branch — branches are stacked linearly. When one agent has uncommitted changes and another checks out a different branch, the uncommitted changes carry over, contaminating branches. Worse, sometimes a merged branch's commit doesn't make it into the next branch's ancestry (like T0039 being orphaned).
+
+**Your correct model:**
+- One origin repo (the project at ~/dev/standup)
+- Each agent has their own local clone in their workspace
+- Agent creates feature branch, works, pushes to origin
+- QA reviews in their own clone, merges to main on origin
+
+**What I've done so far:**
+1. Updated the charter (code-review.md) in BOTH ~/dev/standup/scripts/charter/ and myteam/.standup/charter/ to document the workspace isolation model
+
+**What still needs to happen (code changes):**
+1. Create a 'main' branch in the repo pointing at the latest merged HEAD
+2. Modify scripts/agent.py to clone the project repo into the agent's workspace on session start (git clone --local)
+3. Update the agent system prompt to tell agents where their repo clone is
+4. Agents push branches to origin instead of committing in a shared tree
+5. QA/manager review by fetching from origin
+
+This is a meaningful code change — should I assign it to an agent (bob or mark), or would you prefer to handle it yourself since it touches the agent infrastructure?

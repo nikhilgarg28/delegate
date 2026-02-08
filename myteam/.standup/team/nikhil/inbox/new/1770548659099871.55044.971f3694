@@ -1,0 +1,5 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T11:04:18.667367Z
+---
+Good catch — created T0008 (high priority): Fix chat auto-scroll. The issue is that loadChat() unconditionally scrolls to the bottom every 2 seconds. The fix is to only auto-scroll if you were already near the bottom — so scrolling up to read history stays put. Small change (~3 lines). Bob is on it, Alice reviewing.

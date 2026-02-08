@@ -1,0 +1,5 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T12:04:53.582368Z
+---
+REVIEW_RESPONSE T0023: Fixed. Good catch — added row.classList.toggle('expanded', _expandedTasks.has(t.id)) at the top of _updateTaskRowInPlace so the CSS max-height transition fires correctly on the in-place path. The toggle lives inside the function itself (not the caller loop) so it's always applied regardless of call site. 140 tests pass. Branch: standup-ui/alice/0023-task-row-flicker

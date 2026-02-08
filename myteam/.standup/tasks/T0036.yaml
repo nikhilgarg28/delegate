@@ -1,0 +1,42 @@
+id: 36
+title: Add branch/commits fields to task schema and diff API
+description: "Add git metadata tracking to tasks and a new API endpoint to retrieve\
+  \ diffs.\n\n## Task Schema Changes (scripts/task.py)\n\nAdd two new optional fields\
+  \ to the task dict (in create_task, around line 71):\n- branch: string, default\
+  \ '' \u2014 feature branch name (e.g. 'alice/standup-ui/0034-relative-timestamps')\n\
+  - commits: list[string], default [] \u2014 list of commit SHA hashes on this branch\n\
+  \nAdd helper functions:\n- set_task_branch(root, task_id, branch_name) \u2014 sets\
+  \ the branch field on a task\n- add_task_commit(root, task_id, commit_sha) \u2014\
+  \ appends a commit SHA to the task's commits list\n- get_task_diff(root, task_id)\
+  \ -> str \u2014 returns the git diff for the task's branch\n\nget_task_diff logic:\n\
+  1. Read the task, get the branch name\n2. If branch is empty, return '(no branch\
+  \ set)'\n3. Run: git diff main...<branch> (three-dot diff to show what the branch\
+  \ adds)\n4. If that fails (no main branch), try: git log --oneline <branch> to get\
+  \ commits, then git show <first_commit>...<last_commit>\n5. Return the diff text,\
+  \ or '(no diff available)' on failure\n\n## Branch Convention Change (scripts/charter/code-review.md)\n\
+  \nUpdate the branch naming convention from:\n  <project>/<agent>/<task-number>-<short-name>\n\
+  to:\n  <agent>/<project>/<task-number>-<short-name>\n\ni.e. user namespace comes\
+  \ first. Update the examples too:\n  Old: backend/alice/001-api-spec\n  New: alice/backend/001-api-spec\n\
+  \n## API Endpoint (scripts/web.py)\n\nAdd: GET /tasks/{task_id}/diff\n- Returns:\
+  \ {\"task_id\": N, \"branch\": \"...\", \"commits\": [...], \"diff\": \"...\"}\n\
+  - Calls get_task_diff() from task.py\n- If task not found, return 404\n\nAlso extend\
+  \ the existing GET /tasks/{task_id}/stats response to include branch and commits\
+  \ fields from the task data.\n\n## Auto-detect branch from REVIEW_REQUEST (scripts/qa.py)\n\
+  \nWhen QA parses a REVIEW_REQUEST message (around line 55-70), extract the branch\
+  \ name and:\n1. Look up the task by matching the branch pattern (<agent>/<project>/<task_number>-*)\n\
+  2. Call set_task_branch() to store it on the task\n\n## Tests (tests/test_task.py)\n\
+  \nAdd tests for:\n- set_task_branch() sets the field correctly\n- add_task_commit()\
+  \ appends commits\n- get_task_diff() with mocked git subprocess\n- New fields appear\
+  \ in create_task output\n- Branch field survives task status updates\n\nCode lives\
+  \ in /Users/nikhil/dev/standup/.\nMessage edison when done."
+status: done
+assignee: mark
+reviewer: ''
+project: diff-views
+priority: high
+created_at: '2026-02-08T19:37:56.717299Z'
+updated_at: '2026-02-08T19:42:20.169876Z'
+completed_at: '2026-02-08T19:42:20.166957Z'
+depends_on: []
+branch: ''
+commits: []

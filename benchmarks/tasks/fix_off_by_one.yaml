@@ -1,0 +1,69 @@
+title: Fix off-by-one bug in pagination helper
+description: |
+  The existing `src/paginate.py` module has an off-by-one error.
+  `paginate(items, page, page_size)` should return the correct slice for
+  1-indexed pages:
+
+    page=1, page_size=10  ->  items[0:10]
+    page=2, page_size=10  ->  items[10:20]
+
+  The current code incorrectly starts from index `page * page_size` instead of
+  `(page - 1) * page_size`, so page 1 actually returns the second page of
+  results and page 0 would be needed to get the first page.
+
+  Fix the bug and make the existing tests pass.
+
+repo_setup:
+  - path: src/__init__.py
+    content: ""
+  - path: src/paginate.py
+    content: |
+      """Pagination helper."""
+
+
+      def paginate(items: list, page: int, page_size: int = 10) -> list:
+          """Return a single page of items (1-indexed)."""
+          if page < 1:
+              raise ValueError("page must be >= 1")
+          start = page * page_size        # BUG: should be (page - 1) * page_size
+          end = start + page_size
+          return items[start:end]
+  - path: tests/__init__.py
+    content: ""
+  - path: tests/test_paginate.py
+    content: |
+      from src.paginate import paginate
+
+      ITEMS = list(range(1, 26))  # [1..25]
+
+
+      def test_first_page():
+          assert paginate(ITEMS, page=1, page_size=10) == list(range(1, 11))
+
+
+      def test_second_page():
+          assert paginate(ITEMS, page=2, page_size=10) == list(range(11, 21))
+
+
+      def test_last_partial_page():
+          assert paginate(ITEMS, page=3, page_size=10) == list(range(21, 26))
+
+
+      def test_invalid_page_raises():
+          try:
+              paginate(ITEMS, page=0)
+              assert False, "Should have raised ValueError"
+          except ValueError:
+              pass
+
+acceptance_criteria:
+  - grep_match:
+      path: src/paginate.py
+      pattern: "\\(page - 1\\)"
+  - tests_pass:
+      command: "pytest tests/test_paginate.py -v"
+
+timeout_seconds: 120
+tags:
+  - backend
+  - bugfix

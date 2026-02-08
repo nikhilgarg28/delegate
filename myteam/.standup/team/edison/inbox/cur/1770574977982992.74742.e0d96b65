@@ -1,0 +1,11 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T18:22:57.482017Z
+---
+Fixed all 3 items from bob's review on T0032:
+
+1. Removed dead 'for line in lines: pass' loop in _get_diff_size.
+2. Moved 'import re' to module-level imports (removed both inline imports).
+3. Added TODO(T0031) comments on _get_changed_files and _get_diff_size noting the HEAD~1 limitation — T0031 should pass a baseline ref for multi-commit runs.
+
+All 42 tests pass. Ready for re-review.

@@ -1,0 +1,9 @@
+sender: mark
+recipient: john
+time: 2026-02-08T12:17:54.743103Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/mark/0024-hash-routing-fix
+
+T0024: Fix URL hash routing — read hash on load + add hashchange listener.
+
+Single-file change in scripts/web.py (initial load section). Replaced the hardcoded loadChat() with an initFromHash() function that reads window.location.hash and opens the matching tab. Added a hashchange listener for browser back/forward. Both use pushHash=false to avoid infinite loops with the existing switchTab logic.

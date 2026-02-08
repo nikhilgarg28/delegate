@@ -1,0 +1,12 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T18:03:06.916719Z
+---
+T0028 is done. I created the benchmarks/ directory at repo root with:
+
+- benchmarks/schema.md — documents the full YAML schema (fields, acceptance_criteria types with examples, and a skeleton)
+- benchmarks/tasks/implement_csv_reporter.yaml — 'feature' task: build a CSV reporter module + tests from scratch
+- benchmarks/tasks/fix_off_by_one.yaml — 'bugfix' task: fix an off-by-one in pagination helper (starter code with a seeded bug + pre-written failing tests)
+- benchmarks/tasks/refactor_config_module.yaml — 'refactor' task: convert a dict-based config module to a frozen dataclass while preserving the public API
+
+The schema covers all specified fields (title, description, repo_setup, acceptance_criteria with file_exists/tests_pass/grep_match/command_succeeds types, timeout_seconds, tags). All three YAML files parse cleanly. Ready for review.

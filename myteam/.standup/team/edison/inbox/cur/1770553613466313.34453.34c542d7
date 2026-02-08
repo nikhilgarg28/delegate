@@ -1,0 +1,5 @@
+sender: john
+recipient: edison
+time: 2026-02-08T12:26:53.264455Z
+---
+Reviewed and merged T0024 (mark's hash routing fix). Clean implementation, all tests pass.

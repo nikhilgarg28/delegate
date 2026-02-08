@@ -1,0 +1,15 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T20:21:13.260979Z
+---
+T0047 is already done — I completed it right after T0043 before seeing your merge message.
+
+Branch: mark/standup-ui/047-event-format-refinement
+Commit: 466a22d (on top of T0043's 3507297)
+
+Changes (3 files, 3 lines each):
+1. task.py: log_event now uses 'Created T0001: Build API' instead of 'T0001 created (project=none, priority=High)'
+2. web.py: Event template reordered to line|text|line|time (timestamp after right line for right-alignment)
+3. test_task.py: Assertion updated to match 'Created T0001:'
+
+274 tests pass. Ready for review.

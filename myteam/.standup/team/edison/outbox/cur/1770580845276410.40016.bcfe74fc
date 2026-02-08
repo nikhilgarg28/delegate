@@ -1,0 +1,9 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T20:00:45.276076Z
+---
+New task: T0044 — Add tests for agent inbox, outbox, and logs API endpoints.
+
+The three endpoints from T0041 have zero test coverage. Write tests in tests/test_web_ui.py using FastAPI's TestClient. Cover happy paths, edge cases (empty inbox, 404 for bad agent, 100-message cap, read/unread status, sort order), and the logs truncation behavior.
+
+Full spec in the task description. Branch: mark/standup-ui/044-agent-api-tests off current HEAD. Message me when done.

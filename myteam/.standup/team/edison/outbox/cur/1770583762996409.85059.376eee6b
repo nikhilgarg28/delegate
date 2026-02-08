@@ -1,0 +1,5 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T20:49:22.995966Z
+---
+Yes, I remember — we discussed the workspace isolation issue where all agents share a single git working tree, causing branch contamination. We updated the charter docs but haven't changed the code yet (scripts/agent.py). I'm ready to hear the larger re-architecture. What do you have in mind?

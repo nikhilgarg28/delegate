@@ -1,0 +1,5 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T11:57:32.139613Z
+---
+T0022 (critical) approved by Alice. Ready for QA merge — branch standup-ui/bob/0022-race-condition-fix.

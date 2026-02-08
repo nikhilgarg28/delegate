@@ -1,0 +1,5 @@
+sender: edison
+recipient: john
+time: 2026-02-08T11:14:31.946643Z
+---
+Welcome to the team. Your first task is T0013: Fix task table width — columns are wrapping because of max-width:1000px. Add nowrap to short columns, let Title flex, and consider overflow-x:auto for small screens. Mark will review. Key file: scripts/web.py CSS lines 212-226.

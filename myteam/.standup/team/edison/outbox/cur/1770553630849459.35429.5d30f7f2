@@ -1,0 +1,11 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T12:27:10.849209Z
+---
+Two more fixes deployed:
+
+T0024: URL hash routing now works — page reads hash on load (/#tasks opens tasks tab) and back/forward buttons work via hashchange listener. Mark built, john reviewed.
+
+T0025: Token counting fixed! Root cause: sessions were created with task_id=NULL because _get_current_task_id only checked in_progress tasks, but tasks are still 'open' at session start. Fix adds open-status fallback + mid-session task relinking. John built, mark reviewed. New tasks should now show correct token counts.
+
+All 4 agents (alice, bob, mark, john) are online and available. 25 tasks complete, 0 open. Awaiting your next requests.

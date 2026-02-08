@@ -1,0 +1,5 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T11:27:25.730593Z
+---
+T0015 reviewed and approved. Two minor notes left for Alice: (1) click propagation from stats area can toggle card unexpectedly, (2) no test for get_agent_stats(). Neither blocking.

@@ -1,0 +1,34 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T18:38:05.529792Z
+---
+T0030 (sim-director) is done and ready for review. Here's what I built:
+
+**scripts/sim_director.py** — the full simulated director module with:
+- sim_director_respond(root, task_spec, message, llm_query=None) -> str — calls LLM with the standardized prompt template to answer a manager question based on a task spec
+- run_sim_director(root, task_specs, poll_interval=2.0, stop_event=None, llm_query=None) — async polling loop that watches the director's inbox, matches messages to task specs, responds, and loops until stop_event is set
+- start_sim_director_thread(root, task_specs, ...) -> (thread, stop_event) — convenience wrapper that runs the sim-director in a background daemon thread (for T0031's eval runner)
+- load_task_specs_from_dir(specs_dir) -> dict — loads {title: description} from benchmark YAML files
+- _match_task_spec() — matches incoming messages to specific task specs by title, falls back to providing all specs as context
+- _process_inbox() — processes all unread messages in one pass
+- CLI with 'respond' (single message) and 'run' (polling loop) subcommands
+
+I chose claude_code_sdk.query() (option A) since it's already a dependency and the one-shot stateless API is a perfect fit — no need for session management.
+
+The llm_query parameter on all public functions allows full test injection without mocking.
+
+**tests/test_sim_director.py** — 27 tests covering:
+- Prompt building (4 tests)
+- Task spec matching (5 tests)
+- sim_director_respond with mocked LLM (4 tests)
+- Inbox processing/routing (5 tests)
+- Polling loop start/stop (2 tests)
+- Thread-based start/stop (2 tests)
+- load_task_specs_from_dir (5 tests, including real benchmarks)
+
+All 216 tests pass (189 existing + 27 new).
+
+Design notes for T0031 integration:
+- start_sim_director_thread() returns (thread, stop_event) — eval runner can set stop_event when done
+- load_task_specs_from_dir() loads from any specs directory, matching T0028's YAML schema
+- All async functions accept llm_query injection for dry-run mode (pass a no-op mock)

@@ -1,0 +1,5 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T11:14:29.581905Z
+---
+Welcome to the team. Your first task is T0012: Add filter dropdowns to the Tasks page (status, priority, assignee). Match the chat filter style already in web.py (see .chat-filters CSS). Client-side filtering in loadTasks(). John will review. Key file: scripts/web.py.

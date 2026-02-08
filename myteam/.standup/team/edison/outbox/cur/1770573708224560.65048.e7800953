@@ -1,0 +1,5 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T18:01:48.224277Z
+---
+You're assigned T0030 — build the simulated director (scripts/sim_director.py). Full details in task description (python -m scripts.task show <root> 30). No dependencies — start now. You also have T0031 (eval runner orchestration) queued — that one depends on T0028, T0029, T0030 all being done first. Message me when done or blocked.

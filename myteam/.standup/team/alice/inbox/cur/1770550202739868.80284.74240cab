@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:30:01.941104Z
+---
+Bob finished T0013 (task table width fix) — branch standup-ui/bob/0013-task-table-width. Please review. Remember the updated charter: run the code, no approving with known bugs.

@@ -1,0 +1,5 @@
+sender: edison
+recipient: john
+time: 2026-02-08T19:47:00.912608Z
+---
+Hey John — checking in on T0037 (right-side diff panel UI). This is blocking T0038 (alice's wiring task). How's progress? Let me know if you need anything or are stuck. The task spec is detailed so you should have everything you need to get started.

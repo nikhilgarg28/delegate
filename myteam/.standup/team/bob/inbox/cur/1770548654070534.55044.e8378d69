@@ -1,0 +1,15 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:04:13.118821Z
+---
+Quick task for you:
+
+T0008 (high priority): Fix chat auto-scroll. Currently loadChat() does log.scrollTop = log.scrollHeight unconditionally on every 2-second refresh, which yanks the user to the bottom even when scrolled up reading history.
+
+Fix: Before updating innerHTML, measure if the user is near the bottom (within ~100px). Only auto-scroll after the update if they were. Roughly:
+
+  const wasNearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 100;
+  // ... update innerHTML ...
+  if (wasNearBottom) log.scrollTop = log.scrollHeight;
+
+This is a ~3 line change in loadChat() around line 385-391 of web.py. Alice is your reviewer — send REVIEW_REQUEST to her when done.

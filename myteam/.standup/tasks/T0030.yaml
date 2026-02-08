@@ -1,0 +1,29 @@
+id: 30
+title: Simulated director for eval runs
+description: "Create a simulated director that answers manager questions during eval\
+  \ runs, removing the need for a human in the loop.\n\nThe sim-director:\n- Watches\
+  \ the director's inbox for messages from the manager\n- Responds via the director's\
+  \ outbox using the existing mailbox system\n- Answers strictly based on the benchmark\
+  \ task spec (no volunteering extra info)\n- Uses a standardized prompt template:\
+  \ 'You are a director. Here is the task spec: {spec}. Answer the manager's question\
+  \ based only on this spec. Be concise.'\n\nImplementation options (pick the simpler\
+  \ one):\nA. Use claude-code-sdk (already a dependency) to call Claude with the sim-director\
+  \ prompt\nB. Use the Anthropic API directly via httpx (already a dev dependency)\n\
+  \nPut this in scripts/sim_director.py (separate module since it has its own event\
+  \ loop):\n- sim_director_respond(root, task_spec, message) -> str \u2014 given a\
+  \ message, return the sim-director's response\n- run_sim_director(root, task_specs,\
+  \ poll_interval=2.0) \u2014 poll director inbox, match messages to task specs, respond,\
+  \ loop until stopped\n\nThe task_specs param is a dict of {task_title: task_description}\
+  \ loaded from benchmark YAML files.\n\nAdd basic tests in tests/test_sim_director.py\
+  \ (mock the LLM call, test the inbox polling + response routing logic).\n\nCode\
+  \ lives in /Users/nikhil/dev/standup/. Study scripts/agent.py and scripts/router.py\
+  \ for patterns on polling inboxes and sending messages.\nMessage edison when done."
+status: done
+assignee: mark
+reviewer: ''
+project: eval-harness
+priority: high
+created_at: '2026-02-08T18:00:54.558166Z'
+updated_at: '2026-02-08T18:43:39.371799Z'
+completed_at: '2026-02-08T18:43:39.369690Z'
+depends_on: []

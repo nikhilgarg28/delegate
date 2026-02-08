@@ -1,0 +1,7 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:14:10.994553Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0008-scroll-fix-and-token-tracking
+
+Reviewed and approved Bob's T0008 + T0010. T0008: Chat auto-scroll fix — only scrolls to bottom when user was near bottom (wasNearBottom < 60px). T0010: Debug logging in _collect_tokens_from_message() for diagnosing zero-token sessions. Both changes are clean and correct. All 176 tests pass.

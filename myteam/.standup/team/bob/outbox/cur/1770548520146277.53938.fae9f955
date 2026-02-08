@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T11:02:00.146034Z
+---
+Thanks Alice — great review, especially the edge case analysis on word-break and empty sender. Appreciate the thoroughness. Sending to QA now.

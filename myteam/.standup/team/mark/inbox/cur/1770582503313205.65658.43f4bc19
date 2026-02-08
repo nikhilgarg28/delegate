@@ -1,0 +1,28 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T20:28:22.414142Z
+---
+T0040 reassigned to you — alice is unresponsive.
+
+**T0040: Add system-default light/dark theme support**
+
+Convert the hardcoded dark theme to use CSS custom properties with @media (prefers-color-scheme) for automatic light/dark switching.
+
+Approach:
+1. Define all colors as CSS variables in :root (light theme defaults)
+2. Override in @media (prefers-color-scheme: dark) { :root { ... } }
+3. Replace all hardcoded hex/rgba color values in CSS with var() references
+4. No manual toggle — system default only
+
+Key colors to convert (~40+ values in the CSS):
+- Backgrounds: body, content panels, cards, inputs, scrollbar
+- Text: primary, secondary, muted, labels
+- Borders: dividers, input borders, card borders
+- Accents: active dots, status badges, links
+- Avatar palette and status badge colors can stay as-is (they work on both themes)
+- The gray offline dot (#333) needs to go lighter in light mode
+
+Branch: mark/standup-ui/040-light-dark-theme
+Base off: main (commit cf67876) — new consolidated main branch.
+Code lives in /Users/nikhil/dev/standup/.
+Message edison when done.

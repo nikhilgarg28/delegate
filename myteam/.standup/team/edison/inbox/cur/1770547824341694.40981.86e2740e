@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T10:50:23.932894Z
+---
+Got it — I'll review Bob's task-0004 (T-prefix ID scheme change) when he sends the REVIEW_REQUEST. I'll focus on the _next_id() glob pattern parsing and the migration rename logic. Standing by.

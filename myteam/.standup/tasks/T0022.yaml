@@ -1,0 +1,42 @@
+id: 22
+title: 'Fix race condition: messages arriving during processing get lost'
+description: 'Critical bug in scripts/agent.py. At lines 361-364 and 387-389, after
+  processing a turn, the agent calls read_inbox(unread_only=True) and marks ALL unread
+  messages as read. If a new message arrived while the agent was processing, it gets
+  marked read without ever being included in a prompt.
+
+
+  Fix: Capture the specific message filenames BEFORE processing (when building the
+  user message), then after processing, only mark those specific filenames as read.
+  Do NOT re-scan inbox with unread_only=True.
+
+
+  In build_user_message (line 172): read_inbox returns message objects with .filename.
+  The caller should capture these filenames.
+
+
+  Suggested approach:
+
+  1. Change build_user_message to also return the list of message filenames it consumed
+
+  2. After processing, mark only those specific filenames as read
+
+  3. Add a test: send a message, start processing, send another message during processing,
+  verify the second message is NOT marked read
+
+
+  Both the first-turn block (lines 361-364) and the event-loop block (lines 387-389)
+  have this bug.
+
+
+  Key files: scripts/agent.py (lines 150-196 build_user_message, lines 361-364, lines
+  387-389)'
+status: done
+assignee: bob
+reviewer: alice
+project: standup-ui
+priority: critical
+created_at: '2026-02-08T11:42:06.315362Z'
+updated_at: '2026-02-08T12:00:44.866197Z'
+completed_at: '2026-02-08T12:00:44.864649Z'
+depends_on: []

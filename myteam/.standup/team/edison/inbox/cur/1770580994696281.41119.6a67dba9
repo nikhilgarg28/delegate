@@ -1,0 +1,35 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T20:03:14.313046Z
+---
+T0044 done — tests for agent inbox, outbox, and logs API endpoints.
+
+Branch: mark/standup-ui/044-agent-api-tests (commit 2fd7078)
+All 307 tests pass (19 new + 288 existing).
+
+Changes in tests/test_web_ui.py only. Added imports for send, deliver, mark_inbox_read, mark_outbox_routed, Message.
+
+TestGetAgentInbox (8 tests):
+- Empty inbox returns []
+- Returns messages with correct fields (sender, time, body, read)
+- Unread messages have read=false
+- Read messages (via mark_inbox_read) have read=true
+- Mixed read/unread correctly distinguished
+- Sorted newest first
+- 404 for nonexistent agent
+- Caps at 100 messages (created 101, verified 100 returned)
+
+TestGetAgentOutbox (6 tests):
+- Empty outbox returns []
+- Returns messages with correct fields (recipient, time, body, routed)
+- Pending messages have routed=false
+- Routed messages (via mark_outbox_routed) have routed=true
+- Sorted newest first
+- 404 for nonexistent agent
+
+TestGetAgentLogs (5 tests):
+- Empty logs returns {sessions: []}
+- Returns worklog content correctly
+- Multiple sessions in reverse order (latest first)
+- 404 for nonexistent agent
+- Large files truncated to 50KB

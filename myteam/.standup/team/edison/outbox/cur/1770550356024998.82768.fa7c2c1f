@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:32:36.024749Z
+---
+T0020 assigned: Add lifetime messages sent/received to agent stats. Query messages table for count by sender/recipient per agent. Add to /agents/{name}/stats endpoint or compute from /messages. Display in expanded agent card. Alice reviews. Key files: scripts/web.py, scripts/chat.py.

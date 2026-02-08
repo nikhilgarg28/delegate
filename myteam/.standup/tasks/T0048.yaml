@@ -1,0 +1,40 @@
+id: 48
+title: Re-incorporate notification sounds from orphaned T0039
+description: "T0039 (notification sounds) was approved but its commit (5427136) was\
+  \ orphaned \u2014 it exists only on branch mark/standup-ui/039-notification-sounds\
+  \ and was never merged into the main commit chain. The current HEAD is missing all\
+  \ sound code.\n\nCherry-pick or re-implement the following from T0039 into scripts/web.py:\n\
+  \n## JS \u2014 Audio functions (add near the top of the script block, after _isMuted\
+  \ declaration which already exists from T0043):\n\nlet _audioCtx = null;\nfunction\
+  \ _getAudioCtx() {\n  if (\\!_audioCtx) { try { _audioCtx = new (window.AudioContext\
+  \ || window.webkitAudioContext)(); } catch(e) { return null; } }\n  return _audioCtx;\n\
+  }\nfunction playMsgSound() {\n  if (_isMuted) return;\n  const ctx = _getAudioCtx();\
+  \ if (\\!ctx) return;\n  const now = ctx.currentTime;\n  const osc = ctx.createOscillator();\
+  \ osc.type = 'sine'; osc.frequency.value = 880;\n  const g = ctx.createGain(); g.connect(ctx.destination);\
+  \ g.gain.setValueAtTime(0.15, now);\n  g.gain.exponentialRampToValueAtTime(0.001,\
+  \ now + 0.25);\n  osc.connect(g); osc.start(now); osc.stop(now + 0.25);\n}\nfunction\
+  \ playTaskSound() {\n  if (_isMuted) return;\n  const ctx = _getAudioCtx(); if (\\\
+  !ctx) return;\n  const now = ctx.currentTime;\n  [[523.25, 0], [659.25, 0.12], [783.99,\
+  \ 0.24]].forEach(([freq, offset]) => {\n    const t = now + offset;\n    const osc\
+  \ = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = freq;\n   \
+  \ const g = ctx.createGain(); g.connect(ctx.destination); g.gain.setValueAtTime(0.12,\
+  \ t);\n    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);\n    osc.connect(g);\
+  \ osc.start(t); osc.stop(t + 0.15);\n  });\n}\n\n## JS \u2014 Integration into loadChat()\
+  \ and loadTasks():\n\nIn loadChat(): After rendering new messages, if new messages\
+  \ were received from another agent, call playMsgSound().\nIn loadTasks() or wherever\
+  \ task status changes are detected: If a task status changed to 'done', call playTaskSound().\n\
+  \nReference the original T0039 code at git show 5427136:scripts/web.py for the exact\
+  \ integration points.\n\nAll changes in scripts/web.py.\nBranch: bob/standup-ui/048-notification-sounds\n\
+  Base off: mark/standup-ui/043-mute-icon-and-mic (commit 3507297)\nCode lives in\
+  \ /Users/nikhil/dev/standup/.\nMessage edison when done."
+status: done
+assignee: bob
+reviewer: ''
+project: standup-ui
+priority: high
+created_at: '2026-02-08T20:20:34.993595Z'
+updated_at: '2026-02-08T20:25:18.999150Z'
+completed_at: '2026-02-08T20:25:18.996745Z'
+depends_on: []
+branch: ''
+commits: []

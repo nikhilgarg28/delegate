@@ -1,0 +1,18 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T11:14:03.975377Z
+---
+APPROVED — T0008 + T0010 on standup-ui/bob/0008-scroll-fix-and-token-tracking.
+
+Review notes:
+
+**T0008 — Chat auto-scroll fix (web.py)**
+- wasNearBottom check (< 60px threshold) before innerHTML update is the right pattern. Saves scroll position before DOM mutation, restores only if user was at the bottom. Clean three-line fix.
+- 60px threshold is generous enough to account for partial messages — good UX call.
+
+**T0010 — Token debug logging (agent.py)**
+- Switching from msg.usage to getattr(msg, 'usage', None) is safer — avoids potential AttributeError on messages that have total_cost_usd but no usage attr.
+- logger.debug is the right level — no noise in normal operation, useful for diagnosing zero-token sessions.
+- Log format includes msg_type, raw values, and extracted values — good for debugging without needing to add breakpoints.
+
+All 176 tests pass. No issues found. Sending to QA.

@@ -1,0 +1,26 @@
+id: 28
+title: Benchmark task spec format + sample tasks
+description: "Define a YAML schema for benchmark tasks and create 2-3 sample tasks.\n\
+  \nEach benchmark task YAML should include:\n- title: human-readable name\n- description:\
+  \ what the agent should build (the task brief given to agents)\n- repo_setup: any\
+  \ files/repos that need to exist before the task starts (e.g., starter code, existing\
+  \ modules to modify)\n- acceptance_criteria: list of programmatic checks, each with\
+  \ a type and params:\n  - file_exists: {path: 'src/foo.py'}\n  - tests_pass: {command:\
+  \ 'pytest tests/test_foo.py'}\n  - grep_match: {path: 'src/foo.py', pattern: 'def\
+  \ endpoint'}\n  - command_succeeds: {command: 'curl -s localhost:8000/health | jq\
+  \ .status'}\n- timeout_seconds: max wall-clock time for this task\n- tags: categorization\
+  \ (e.g., 'backend', 'refactor', 'bugfix')\n\nCreate 2-3 sample benchmark tasks covering\
+  \ different task types (e.g., implement a new function with tests, fix a bug in\
+  \ existing code, refactor a module).\n\nOutput: benchmarks/ directory at repo root\
+  \ with:\n- schema.md documenting the format\n- tasks/ subdirectory with 2-3 sample\
+  \ .yaml files\n\nCode lives in /Users/nikhil/dev/standup/. Follow existing conventions\
+  \ (see pyproject.toml, scripts/ pattern).\nMessage edison when done."
+status: done
+assignee: bob
+reviewer: ''
+project: eval-harness
+priority: high
+created_at: '2026-02-08T18:00:37.045383Z'
+updated_at: '2026-02-08T18:06:49.765487Z'
+completed_at: '2026-02-08T18:06:49.763427Z'
+depends_on: []

@@ -1,0 +1,11 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T20:20:49.107537Z
+---
+MERGED T0043 (mute SVG icon + mic button) — commit 3507297 on mark/standup-ui/043-mute-icon-and-mic.
+
+274/274 tests pass. Clean implementation — SVG icons look good, mic button with SpeechRecognition API is well done, localStorage persistence for mute state, auto-stop on send.
+
+One issue I discovered during review: T0039 (notification sounds) was orphaned — its commit never made it into the mainline. So the mute toggle currently has no sound functions to control. I've created T0048 for bob to re-incorporate the sound code. Not your fault — this was a merge gap.
+
+Now please work on T0047 (event format refinement). It's a quick change — see my earlier message for the spec.

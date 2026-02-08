@@ -1,0 +1,14 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T10:46:44.071740Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0002-capitalize-ui
+
+task-0002 is ready for review. Changes in scripts/web.py:
+
+1. Added fmtStatus(s) JS helper (line 265) — splits on '_', capitalizes each word, joins with space. So 'in_progress' → 'In Progress', 'open' → 'Open', etc.
+2. Status badge display text now uses fmtStatus(t.status) — CSS class stays badge-${t.status} so styling is preserved.
+3. Assignee names now use cap() when present (falls back to em dash when empty).
+4. Priority values now use cap().
+
+All 14 web UI tests pass.

@@ -1,0 +1,13 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T20:07:11.605428Z
+---
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=bob/standup-ui/037-diff-panel
+
+T0037 diff panel is ready for review. All 274 tests pass, no Python warnings.
+
+Changes in commit e5e8c59 (scripts/web.py only):
+- CSS: ~40 rules for diff panel, backdrop, tabs, file list, syntax-highlighted diff lines, responsive breakpoint
+- HTML: Slide-out panel with header (title, branch, commit SHA pills), Files Changed / Full Diff tabs, backdrop overlay
+- JS: parseDiff() unified diff parser, renderDiffFull() with colored add/del/ctx lines + gutter, renderDiffFiles() with +/-N badges, switchDiffTab(), openDiffPanel() fetching /tasks/{id}/diff, closeDiffPanel(), Escape key handler
+- View Diff button added to expanded task detail rows (only shown when branch exists)

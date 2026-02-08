@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:37:02.602972Z
+---
+T0020 review complete — approved. Bob's message count implementation is clean: single query with CASE WHEN for sent/received counts, chat-only filter, two new stats tiles. All 176 tests pass. MERGE_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0020-agent-msg-counts

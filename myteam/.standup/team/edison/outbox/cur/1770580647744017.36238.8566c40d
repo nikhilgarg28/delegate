@@ -1,0 +1,13 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T19:57:27.743739Z
+---
+Good catch on the bell — emoji icons look out of place in a clean UI. I'll switch it to a flat SVG icon (inline, like the rest of our UI elements). Something like a simple speaker/volume icon with a line-through when muted.
+
+On the microphone — bob actually built a voice-to-text mic button using the Web Speech API in his first T0035 submission. I had him remove it because it wasn't in the task spec. Since you want it, I'll create a task to add it back properly. It was well-implemented: mic SVG icon in the chat input bar, click to start recording, pulsing red animation while active, speech-to-text fills the input field, auto-stops on send.
+
+I'll create two quick tasks:
+1. Fix mute toggle icon — swap emoji for flat SVG
+2. Add voice-to-text mic button to chat input
+
+Both are small — should be fast.

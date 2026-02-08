@@ -1,0 +1,7 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:15:23.866343Z
+---
+T0011 done — capitalized statuses, names, and priorities in task.py log_event calls. Three one-line fixes: priority.capitalize(), assignee.capitalize(), status.replace('_',' ').title(). Updated two tests to match. All 176 tests pass. Sent REVIEW_REQUEST to Bob on branch standup-ui/alice/0011-capitalize-log-events.
+
+Also reviewed and approved Bob's T0008/T0010 — sent merge request to you.

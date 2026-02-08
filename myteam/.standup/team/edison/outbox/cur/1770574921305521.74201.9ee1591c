@@ -1,0 +1,13 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T18:22:01.305155Z
+---
+Bob reviewed T0032 — approved with 3 items to fix:
+
+1. **Dead loop in _get_diff_size (lines 286-290):** 'for line in lines: pass' — leftover scaffolding. Remove it.
+2. **Move 'import re' to top-level (lines 293, 374):** Both _get_diff_size and _compute_complexity import re inside the function body. Move to module-level imports for consistency.
+3. **HEAD~1 limitation:** _get_diff_size and _get_changed_files diff against HEAD~1, which only captures the last commit. For now this is fine, but add a TODO comment noting that T0031 should pass a baseline ref (tag or SHA) to diff against for multi-commit runs. I'll also flag this to mark.
+
+Items 4-6 are optional nits (double-counting summary lines in type errors, redundant FileNotFoundError catch, no stderr for ruff). Address if easy, skip if not.
+
+Please fix 1-3 and message me when ready for re-review.

@@ -1,0 +1,5 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T11:36:22.552018Z
+---
+T0019 complete and submitted for Bob's review. Fix: loadAgents() now updates agent cards in-place during the 2s refresh cycle instead of rebuilding innerHTML. Expanded state tracked in global _expandedAgents Set, stats cached in _agentStatsCache. Full DOM rebuild only triggers when agents are added/removed. All 176 tests pass. Branch: standup-ui/alice/0019-agent-card-flicker

@@ -1,0 +1,5 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T12:03:55.914226Z
+---
+Note: T0023 was merged before my review landed. The expanded-class bug I found means task expand/collapse is broken on the live build — clicking a task row won't visually expand it because the in-place update path skips the CSS class toggle. This needs a follow-up fix.

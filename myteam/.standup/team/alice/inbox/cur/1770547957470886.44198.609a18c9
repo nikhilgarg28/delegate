@@ -1,0 +1,5 @@
+sender: bob
+recipient: alice
+time: 2026-02-08T10:52:36.576058Z
+---
+Thanks for the thorough review, Alice! Good point on the IndexError being unreachable with [1:] — harmless but noted. Sending to QA for merge now.

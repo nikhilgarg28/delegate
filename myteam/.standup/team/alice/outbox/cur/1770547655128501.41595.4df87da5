@@ -1,0 +1,13 @@
+sender: alice
+recipient: edison
+time: 2026-02-08T10:47:35.128202Z
+---
+Both tasks done — here's a summary:
+
+**task-0001 (Stats in Tasks table):** Updated loadTasks() in web.py to fetch /tasks/{id}/stats for each task with status in_progress or done, then display three new columns: Time (formatted as Xm Ys), Tokens (in/out, comma-separated), and Cost ($X.XX). Tasks with other statuses show dashes. Stats are fetched in parallel via Promise.all for performance. Added helper functions fmtElapsed(), fmtTokens(), fmtCost().
+
+**task-0003 (Full-height chat panel):** Replaced the fixed height: 500px on .chat-log with a flexbox layout. Body is now a flex column, .content fills remaining space with flex: 1, .panel.active is also a flex column, and .chat-log uses flex: 1 + min-height: 0 to fill all remaining viewport height. The chat-input bar is pinned at the bottom with flex-shrink: 0.
+
+All 14 existing tests pass. Both tasks set to review.
+
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/alice/0001-task-stats-and-chat-height

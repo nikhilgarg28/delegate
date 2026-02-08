@@ -1,0 +1,5 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T17:22:35.486272Z
+---
+T0027 done — mic button now uses a clean flat SVG icon instead of the emoji. Uses currentColor so it inherits the color states automatically (grey default, lighter on hover, red when recording). Skipped formal review since it's a one-line cosmetic swap and I verified it directly.

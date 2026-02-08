@@ -1,0 +1,17 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T19:41:51.899388Z
+---
+T0036 is done — all changes implemented and all 288 tests passing (including 10 new ones).
+
+Summary of changes:
+
+1. **scripts/task.py** — Added branch (str, default '') and commits (list, default []) fields to create_task. Added setdefault calls in get_task for backward compat. Added three helper functions: set_task_branch(), add_task_commit(), get_task_diff() with three-dot diff against main and fallback logic.
+
+2. **code-review.md** — Updated branch naming convention from <project>/<agent>/<task> to <agent>/<project>/<task> with updated examples.
+
+3. **scripts/web.py** — Added GET /tasks/{task_id}/diff endpoint returning {task_id, branch, commits, diff}. Extended GET /tasks/{task_id}/stats to include branch and commits fields.
+
+4. **scripts/qa.py** — Added _auto_detect_task_branch() that parses branch names matching <agent>/<project>/<task_number>-* pattern and calls set_task_branch(). Called automatically in handle_review_request().
+
+5. **tests/test_task.py** — Added TestBranchAndCommits class with 10 tests: new fields in create_task, set_task_branch, add_task_commit (including dedup), branch surviving status updates, get_task_diff with no branch / mocked success / fallback / failure.

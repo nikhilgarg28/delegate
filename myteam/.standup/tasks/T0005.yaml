@@ -1,0 +1,28 @@
+id: 5
+title: 'Visual refresh: Geist font and improved aesthetics'
+description: "Upgrade the UI typography and overall aesthetics to feel more modern/Vercel-like.\
+  \ Scope:\n\n1. **Font**: Switch from system font stack to Geist Sans (Vercel font).\
+  \ Load via Google Fonts CDN or the Vercel font CDN. Add a <link> tag in the <head>\
+  \ of the HTML_PAGE. Update the body font-family to: \"Geist Sans\", \"Inter\", -apple-system,\
+  \ BlinkMacSystemFont, sans-serif (with fallback chain).\n\n2. **Typography refinement**:\
+  \ Adjust font sizes, weights, line-heights, and letter-spacing across the UI for\
+  \ better readability and polish. Chat messages especially need attention \u2014\
+  \ the director called out the chat font specifically.\n\n3. **Color refresh**: The\
+  \ current palette is functional but flat. Improve the color scheme to feel more\
+  \ polished \u2014 consider:\n   - Slightly warmer or more vibrant background tones\n\
+  \   - Better contrast ratios for readability\n   - More refined border/divider colors\n\
+  \   - Subtle hover/focus states\n   - Consider a subtle gradient or accent treatment\
+  \ for the header\n\n4. **Overall polish**: Improve spacing, padding, border-radius,\
+  \ and any other visual details that make the difference between \"functional\" and\
+  \ \"refined\". Look at Linear, Vercel, or similar modern dark-mode dashboards for\
+  \ inspiration.\n\nKey file: scripts/web.py \u2014 all CSS is inline in HTML_PAGE\
+  \ (lines 199-240), plus the HTML structure (lines 242-260). This is a single-file\
+  \ change."
+status: done
+assignee: alice
+project: standup-ui
+priority: high
+created_at: '2026-02-08T10:53:23.181014Z'
+updated_at: '2026-02-08T10:57:25.031488Z'
+completed_at: '2026-02-08T10:57:25.029947Z'
+depends_on: []

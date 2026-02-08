@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T10:59:05.704566Z
+---
+This is good but it's very hard to read long messages. We need some UI work to somewhat visually separate messages from adjacent messages and also separate sender/recipient visually. Can you consider UI like slack or other messaging apps but but make modern for a dev tool 

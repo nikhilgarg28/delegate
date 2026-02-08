@@ -1,0 +1,33 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T18:21:50.288289Z
+---
+Finished reviewing T0032 (Alice's Tier 1 automated quality checks). All 42 tests pass. Overall this is solid, well-structured work. I'd approve with a few nits and one medium-priority item.
+
+APPROVE with minor changes requested:
+
+--- Medium priority ---
+
+1. _get_diff_size: dead loop on lines 286-290. There's a "for line in lines: pass" loop that does nothing -- it iterates over all diff stat lines but the body is just "pass". This is clearly leftover scaffolding. Should be removed to avoid confusion.
+
+2. _get_diff_size / _get_changed_files: HEAD~1 assumes a single commit. Both git commands diff against HEAD~1, which only captures the last commit. If an eval run creates multiple commits (e.g., agent commits per-task), this will miss earlier changes. T0031's runner should set a baseline ref (tag or SHA) at the start of a run and diff against that. Worth flagging for Mark -- the current code works for single-commit runs but will undercount for multi-commit ones.
+
+3. "import re" inside function bodies (lines 293 and 374). Both _get_diff_size and _compute_complexity import re inside the function. Should be moved to the top-level imports with the other standard library imports for consistency with the rest of the codebase.
+
+--- Low priority (nits) ---
+
+4. _count_type_errors double-counts summary lines. The pyright test (test_counts_pyright_errors) expects count=2 for input that has one actual error + one summary line ("0 warnings, 1 error"). The function counts any line containing "error" (case-insensitive), so summary lines inflate the count. Not a blocker since it's consistently applied, but worth a comment or a filter for lines matching summary patterns.
+
+5. _run_tool catches FileNotFoundError redundantly. shutil.which() already returns None when the tool isn't installed, which is checked first. The FileNotFoundError catch on line 246 can only trigger in a race condition (tool uninstalled between which() and run()). Fine as defensive code, but a comment would clarify the intent.
+
+6. No stderr handling for ruff. _count_lint_violations only examines stdout. If ruff emits warnings or errors to stderr (e.g., config parse failures), they're silently dropped. Low risk but worth noting.
+
+--- Metric key alignment with T0031 ---
+
+7. The metric keys (total_tokens_in, total_tokens_out, total_cost_usd, total_sessions, avg_sessions_per_task, total_wall_clock_seconds, avg_seconds_per_task, total_messages, messages_per_task, tasks_completed, tasks_failed, diff_size, lint_violations, type_errors, complexity_score) all match what T0031's description says it expects. The key names are clean, flat, and JSON-serializable. Good alignment.
+
+--- Tests ---
+
+Tests are thorough: DB metrics, task metrics, each external tool (mocked), graceful fallbacks for missing tools, empty inputs, JSON serialization. The test fixture (_create_db) matches the real DB schema. 25 new test cases covering the metrics code, all passing. Well done.
+
+Verdict: APPROVE. Items 1-3 are worth fixing before merge; the rest are optional nits.

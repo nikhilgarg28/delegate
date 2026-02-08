@@ -1,0 +1,31 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T20:27:06.673523Z
+---
+Here's what I've done to address the branch isolation issue:
+
+## Done
+
+**1. Created 'main' branch** — merged all divergent feature branches (T0046, T0047, T0048) into a single 'main' branch at commit cf67876. All 274 tests pass. The merge graph is now clean.
+
+**2. Updated charter documentation** (both copies):
+- ~/dev/standup/scripts/charter/code-review.md
+- myteam/.standup/charter/code-review.md
+
+Added a new 'Workspace Isolation' section documenting:
+- Each agent works in their own clone of the project repo
+- Clone into workspace, fetch origin, branch from main
+- Push branch to origin for QA review
+- QA merges to main on origin
+
+**3. Merged T0048** (notification sounds) — bob's clean implementation. The mute toggle now actually controls sound playback.
+
+## Still needed (code changes)
+
+The charter describes the correct model but the agent infrastructure code doesn't enforce it yet. Changes needed in scripts/agent.py:
+
+1. On agent session start, clone the project repo into the agent's workspace (if not already cloned): git clone --local /Users/nikhil/dev/standup <workspace>/repo
+2. Have the agent work in that clone directory instead of the shared tree
+3. Tell agents in the system prompt where their clone is
+
+This is a code change to scripts/agent.py. Should I assign it to an agent, or do you want to handle it since it touches the core infrastructure?

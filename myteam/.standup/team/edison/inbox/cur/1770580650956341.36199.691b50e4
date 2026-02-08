@@ -1,0 +1,21 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T19:57:30.551368Z
+---
+T0041 done — three new API endpoints added. Ready for review.
+
+Branch: bob/standup-ui/041-agent-detail-apis (commit 517030c)
+
+**Endpoints implemented:**
+
+1. **GET /agents/{name}/inbox** — Returns all inbox messages with read/unread status. Uses read_inbox with unread_only=True to get unread filenames, then read_inbox with unread_only=False for all messages. Compares filenames to determine read status. Sorted newest first, capped at 100.
+
+2. **GET /agents/{name}/outbox** — Same pattern for outbox. Uses read_outbox with pending_only=True vs False. Returns routed (in cur/) vs pending (in new/) status. Sorted newest first, capped at 100.
+
+3. **GET /agents/{name}/logs** — Reads *.worklog.md files from .standup/team/{name}/logs/. Sorts numerically (by leading number in filename). Returns in reverse order (latest session first). Truncates individual files to last 50KB if very large.
+
+All three return 404 if the agent directory doesn't exist. Smoke-tested against live data (bob: 71 inbox, 67 outbox, 2 sessions). 288/288 tests pass.
+
+Note: a branch switch issue caused my commit to also land on mark/standup-ui/039-notification-sounds (a4e26a2). That's a duplicate — the authoritative commit is 517030c on my branch.
+
+REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=bob/standup-ui/041-agent-detail-apis

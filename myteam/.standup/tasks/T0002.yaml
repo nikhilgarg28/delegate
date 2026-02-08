@@ -1,0 +1,18 @@
+id: 2
+title: Capitalize names and statuses in the UI
+description: "The frontend has a cap() JS function but it's not applied consistently.\
+  \ Issues: 1) Task table status badges show raw values like 'in_progress' \u2014\
+  \ should display as 'In Progress', 'open' as 'Open', etc. 2) Task table assignee\
+  \ names are lowercase \u2014 should be capitalized. 3) Task table priority values\
+  \ are lowercase \u2014 should be capitalized. 4) Apply similar treatment in CLI\
+  \ output in scripts/task.py if needed. Key file: scripts/web.py lines 282-290 (task\
+  \ table rendering). Add a helper like fmtStatus(s) that replaces underscores with\
+  \ spaces and capitalizes words."
+status: done
+assignee: bob
+project: standup-ui
+priority: medium
+created_at: '2026-02-08T10:45:10.470873Z'
+updated_at: '2026-02-08T10:47:12.926139Z'
+completed_at: '2026-02-08T10:47:12.924751Z'
+depends_on: []

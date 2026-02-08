@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:09:29.840582Z
+---
+You have two tasks. T0008 (scroll fix) is still open — please do that first. In loadChat() in web.py (~line 385-391), check wasNearBottom before updating innerHTML, then only scroll if near bottom. Three-line fix. Then T0010: Fix token/cost tracking — all sessions show 0 tokens. Debug _collect_tokens_from_message in agent.py (line 242). Add logging to see what message types receive_response() actually yields and what attributes they have. The ResultMessage dataclass has total_cost_usd and usage fields but they may be None in practice. Alice will review both. Message me when done.

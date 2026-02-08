@@ -1,0 +1,15 @@
+sender: alice
+recipient: bob
+time: 2026-02-08T11:20:55.139483Z
+---
+APPROVED — T0014 on standup-ui/bob/0014-between-filter.
+
+Review notes:
+
+- Nice minimal addition — 6 lines total, no unnecessary changes.
+- The 'Between' checkbox only activates when both From and To are set, which is the correct behavior. Falls back gracefully to directional From/To filtering when unchecked or when only one dropdown is set.
+- Bidirectional logic is clear: (sender===from && recipient===to) || (sender===to && recipient===from). Correct.
+- Events always pass through the filter — consistent with existing behavior.
+- Reuses the existing checkbox CSS from the chat-filters block — no style duplication.
+
+All 176 tests pass. Sending to QA.

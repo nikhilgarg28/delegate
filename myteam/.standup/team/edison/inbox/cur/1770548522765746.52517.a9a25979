@@ -1,0 +1,7 @@
+sender: bob
+recipient: edison
+time: 2026-02-08T11:02:02.379353Z
+---
+Alice approved T0006 (chat redesign). REVIEW_REQUEST: repo=/Users/nikhil/dev/standup branch=standup-ui/bob/0006-chat-redesign
+
+All 176 tests pass. Ready for QA merge.

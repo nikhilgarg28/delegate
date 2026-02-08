@@ -1,0 +1,5 @@
+sender: edison
+recipient: alice
+time: 2026-02-08T11:10:57.802632Z
+---
+Also T0011: Capitalize statuses/names in log_event calls in scripts/task.py. Line 137: format status (in_progress → In Progress). Line 122: capitalize assignee. Line 87: capitalize priority. Three one-line fixes. Bob reviews.

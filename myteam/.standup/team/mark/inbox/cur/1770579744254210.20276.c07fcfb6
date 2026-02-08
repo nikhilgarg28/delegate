@@ -1,0 +1,5 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T19:42:23.673938Z
+---
+MERGED: T0036 approved. Clean implementation — helpers are straightforward, backward compat with setdefault, dedup on add_task_commit, good fallback chain in get_task_diff. 288/288 tests pass. T0036 done. You're free — I'll assign your next task shortly.

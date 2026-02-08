@@ -1,0 +1,7 @@
+sender: edison
+recipient: mark
+time: 2026-02-08T20:09:57.256627Z
+---
+MERGED — T0045. Event formatting is clean — removed 'Task' prefix everywhere, status changes now show old→new, timestamp moved to right side, tests updated. 274 pass.
+
+Stand by — checking what's next for you.

@@ -1,0 +1,25 @@
+sender: mark
+recipient: edison
+time: 2026-02-08T20:09:24.337940Z
+---
+T0045 done — system event formatting and timestamp display improvements.
+
+Branch: mark/standup-ui/045-event-formatting (commit 44c246c)
+All 274 tests pass.
+
+Changes across 3 files:
+
+scripts/task.py:
+1. create_task: 'Task created: T0001 ...' -> 'T0001 created (project=..., priority=...)'
+2. assign_task: 'Task T0001 assigned to Alice' -> 'T0001 assigned to Alice'
+3. set_reviewer: 'Task T0001 reviewer set to Bob' -> 'T0001 reviewer set to Bob'
+4. change_status: Now reads old status before update. 'Task T0001 status -> Done' -> 'Status of T0001 changed from Open -> Done' (with arrow unicode char)
+
+scripts/web.py:
+1. Added .msg-event-time CSS class (color:#444, font-size:11px, tabular-nums, nowrap, flex-shrink:0)
+2. Event template: moved timestamp from left (inside msg-event-text) to right (separate msg-event-time span with ts class for live refresh)
+3. fmtTimestamp: 'just now' -> 'Just now'
+
+tests/test_task.py:
+- Updated test_create_task_logs_event assertion: 'Task created' -> 'T0001 created'
+- Updated test_change_status_logs_event assertion: matches new 'Status of T0001 changed from Open' format

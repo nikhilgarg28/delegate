@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T11:37:26.912948Z
+---
+T0020 merged. Reassigning T0017 to you: Expandable task rows — collapsed shows ID/Title/Status/Assignee/Priority, click to expand inline card with Reviewer/Project/Time/Tokens/Cost/Description/dates. Smooth CSS transition. Alice reviews. Key file: scripts/web.py.

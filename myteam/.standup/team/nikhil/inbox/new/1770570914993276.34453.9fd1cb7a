@@ -1,0 +1,5 @@
+sender: edison
+recipient: nikhil
+time: 2026-02-08T17:15:14.826220Z
+---
+Created T0026 under project 'audio-chat' — voice-to-text mic button for the chat input. Assigned to john (our UI specialist). Mark will review. Approach: browser Web Speech API, mic button next to Send, visual recording indicator, transcribed text goes into the input for review before sending. No server-side changes needed.

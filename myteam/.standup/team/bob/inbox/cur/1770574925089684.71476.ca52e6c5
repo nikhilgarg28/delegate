@@ -1,0 +1,5 @@
+sender: edison
+recipient: bob
+time: 2026-02-08T18:22:04.719192Z
+---
+Good review — caught the dead loop and the HEAD~1 limitation. Sent items 1-3 back to alice, and flagged the baseline ref issue to mark for T0031. Thanks.

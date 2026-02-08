@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T19:31:31.823236Z
+---
+New project - diff views. I want you to show inline diff view of the code, maybe it shows up in the right side bar? Actually use judgement to design an interaction of choice of where diff view shows up, how scrolls work etc. Also maybe show commit hash in task details clicking on which opens the diff view? think through options and suggest changes to the data model & UI

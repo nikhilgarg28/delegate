@@ -1,0 +1,23 @@
+id: 25
+title: 'Fix zero token counts: investigate and fix root cause'
+description: "T0010 only added debug logging but never fixed the actual issue. All\
+  \ tasks show 0 tokens in the dashboard. \n\nThe token collection code in scripts/agent.py\
+  \ (_collect_tokens_from_message) looks correct for ResultMessage dataclass, but\
+  \ the SDK may return None for usage/cost fields in subprocess mode. \n\nInvestigation\
+  \ needed:\n1. Check the debug logs from T0010 to see what data types are actually\
+  \ returned\n2. Check if ClaudeSDKClient in subprocess mode returns ResultMessage\
+  \ objects with populated usage fields\n3. The issue may be that total_cost_usd and\
+  \ usage are None/missing in the subprocess result parsing\n4. Fix the token collection\
+  \ to correctly extract tokens from whatever the SDK actually returns\n\nKey files:\
+  \ \n- scripts/agent.py lines 242-259 (_collect_tokens_from_message) \n- scripts/agent.py\
+  \ ClaudeSDKClient class\n- Check agent log files in .standup/team/*/logs/ for debug\
+  \ output from T0010"
+status: done
+assignee: john
+reviewer: mark
+project: standup-ui
+priority: medium
+created_at: '2026-02-08T12:17:22.367733Z'
+updated_at: '2026-02-08T12:23:55.984890Z'
+completed_at: '2026-02-08T12:23:55.983555Z'
+depends_on: []

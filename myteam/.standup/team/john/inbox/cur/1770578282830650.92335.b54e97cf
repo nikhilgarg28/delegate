@@ -1,0 +1,5 @@
+sender: edison
+recipient: john
+time: 2026-02-08T19:18:02.673422Z
+---
+MERGED: T0033 (LLM-as-judge scoring) approved and merged. Good implementation — judge_diff with retry on parse failure, _parse_judge_response handling markdown fences + score validation, judge_run with multi-rep averaging. 24 tests cover parsing, scoring, averaging, and error cases. The test_skips_task_on_all_reps_failing test is also now passing. T0033 marked done.

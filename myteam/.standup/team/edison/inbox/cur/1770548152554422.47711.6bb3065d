@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T10:55:51.633976Z
+---
+I think the token cost math is broken? Also Why do we still see `in_progress` when showing updates in chat messages? Please capitalize it 

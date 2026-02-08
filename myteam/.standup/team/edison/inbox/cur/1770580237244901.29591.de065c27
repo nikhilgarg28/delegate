@@ -1,0 +1,5 @@
+sender: nikhil
+recipient: edison
+time: 2026-02-08T19:50:36.780005Z
+---
+I also want to add details to agents - when selecting an agent, I want to show a view that has one tab for inbox, one tab for outbox, one tab for logs.  We need to think about the interaction design now and ideally something that is consistent across the agent stab the task Tab and the main tab I'm wondering if the agent thing should open up on the right hand side where you click on an agent name and that right hand side view itself as a nowTabs for inbox outbox and logs what do you think
