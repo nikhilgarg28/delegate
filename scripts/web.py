@@ -370,7 +370,9 @@ HTML_PAGE = """\
   .task-detail-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #555; margin-bottom: 4px; }
   .task-detail-value { font-size: 13px; color: #ededed; font-variant-numeric: tabular-nums; }
   .task-desc { color: #a1a1a1; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; padding: 10px 14px; background: rgba(255,255,255,0.02); border-radius: 8px; }
-  .task-dates { display: flex; gap: 24px; margin-top: 10px; font-size: 11px; color: #555; }
+  .task-dates { display: flex; gap: 24px; margin-top: 10px; font-size: 11px; color: #555; align-items: center; }
+  .diff-btn { margin-left: auto; padding: 4px 10px; border-radius: 5px; border: 1px solid rgba(96,165,250,0.3); background: rgba(96,165,250,0.08); color: #60a5fa; font-family: inherit; font-size: 11px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+  .diff-btn:hover { background: rgba(96,165,250,0.16); border-color: rgba(96,165,250,0.5); }
   .badge { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; letter-spacing: 0.01em; }
   .badge-open { background: rgba(52,211,153,0.12); color: #34d399; }
   .badge-in_progress { background: rgba(251,191,36,0.12); color: #fbbf24; }
@@ -390,7 +392,8 @@ HTML_PAGE = """\
   .msg-content { color: #a1a1a1; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
   .msg-event { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px 12px; margin: 4px 0; }
   .msg-event-line { flex: 1; height: 1px; background: rgba(255,255,255,0.06); }
-  .msg-event-text { color: #444; font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .msg-event-text { color: #444; font-size: 11px; white-space: nowrap; }
+  .msg-event-time { color: #444; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
   .chat-input { display: flex; gap: 8px; flex-shrink: 0; }
   .chat-input input { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: #111113; color: #ededed; font-family: inherit; font-size: 13px; outline: none; transition: border-color 0.15s; }
   .chat-input input:focus { border-color: rgba(255,255,255,0.25); }
@@ -426,6 +429,45 @@ HTML_PAGE = """\
   .chat-filters input[type="checkbox"]:checked, .task-filters input[type="checkbox"]:checked { background: #fafafa; border-color: #fafafa; }
   .chat-filters input[type="checkbox"]:checked::after, .task-filters input[type="checkbox"]:checked::after { content: ''; position: absolute; top: 1px; left: 4px; width: 4px; height: 8px; border: solid #0a0a0b; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
   .filter-label { color: #444; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* Diff Panel */
+  .diff-panel { position: fixed; top: 0; right: 0; width: 55vw; height: 100vh; background: #0d0d0f; border-left: 1px solid rgba(255,255,255,0.08); z-index: 200; display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.25s ease; }
+  .diff-panel.open { transform: translateX(0); }
+  .diff-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 199; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
+  .diff-backdrop.open { opacity: 1; pointer-events: auto; }
+  .diff-panel-header { padding: 16px 20px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); flex-shrink: 0; }
+  .diff-panel-title { font-size: 15px; font-weight: 600; color: #fafafa; margin-bottom: 4px; }
+  .diff-panel-branch { font-size: 12px; color: #60a5fa; font-family: 'SF Mono', 'Fira Code', monospace; margin-bottom: 8px; }
+  .diff-panel-commits { display: flex; flex-wrap: wrap; gap: 6px; }
+  .diff-panel-commit { font-size: 11px; font-family: 'SF Mono', 'Fira Code', monospace; background: rgba(255,255,255,0.06); color: #a1a1a1; padding: 2px 8px; border-radius: 4px; }
+  .diff-panel-close { position: absolute; top: 14px; right: 16px; background: none; border: none; color: #666; font-size: 22px; cursor: pointer; line-height: 1; padding: 4px; }
+  .diff-panel-close:hover { color: #ededed; }
+  .diff-panel-tabs { display: flex; gap: 2px; padding: 8px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); flex-shrink: 0; }
+  .diff-tab { padding: 6px 12px; cursor: pointer; border-radius: 6px; background: transparent; border: none; color: #666; font-family: inherit; font-size: 12px; font-weight: 500; transition: color 0.15s, background 0.15s; }
+  .diff-tab:hover { color: #999; background: rgba(255,255,255,0.04); }
+  .diff-tab.active { background: rgba(255,255,255,0.08); color: #fafafa; }
+  .diff-panel-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .diff-file-section { margin-bottom: 20px; }
+  .diff-file-header { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: rgba(255,255,255,0.03); border-radius: 6px; margin-bottom: 4px; }
+  .diff-file-name { font-size: 12px; font-family: 'SF Mono', 'Fira Code', monospace; color: #ededed; font-weight: 500; }
+  .diff-file-stats { margin-left: auto; display: flex; gap: 6px; font-size: 11px; font-family: 'SF Mono', 'Fira Code', monospace; }
+  .diff-file-add { color: #34d399; }
+  .diff-file-del { color: #f87171; }
+  .diff-hunk-header { font-size: 11px; font-family: 'SF Mono', 'Fira Code', monospace; color: #555; padding: 4px 12px; background: rgba(96,165,250,0.06); margin: 2px 0; border-radius: 3px; }
+  .diff-line { display: flex; font-size: 12px; font-family: 'SF Mono', 'Fira Code', monospace; line-height: 1.6; }
+  .diff-line-gutter { width: 48px; min-width: 48px; text-align: right; padding-right: 8px; color: #444; user-select: none; flex-shrink: 0; }
+  .diff-line-content { flex: 1; padding: 0 8px; white-space: pre-wrap; word-break: break-all; }
+  .diff-line.add { background: rgba(34,197,94,0.08); }
+  .diff-line.add .diff-line-content { color: #6ee7b7; }
+  .diff-line.del { background: rgba(248,113,113,0.08); }
+  .diff-line.del .diff-line-content { color: #fca5a5; }
+  .diff-line.ctx .diff-line-content { color: #666; }
+  .diff-file-list { display: flex; flex-direction: column; gap: 2px; }
+  .diff-file-list-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 6px; cursor: pointer; transition: background 0.15s; }
+  .diff-file-list-item:hover { background: rgba(255,255,255,0.04); }
+  .diff-file-list-name { font-size: 13px; font-family: 'SF Mono', 'Fira Code', monospace; color: #ededed; }
+  .diff-empty { color: #555; font-size: 13px; padding: 24px; text-align: center; }
+  @media (max-width: 900px) { .diff-panel { width: 100vw; } }
 
   /* Scrollbar */
   ::-webkit-scrollbar { width: 6px; }
@@ -509,6 +551,20 @@ HTML_PAGE = """\
   <div id="agents" class="panel"></div>
 </div>
 </div>
+<div id="diffPanel" class="diff-panel">
+  <div class="diff-panel-header">
+    <div class="diff-panel-title" id="diffPanelTitle"></div>
+    <div class="diff-panel-branch" id="diffPanelBranch"></div>
+    <div class="diff-panel-commits" id="diffPanelCommits"></div>
+    <button class="diff-panel-close" onclick="closeDiffPanel()">&times;</button>
+  </div>
+  <div class="diff-panel-tabs">
+    <button class="diff-tab active" data-dtab="files" onclick="switchDiffTab('files')">Files Changed</button>
+    <button class="diff-tab" data-dtab="diff" onclick="switchDiffTab('diff')">Full Diff</button>
+  </div>
+  <div class="diff-panel-body" id="diffPanelBody"></div>
+</div>
+<div id="diffBackdrop" class="diff-backdrop" onclick="closeDiffPanel()"></div>
 <script>
 function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
 function fmtStatus(s){return s.split('_').map(w=>cap(w)).join(' ');}
@@ -516,7 +572,7 @@ function fmtTime(iso){const d=new Date(iso);return d.toLocaleTimeString([],{hour
 function fmtTimestamp(iso){
   if(!iso) return '\u2014';
   const d=new Date(iso), now=new Date(), diff=now-d, sec=Math.floor(diff/1000), min=Math.floor(sec/60), hr=Math.floor(min/60);
-  if(sec<60) return 'just now';
+  if(sec<60) return 'Just now';
   if(min<60) return min+' min ago';
   const time=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:false});
   if(hr<24) return time;
@@ -583,6 +639,7 @@ function _taskRowHtml(t) {
       <div class="task-dates">
         <span>Created: <span class="ts" data-ts="${t.created_at || ''}">${fmtTimestamp(t.created_at)}</span></span>
         <span>Completed: <span class="ts" data-ts="${t.completed_at || ''}">${fmtTimestamp(t.completed_at)}</span></span>
+        ${s && s.branch ? '<button class="diff-btn" onclick="openDiffPanel(' + t.id + ')">View Diff</button>' : ''}
       </div>
     </div>
   </div>`;
@@ -915,6 +972,127 @@ async function loadSidebar() {
     document.getElementById('sidebarTaskList').innerHTML = taskHtml;
   } catch(e) { console.error('Sidebar load error:', e); }
 }
+
+// --- Diff Panel ---
+let _diffData = null;
+let _diffCurrentTab = 'files';
+
+function parseDiff(diffText) {
+  if (!diffText) return [];
+  const files = [];
+  let currentFile = null;
+  const lines = diffText.split('\\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('diff --git')) {
+      const match = line.match(/b\\/(.+)$/);
+      currentFile = { name: match ? match[1] : 'unknown', hunks: [], additions: 0, deletions: 0 };
+      files.push(currentFile);
+      // Skip --- and +++ lines
+      while (i + 1 < lines.length && (lines[i+1].startsWith('---') || lines[i+1].startsWith('+++') || lines[i+1].startsWith('index ') || lines[i+1].startsWith('new file') || lines[i+1].startsWith('deleted file'))) i++;
+    } else if (line.startsWith('@@') && currentFile) {
+      currentFile.hunks.push({ header: line, lines: [] });
+    } else if (currentFile && currentFile.hunks.length > 0) {
+      const hunk = currentFile.hunks[currentFile.hunks.length - 1];
+      if (line.startsWith('+')) {
+        hunk.lines.push({ type: 'add', content: line.substring(1) });
+        currentFile.additions++;
+      } else if (line.startsWith('-')) {
+        hunk.lines.push({ type: 'del', content: line.substring(1) });
+        currentFile.deletions++;
+      } else {
+        hunk.lines.push({ type: 'ctx', content: line.startsWith(' ') ? line.substring(1) : line });
+      }
+    }
+  }
+  return files;
+}
+
+function renderDiffFull(files) {
+  if (!files.length) return '<div class="diff-empty">No changes</div>';
+  let html = '';
+  for (const f of files) {
+    html += '<div class="diff-file-section" id="diff-file-' + encodeURIComponent(f.name) + '">';
+    html += '<div class="diff-file-header"><span class="diff-file-name">' + esc(f.name) + '</span>';
+    html += '<span class="diff-file-stats"><span class="diff-file-add">+' + f.additions + '</span><span class="diff-file-del">-' + f.deletions + '</span></span></div>';
+    for (const h of f.hunks) {
+      html += '<div class="diff-hunk-header">' + esc(h.header) + '</div>';
+      let lineNum = 1;
+      const m = h.header.match(/\\+(\\d+)/);
+      if (m) lineNum = parseInt(m[1]);
+      for (const l of h.lines) {
+        const gutter = l.type === 'del' ? '' : lineNum;
+        html += '<div class="diff-line ' + l.type + '"><span class="diff-line-gutter">' + gutter + '</span><span class="diff-line-content">' + esc(l.content) + '</span></div>';
+        if (l.type !== 'del') lineNum++;
+      }
+    }
+    html += '</div>';
+  }
+  return html;
+}
+
+function renderDiffFiles(files) {
+  if (!files.length) return '<div class="diff-empty">No files changed</div>';
+  let html = '<div class="diff-file-list">';
+  for (const f of files) {
+    html += '<div class="diff-file-list-item" onclick="scrollToDiffFile(\\'' + encodeURIComponent(f.name) + '\\')">';
+    html += '<span class="diff-file-list-name">' + esc(f.name) + '</span>';
+    html += '<span class="diff-file-stats"><span class="diff-file-add">+' + f.additions + '</span><span class="diff-file-del">-' + f.deletions + '</span></span>';
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function scrollToDiffFile(encodedName) {
+  switchDiffTab('diff');
+  setTimeout(() => {
+    const el = document.getElementById('diff-file-' + encodedName);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 50);
+}
+
+function switchDiffTab(tab) {
+  _diffCurrentTab = tab;
+  document.querySelectorAll('.diff-tab').forEach(t => t.classList.toggle('active', t.dataset.dtab === tab));
+  const body = document.getElementById('diffPanelBody');
+  if (!_diffData) return;
+  body.innerHTML = tab === 'files' ? renderDiffFiles(_diffData) : renderDiffFull(_diffData);
+}
+
+async function openDiffPanel(taskId) {
+  const panel = document.getElementById('diffPanel');
+  const backdrop = document.getElementById('diffBackdrop');
+  document.getElementById('diffPanelTitle').textContent = 'T' + String(taskId).padStart(4, '0');
+  document.getElementById('diffPanelBranch').textContent = 'Loading...';
+  document.getElementById('diffPanelCommits').innerHTML = '';
+  document.getElementById('diffPanelBody').innerHTML = '<div class="diff-empty">Loading diff...</div>';
+  panel.classList.add('open');
+  backdrop.classList.add('open');
+  try {
+    const res = await fetch('/tasks/' + taskId + '/diff');
+    const data = await res.json();
+    document.getElementById('diffPanelBranch').textContent = data.branch || 'no branch';
+    const commitsHtml = (data.commits || []).map(c => '<span class="diff-panel-commit">' + esc(String(c).substring(0, 7)) + '</span>').join('');
+    document.getElementById('diffPanelCommits').innerHTML = commitsHtml;
+    _diffData = parseDiff(data.diff || '');
+    _diffCurrentTab = 'files';
+    document.querySelectorAll('.diff-tab').forEach(t => t.classList.toggle('active', t.dataset.dtab === 'files'));
+    document.getElementById('diffPanelBody').innerHTML = renderDiffFiles(_diffData);
+  } catch(e) {
+    document.getElementById('diffPanelBody').innerHTML = '<div class="diff-empty">Failed to load diff</div>';
+  }
+}
+
+function closeDiffPanel() {
+  document.getElementById('diffPanel').classList.remove('open');
+  document.getElementById('diffBackdrop').classList.remove('open');
+  _diffData = null;
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeDiffPanel();
+});
 
 async function sendMsg() {
   const input = document.getElementById('msgInput');
