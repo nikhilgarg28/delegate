@@ -260,8 +260,6 @@ HTML_PAGE = """\
   .tab { padding: 7px 14px; cursor: pointer; border-radius: 6px; background: transparent; border: none; color: #666; font-family: inherit; font-size: 13px; font-weight: 500; transition: color 0.15s, background 0.15s; }
   .tab:hover { color: #999; background: rgba(255,255,255,0.04); }
   .tab.active { background: rgba(255,255,255,0.08); color: #fafafa; }
-  .mute-toggle { background: transparent; border: none; color: #555; cursor: pointer; font-size: 14px; padding: 4px 8px; transition: color 0.15s; margin-left: auto; }
-  .mute-toggle:hover { color: #999; }
   .content { max-width: 1000px; width: 100%; margin: 0 auto; padding: 24px; flex: 1; display: flex; flex-direction: column; min-height: 0; }
   .panel { display: none; }
   .panel.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -373,7 +371,6 @@ HTML_PAGE = """\
     <button class="tab" data-tab="tasks" onclick="switchTab('tasks')">Tasks</button>
     <button class="tab" data-tab="agents" onclick="switchTab('agents')">Agents</button>
   </div>
-  <button class="mute-toggle" id="muteToggle" onclick="toggleMute()" title="Toggle notification sounds"></button>
 </div>
 <div class="content">
   <div id="chat" class="panel active">
