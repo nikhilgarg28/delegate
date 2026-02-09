@@ -841,15 +841,19 @@ async function loadSidebar() {
     let totalCost = 0;
     for (const name in statsMap)
       totalCost += statsMap[name].total_cost_usd || 0;
+    // Update status dot: green+glow when active tasks, gray otherwise
+    const statusDot = document.getElementById("sidebarStatusDot");
+    if (statusDot) {
+      if (openCount > 0) statusDot.classList.add("active");
+      else statusDot.classList.remove("active");
+    }
+    // Render 3-column stat card grid
     document.getElementById("sidebarStatusContent").innerHTML =
-      '<div class="sidebar-stat-row"><span class="stat-value">' +
-      doneToday +
-      " done</span> &middot; <span class=\"stat-value\">" +
-      openCount +
-      " open</span></div>" +
-      '<div class="sidebar-stat-row">$' +
-      totalCost.toFixed(2) +
-      " total spent</div>";
+      '<div class="sidebar-stat-grid">' +
+      '<div class="sidebar-stat-card"><div class="sidebar-stat-number">' + doneToday + '</div><div class="sidebar-stat-label">Done today</div></div>' +
+      '<div class="sidebar-stat-card"><div class="sidebar-stat-number">' + openCount + '</div><div class="sidebar-stat-label">Active tasks</div></div>' +
+      '<div class="sidebar-stat-card"><div class="sidebar-stat-number">$' + totalCost.toFixed(2) + '</div><div class="sidebar-stat-label">Spent lifetime</div></div>' +
+      '</div>';
     const inProgressTasks = tasks.filter((t) => t.status === "in_progress");
     let agentHtml = "";
     for (const a of agents || []) {
@@ -885,28 +889,32 @@ async function loadSidebar() {
         "</span></div>";
     }
     document.getElementById("sidebarAgentList").innerHTML = agentHtml;
-    const sorted = [...tasks]
-      .sort((a, b) => {
-        const da = a.updated_at || a.created_at || "";
-        const db = b.updated_at || b.created_at || "";
-        return db.localeCompare(da);
-      })
-      .slice(0, 7);
+    // Task heuristic: Tier 0 needs_merge, Tier 1 in_progress+review, Tier 2 open, Tier 3 merged+done (max 3). Never show rejected.
+    function taskTier(t) {
+      if (t.status === "needs_merge") return 0;
+      if (t.status === "in_progress" || t.status === "review") return 1;
+      if (t.status === "open") return 2;
+      if (t.status === "merged" || t.status === "done") return 3;
+      return 4; // conflict, etc — treat as low priority
+    }
+    const eligible = tasks.filter((t) => t.status !== "rejected");
+    const tier0 = eligible.filter((t) => taskTier(t) === 0).sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
+    const tier1 = eligible.filter((t) => taskTier(t) === 1).sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
+    const tier2 = eligible.filter((t) => taskTier(t) === 2).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+    const tier3 = eligible.filter((t) => taskTier(t) === 3).sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || "")).slice(0, 3);
+    const sorted = [...tier0, ...tier1, ...tier2, ...tier3].slice(0, 7);
     let taskHtml = "";
     for (const t of sorted) {
       const tid = "T" + String(t.id).padStart(4, "0");
       taskHtml +=
         '<div class="sidebar-task-row" style="cursor:pointer" onclick="openTaskPanel(' +
         t.id +
-        ')"><span class="sidebar-task-id">' +
+        ')"><span class="sidebar-task-dot dot-' + t.status + '" title="' + fmtStatus(t.status) + '"></span>' +
+        '<span class="sidebar-task-id">' +
         tid +
         '</span><span class="sidebar-task-title">' +
         esc(t.title) +
-        '</span><span class="sidebar-task-badge"><span class="badge badge-' +
-        t.status +
-        '">' +
-        fmtStatus(t.status) +
-        '</span></span><span class="sidebar-task-assignee">' +
+        '</span><span class="sidebar-task-assignee">' +
         (t.assignee ? cap(t.assignee) : "") +
         "</span></div>";
     }

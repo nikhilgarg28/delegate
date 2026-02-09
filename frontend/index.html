@@ -12,7 +12,10 @@
 
 <div class="sidebar" id="sidebar">
   <div class="sidebar-widget" id="sidebarStatus">
-    <div class="sidebar-widget-header">Status</div>
+    <div class="sidebar-widget-header">
+      <span><span class="sidebar-status-dot" id="sidebarStatusDot">●</span> STATUS</span>
+      <a class="sidebar-see-all" onclick="switchTab('tasks')">See All &rarr;</a>
+    </div>
     <div id="sidebarStatusContent"><span style="color:var(--text-faint);font-size:12px">Loading...</span></div>
   </div>
   <div class="sidebar-widget" id="sidebarAgents">
