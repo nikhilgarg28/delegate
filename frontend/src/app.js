@@ -491,7 +491,7 @@ function linkifyTaskRefs(html) {
   // Replace TXXX in text nodes only (between > and <, or at start/end of string)
   // Split into segments: HTML tags vs text content
   return html.replace(/(^[^<]+|>[^<]*)/g, function (match) {
-    return match.replace(/\bT(\d{4})\b/g, function (full, digits) {
+    return match.replace(/(?<!\/)T(\d{4})\b/g, function (full, digits) {
       const id = parseInt(digits, 10);
       return '<span class="task-link" data-task-id="' + id + '" onclick="event.stopPropagation();openTaskPanel(' + id + ')">' + full + '</span>';
     });
