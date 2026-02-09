@@ -513,7 +513,13 @@ function switchTaskPanelDiffTab(tab) {
       diffContent.innerHTML = '<div class="diff-empty">No files changed</div>';
       return;
     }
-    let h = '<div class="diff-file-list">';
+    let totalAdd = 0, totalDel = 0;
+    for (const f of files) { totalAdd += f.addedLines; totalDel += f.deletedLines; }
+    let h = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">' +
+      files.length + ' file' + (files.length !== 1 ? 's' : '') + ' changed, ' +
+      '<span style="color:var(--diff-add-text)">+' + totalAdd + '</span> ' +
+      '<span style="color:var(--diff-del-text)">\u2212' + totalDel + '</span></div>';
+    h += '<div class="diff-file-list">';
     for (const f of files) {
       const name = (f.newName === '/dev/null' ? f.oldName : f.newName) || f.oldName || "unknown";
       h += '<div class="diff-file-list-item" onclick="switchTaskPanelDiffTab(\'diff\')"><span class="diff-file-list-name">' +
@@ -536,6 +542,8 @@ function switchTaskPanelDiffTab(tab) {
 }
 
 async function openTaskPanel(taskId) {
+  // Close agent/diff panel if open (don't stack panels)
+  if (_panelMode) closePanel();
   _panelTask = taskId;
   const panel = document.getElementById("taskPanel");
   const backdrop = document.getElementById("taskBackdrop");
@@ -952,6 +960,8 @@ function switchDiffTab(tab) {
 }
 
 async function openDiffPanel(taskId) {
+  // Close task panel if open (don't stack panels)
+  if (_panelTask !== null) closeTaskPanel();
   _panelMode = "diff";
   _panelAgent = null;
   _agentTabData = {};
@@ -1147,6 +1157,8 @@ function _renderAgentTab(tab, data) {
 }
 
 async function openAgentPanel(agentName) {
+  // Close task panel if open (don't stack panels)
+  if (_panelTask !== null) closeTaskPanel();
   _panelMode = "agent";
   _panelAgent = agentName;
   _agentTabData = {};

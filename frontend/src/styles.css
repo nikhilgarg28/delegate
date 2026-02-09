@@ -450,7 +450,7 @@ body {
 .theme-toggle:hover { color: var(--text-secondary); background: var(--bg-hover); }
 
 /* ---- Task detail side panel ---- */
-.task-panel { position: fixed; top: 0; right: 0; width: 55vw; height: 100vh; background: var(--bg-sidebar); border-left: 1px solid var(--border-default); z-index: 200; display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.25s ease; }
+.task-panel { position: fixed; top: 0; right: 0; width: 55vw; max-width: 720px; height: 100vh; background: var(--bg-sidebar); border-left: 1px solid var(--border-default); z-index: 200; display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.25s ease; }
 .task-panel.open { transform: translateX(0); }
 .task-backdrop { position: fixed; inset: 0; background: var(--backdrop-bg); z-index: 199; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
 .task-backdrop.open { opacity: 1; pointer-events: auto; }
@@ -459,29 +459,31 @@ body {
 .task-panel-id { font-size: 13px; font-family: 'SF Mono', 'Fira Code', monospace; color: var(--text-muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .task-panel-title { font-size: 15px; font-weight: 600; color: var(--text-heading); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-panel-meta-row { display: flex; align-items: center; gap: 10px; }
+.task-panel-meta-row .badge { font-size: 12px; padding: 4px 10px; }
 .task-panel-assignee { font-size: 12px; color: var(--text-secondary); }
 .task-panel-priority { font-size: 12px; color: var(--text-muted); }
-.task-panel-close { position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; line-height: 1; padding: 4px; }
+.task-panel-close { position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; line-height: 1; padding: 8px; }
 .task-panel-close:hover { color: var(--text-primary); }
 .task-panel-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
 .task-panel-section { margin-bottom: 16px; }
-.task-panel-section-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; }
+.task-panel-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 6px; }
 .task-panel-meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
 .task-panel-meta-item { background: var(--bg-hover); border-radius: 8px; padding: 10px 14px; }
 .task-panel-meta-item .task-detail-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 4px; }
 .task-panel-meta-item .task-detail-value { font-size: 13px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-.task-panel-desc { color: var(--text-secondary); font-size: 13px; line-height: 1.6; word-break: break-word; padding: 10px 14px; background: var(--bg-hover); border-radius: 8px; }
+.task-panel-desc { color: var(--text-secondary); font-size: 13px; line-height: 1.6; word-break: break-word; padding: 10px 14px 10px 0; border-top: 1px solid var(--border-subtle); }
 .task-panel-dates { display: flex; gap: 24px; font-size: 11px; color: var(--text-muted); align-items: center; margin-bottom: 16px; }
 .task-panel-vcs-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
 .task-panel-diff-section { margin-top: 16px; }
-.task-panel-diff-tabs { display: flex; gap: 2px; margin-bottom: 10px; }
+.task-panel-diff-tabs { display: flex; gap: 2px; margin-bottom: 10px; position: sticky; top: 0; z-index: 1; background: var(--bg-sidebar); padding: 4px 0; }
 .task-panel-diff-tabs .diff-tab { padding: 6px 12px; cursor: pointer; border-radius: 6px; background: transparent; border: none; color: var(--text-muted); font-family: inherit; font-size: 12px; font-weight: 500; transition: color 0.15s, background 0.15s; }
 .task-panel-diff-tabs .diff-tab:hover { color: var(--text-secondary); background: var(--border-subtle); }
 .task-panel-diff-tabs .diff-tab.active { background: var(--bg-active); color: var(--text-heading); }
-@media (max-width: 900px) { .task-panel { width: 100vw; } }
+@media (max-width: 900px) { .task-panel { width: 100vw; max-width: none; } }
+@media (max-width: 600px) { .task-panel-meta-grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* ---- TXXX clickable links ---- */
-.task-link { font-family: 'SF Mono', 'Fira Code', monospace; color: var(--accent-blue); cursor: pointer; font-size: 0.95em; }
+.task-link { font-family: 'SF Mono', 'Fira Code', monospace; color: var(--accent-blue); cursor: pointer; font-size: 0.95em; transition: color 0.15s; }
 .task-link:hover { text-decoration: underline; }
 
 /* ---- Mic button ---- */
