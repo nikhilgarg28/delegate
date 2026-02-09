@@ -607,7 +607,7 @@ function updateKnownAgents(agents) {
 function agentifyRefs(html) {
   if (!_knownAgentNames.length) return html;
   // Build a regex that matches capitalized agent names in text nodes
-  var pattern = new RegExp("\\b(" + _knownAgentNames.map(function (n) { return n.charAt(0).toUpperCase() + n.slice(1); }).join("|") + ")\\b", "g");
+  var pattern = new RegExp("\\b(" + _knownAgentNames.map(function (n) { return n.charAt(0).toUpperCase() + n.slice(1); }).join("|") + ")(?!/)", "g");
   return html.replace(/(^[^<]+|>[^<]*)/g, function (match) {
     return match.replace(pattern, function (full) {
       var name = full.toLowerCase();
