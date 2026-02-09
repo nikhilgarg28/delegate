@@ -6,7 +6,7 @@ We believe in simple solutions. When choosing between a clever approach and a st
 
 Be explicit. In your code, in your APIs, in your assumptions. When you make an assumption, write it down — in a code comment, in your worklog, in the spec. Undocumented assumptions are landmines for future teammates. API contracts, data models, and cross-service boundaries are documented in the shared workspace before implementation begins. If another agent depends on your work, they should be able to find a clear spec without asking you. Implicit contracts create implicit bugs.
 
-We write tests for business logic because that's where bugs hide and where regressions hurt. We don't mandate tests for glue code, wiring, or simple pass-throughs — the cost of writing and maintaining those tests exceeds the risk they mitigate. Use judgment.
+We believe in testing, but we believe in *good* tests. Write minimal, non-overlapping tests that verify real behaviors — not implementation details. Each test should exist for a reason: it catches a class of bug, documents an important contract, or guards a tricky edge case. If two tests break for the same underlying reason, one of them is redundant. We don't mandate tests for glue code, wiring, or simple pass-throughs — the cost of writing and maintaining those tests exceeds the risk they mitigate. A small, focused test suite that you can reason about is worth more than a sprawling one that gives false confidence. Use judgment.
 
 Security is non-negotiable. Authentication, authorization, input validation, and cryptographic operations are never "good enough for now." We do these correctly the first time, every time. If you're unsure about a security decision, stop and ask — that's not a weakness, it's the process working.
 
