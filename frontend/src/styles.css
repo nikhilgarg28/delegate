@@ -234,8 +234,7 @@ body {
   flex-shrink: 0;
 }
 .header h1 { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-heading); }
-.team-selector { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-input); background: var(--bg-input); color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; cursor: pointer; }
-.tabs { display: flex; gap: 2px; margin-left: 16px; }
+.tabs { display: flex; gap: 2px; }
 .tab { padding: 7px 14px; cursor: pointer; border-radius: 6px; background: transparent; border: none; color: var(--text-muted); font-family: inherit; font-size: 13px; font-weight: 500; transition: color 0.15s, background 0.15s; }
 .tab:hover { color: var(--text-secondary); background: var(--border-subtle); }
 .tab.active { background: var(--bg-active); color: var(--text-heading); }
@@ -260,6 +259,74 @@ body {
   font-weight: 600;
   color: var(--text-heading);
   letter-spacing: -0.01em;
+}
+
+/* ---- Sidebar Team Selector ---- */
+.sidebar-team-selector {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  flex-shrink: 0;
+}
+.sidebar-team-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+.sidebar-team-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.sidebar-team-selector:hover {
+  background: var(--bg-hover);
+}
+.sidebar-team-selector.single-team {
+  cursor: default;
+}
+.sidebar-team-selector.single-team:hover {
+  background: transparent;
+}
+.sidebar-team-selector.single-team .sidebar-team-chevron {
+  display: none;
+}
+.sidebar-team-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  z-index: 100;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.sidebar-team-option {
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sidebar-team-option:hover {
+  background: var(--bg-hover);
+}
+.sidebar-team-option.active::after {
+  content: "✓";
+  color: var(--accent-blue);
 }
 
 /* ---- Action Required widget ---- */

@@ -142,35 +142,114 @@ function onTaskFilterChange() {
 }
 
 // =====================================================================
-// Team selector
+// Team selector (sidebar dropdown — Option A)
 // =====================================================================
+let _teamDropdownOpen = false;
+
 async function loadTeams() {
   try {
     const res = await fetch("/teams");
     if (!res.ok) return;
     _teams = await res.json();
-    const sel = document.getElementById("teamSelector");
     const prev = _currentTeam;
-    sel.innerHTML = _teams
-      .map((t) => `<option value="${t}">${t}</option>`)
-      .join("");
     if (prev && _teams.includes(prev)) {
-      sel.value = prev;
+      _currentTeam = prev;
     } else if (_teams.length > 0) {
-      sel.value = _teams[0];
+      _currentTeam = _teams[0];
     }
-    _currentTeam = sel.value;
+    _renderSidebarTeamSelector();
   } catch (e) {
     console.warn("loadTeams failed:", e);
   }
 }
 
+function _renderSidebarTeamSelector() {
+  const container = document.getElementById("sidebarTeamSelector");
+  const nameEl = document.getElementById("sidebarTeamName");
+  if (!container || !nameEl) return;
+
+  nameEl.textContent = _currentTeam || "No team";
+
+  // Single team: hide chevron, disable click
+  if (_teams.length <= 1) {
+    container.classList.add("single-team");
+  } else {
+    container.classList.remove("single-team");
+  }
+
+  // Remove any existing dropdown
+  _closeTeamDropdown();
+}
+
+function _toggleTeamDropdown(e) {
+  if (e) e.stopPropagation();
+  const container = document.getElementById("sidebarTeamSelector");
+  if (!container || container.classList.contains("single-team")) return;
+  if (_teamDropdownOpen) {
+    _closeTeamDropdown();
+  } else {
+    _openTeamDropdown();
+  }
+}
+
+function _openTeamDropdown() {
+  const container = document.getElementById("sidebarTeamSelector");
+  if (!container) return;
+  // Remove old dropdown if any
+  _closeTeamDropdown();
+  _teamDropdownOpen = true;
+  const dd = document.createElement("div");
+  dd.className = "sidebar-team-dropdown";
+  dd.id = "sidebarTeamDropdown";
+  for (const t of _teams) {
+    const opt = document.createElement("div");
+    opt.className = "sidebar-team-option" + (t === _currentTeam ? " active" : "");
+    opt.textContent = t;
+    opt.addEventListener("click", function (e) {
+      e.stopPropagation();
+      _selectTeam(t);
+    });
+    dd.appendChild(opt);
+  }
+  container.appendChild(dd);
+}
+
+function _closeTeamDropdown() {
+  _teamDropdownOpen = false;
+  const dd = document.getElementById("sidebarTeamDropdown");
+  if (dd) dd.remove();
+}
+
+function _selectTeam(team) {
+  _closeTeamDropdown();
+  if (team === _currentTeam) return;
+  _currentTeam = team;
+  _renderSidebarTeamSelector();
+  onTeamChange();
+}
+
 function onTeamChange() {
-  _currentTeam = document.getElementById("teamSelector").value;
   loadChat();
   loadAgents();
   loadSidebar();
 }
+
+// Click handler for the team selector row
+(function _initTeamSelector() {
+  const container = document.getElementById("sidebarTeamSelector");
+  if (container) {
+    container.addEventListener("click", _toggleTeamDropdown);
+  }
+})();
+
+// Close dropdown on outside click
+document.addEventListener("click", function (e) {
+  if (!_teamDropdownOpen) return;
+  const container = document.getElementById("sidebarTeamSelector");
+  if (container && !container.contains(e.target)) {
+    _closeTeamDropdown();
+  }
+});
 
 // =====================================================================
 // Audio / mute
@@ -1867,6 +1946,7 @@ function toggleMic() {
 // =====================================================================
 document.addEventListener("keydown", function (e) {
   if (e.key === "Escape") {
+    if (_teamDropdownOpen) { _closeTeamDropdown(); return; }
     if (_panelTask !== null) closeTaskPanel();
     else closePanel();
   }
@@ -1917,6 +1997,8 @@ loadTeams().then(() => {
 Object.assign(window, {
   switchTab,
   onTeamChange,
+  _toggleTeamDropdown,
+  _closeTeamDropdown,
   toggleMute,
   cycleTheme,
   loadChat,

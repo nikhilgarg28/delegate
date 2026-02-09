@@ -17,8 +17,11 @@
     <span class="sidebar-boss-label">Boss</span>
   </div>
 
-  <!-- 2. Team selector slot (if approved — see team-selector-sidebar.md Option A) -->
-  <!-- <div class="sidebar-widget sidebar-team-widget" id="sidebarTeamSelector">...</div> -->
+  <!-- 2. Team selector -->
+  <div class="sidebar-team-selector" id="sidebarTeamSelector">
+    <span class="sidebar-team-name" id="sidebarTeamName">Loading...</span>
+    <span class="sidebar-team-chevron" id="sidebarTeamChevron">▾</span>
+  </div>
 
   <!-- 3. Action Required widget -->
   <div class="sidebar-widget sidebar-action-widget" id="sidebarActions">
@@ -69,7 +72,6 @@
 
 <div class="main">
 <div class="header">
-  <select class="team-selector" id="teamSelector" onchange="onTeamChange()"></select>
   <div class="tabs">
     <button class="tab active" data-tab="chat" onclick="switchTab('chat')">Chat</button>
     <button class="tab" data-tab="tasks" onclick="switchTab('tasks')">Tasks</button>
