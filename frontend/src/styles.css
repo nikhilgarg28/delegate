@@ -339,10 +339,6 @@ body {
   align-items: center;
   gap: 6px;
 }
-.sidebar-action-icon {
-  font-size: 12px;
-  line-height: 1;
-}
 .sidebar-action-count {
   display: inline-flex;
   align-items: center;

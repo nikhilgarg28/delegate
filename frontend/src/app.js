@@ -400,20 +400,17 @@ function fmtTime(iso) {
 }
 function fmtTimestamp(iso) {
   if (!iso) return "\u2014";
+  const t = _relativeTimeParts(iso);
+  if (!t) return "\u2014";
+  if (t.sec < 60) return "Just now";
+  if (t.min < 60) return t.min + " min ago";
   const d = new Date(iso);
-  const now = new Date();
-  const diff = now - d;
-  const sec = Math.floor(diff / 1000);
-  const min = Math.floor(sec / 60);
-  const hr = Math.floor(min / 60);
-  if (sec < 60) return "Just now";
-  if (min < 60) return min + " min ago";
   const time = d.toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   });
-  if (hr < 24) return time;
+  if (t.hr < 24) return time;
   const mon = d.toLocaleDateString([], { month: "short", day: "numeric" });
   return mon + ", " + time;
 }
@@ -1144,28 +1141,35 @@ function _fmtDuration(sec) {
   return m + "m";
 }
 
-function _fmtRelativeTime(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const now = new Date();
-  const sec = Math.floor((now - d) / 1000);
-  const min = Math.floor(sec / 60);
-  const hr = Math.floor(min / 60);
-  if (sec < 60) return "just now";
-  if (min < 60) return min + "m ago";
-  if (hr < 24) return hr + "h ago";
-  return Math.floor(hr / 24) + "d ago";
-}
-
-function _fmtRelativeTimeShort(iso) {
-  if (!iso) return "";
+/**
+ * Shared helper: compute relative time parts from an ISO timestamp.
+ * Returns { sec, min, hr, days } or null if iso is falsy.
+ */
+function _relativeTimeParts(iso) {
+  if (!iso) return null;
   const sec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   const min = Math.floor(sec / 60);
   const hr = Math.floor(min / 60);
-  if (sec < 60) return "<1m";
-  if (min < 60) return min + "m";
-  if (hr < 24) return hr + "h";
-  return Math.floor(hr / 24) + "d";
+  const days = Math.floor(hr / 24);
+  return { sec, min, hr, days };
+}
+
+function _fmtRelativeTime(iso) {
+  const t = _relativeTimeParts(iso);
+  if (!t) return "";
+  if (t.sec < 60) return "Just now";
+  if (t.min < 60) return t.min + "m ago";
+  if (t.hr < 24) return t.hr + "h ago";
+  return t.days + "d ago";
+}
+
+function _fmtRelativeTimeShort(iso) {
+  const t = _relativeTimeParts(iso);
+  if (!t) return "";
+  if (t.sec < 60) return "<1m";
+  if (t.min < 60) return t.min + "m";
+  if (t.hr < 24) return t.hr + "h";
+  return t.days + "d";
 }
 
 /**
@@ -1367,7 +1371,7 @@ async function loadSidebar() {
       '<div class="sidebar-stat-row"><span class="sidebar-stat-label">Spent lifetime</span><span class="stat-value">$' + totalCost.toFixed(2) + '</span></div>';
     // ---- Action Required widget ----
     const actionItems = tasks.filter(function (t) {
-      return t.status === "needs_merge" || t.status === "review";
+      return t.status === "needs_merge";
     }).sort(function (a, b) {
       return (a.updated_at || "").localeCompare(b.updated_at || "");
     });
