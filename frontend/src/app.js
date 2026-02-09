@@ -604,6 +604,19 @@ let _knownAgentNames = [];
 function updateKnownAgents(agents) {
   _knownAgentNames = (agents || []).map(function (a) { return a.name; });
 }
+/**
+ * Detect shared/ file paths in text and make them clickable.
+ * Matches paths like shared/specs/foo.md, shared/decisions/bar.md, etc.
+ * Only matches in text nodes (between > and <, or at start/end of string).
+ */
+function linkifyFilePaths(html) {
+  return html.replace(/(^[^<]+|>[^<]*)/g, function (match) {
+    return match.replace(/\bshared\/[\w\-\.\/]+\.[\w]+/g, function (path) {
+      return '<span class="file-link" data-file-path="' + esc(path) + '" onclick="event.stopPropagation();openFilePanel(\'' + esc(path).replace(/'/g, "\\'") + '\')">' + esc(path) + '</span>';
+    });
+  });
+}
+
 function agentifyRefs(html) {
   if (!_knownAgentNames.length) return html;
   // Build a regex that matches capitalized agent names in text nodes
@@ -748,7 +761,7 @@ async function openTaskPanel(taskId) {
     // Description
     if (task.description) {
       body += '<div class="task-panel-section"><div class="task-panel-section-label">Description</div>';
-      body += '<div class="task-panel-desc md-content">' + linkifyTaskRefs(renderMarkdown(task.description)) + '</div>';
+      body += '<div class="task-panel-desc md-content">' + linkifyFilePaths(linkifyTaskRefs(renderMarkdown(task.description))) + '</div>';
       body += '</div>';
     }
     // Approval actions
@@ -871,9 +884,9 @@ async function _loadChatInner() {
   log.innerHTML = msgs
     .map((m) => {
       if (m.type === "event")
-        return `<div class="msg-event"><div class="msg-event-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 7a6 6 0 1 0 2-4.5"/><polyline points="1 1 1 3.5 3.5 3.5"/></svg></div><span class="msg-event-text">${agentifyRefs(linkifyTaskRefs(esc(m.content)))}</span><span class="msg-event-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div>`;
+        return `<div class="msg-event"><div class="msg-event-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 7a6 6 0 1 0 2-4.5"/><polyline points="1 1 1 3.5 3.5 3.5"/></svg></div><span class="msg-event-text">${agentifyRefs(linkifyFilePaths(linkifyTaskRefs(esc(m.content))))}</span><span class="msg-event-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div>`;
       const c = avatarColor(m.sender);
-      return `<div class="msg"><div class="msg-avatar" style="background:${c}">${avatarInitial(m.sender)}</div><div class="msg-body"><div class="msg-header"><span class="msg-sender" style="cursor:pointer" onclick="openAgentPanel('${m.sender}')">${cap(m.sender)}</span><span class="msg-recipient">\u2192 ${cap(m.recipient)}</span><span class="msg-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div><div class="msg-content md-content">${linkifyTaskRefs(renderMarkdown(m.content))}</div></div></div>`;
+      return `<div class="msg"><div class="msg-avatar" style="background:${c}">${avatarInitial(m.sender)}</div><div class="msg-body"><div class="msg-header"><span class="msg-sender" style="cursor:pointer" onclick="openAgentPanel('${m.sender}')">${cap(m.sender)}</span><span class="msg-recipient">\u2192 ${cap(m.recipient)}</span><span class="msg-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div><div class="msg-content md-content">${linkifyFilePaths(linkifyTaskRefs(renderMarkdown(m.content)))}</div></div></div>`;
     })
     .join("");
   if (wasNearBottom) log.scrollTop = log.scrollHeight;
@@ -1448,6 +1461,73 @@ async function openAgentPanel(agentName) {
 }
 
 // =====================================================================
+// File viewer panel (re-uses the diff slide-over)
+// =====================================================================
+let _filePanelPath = "";
+
+function _fileExtension(path) {
+  const dot = path.lastIndexOf(".");
+  return dot !== -1 ? path.substring(dot + 1).toLowerCase() : "";
+}
+
+function _fileBreadcrumb(path) {
+  var parts = path.split("/");
+  return parts.map(function (p, i) {
+    if (i === parts.length - 1) return '<span class="file-breadcrumb-current">' + esc(p) + '</span>';
+    return '<span class="file-breadcrumb-dir">' + esc(p) + '</span>';
+  }).join('<span class="file-breadcrumb-sep">/</span>');
+}
+
+async function openFilePanel(filePath) {
+  // Close task panel if open
+  if (_panelTask !== null) closeTaskPanel();
+  _panelMode = "file";
+  _panelAgent = null;
+  _filePanelPath = filePath;
+  _agentTabData = {};
+  _diffRawText = "";
+  const panel = document.getElementById("diffPanel");
+  const backdrop = document.getElementById("diffBackdrop");
+  // Set up header
+  document.getElementById("diffPanelTitle").innerHTML = _fileBreadcrumb(filePath);
+  document.getElementById("diffPanelBranch").textContent = "";
+  document.getElementById("diffPanelCommits").innerHTML = "";
+  document.getElementById("diffPanelCommits").style.display = "none";
+  // Hide the tabs for file viewer
+  var tabsEl = panel.querySelector(".diff-panel-tabs");
+  tabsEl.innerHTML = "";
+  // Loading state
+  document.getElementById("diffPanelBody").innerHTML = '<div class="diff-empty">Loading file...</div>';
+  panel.classList.add("open");
+  backdrop.classList.add("open");
+  try {
+    // The API expects path relative to shared/, but we receive paths like "shared/specs/foo.md"
+    // Strip the leading "shared/" prefix since the API base is already the shared dir
+    var apiPath = filePath;
+    if (apiPath.startsWith("shared/")) apiPath = apiPath.substring(7);
+    var res = await fetch("/teams/" + _currentTeam + "/files/content?path=" + encodeURIComponent(apiPath));
+    if (!res.ok) {
+      var err = await res.json().catch(function () { return {}; });
+      document.getElementById("diffPanelBody").innerHTML = '<div class="diff-empty">' + esc(err.detail || "Failed to load file") + '</div>';
+      return;
+    }
+    var data = await res.json();
+    // Show modified time in subtitle
+    document.getElementById("diffPanelBranch").textContent = data.modified ? "Modified " + fmtTimestamp(data.modified) : "";
+    // Render content based on file extension
+    var ext = _fileExtension(filePath);
+    var body = document.getElementById("diffPanelBody");
+    if (ext === "md" || ext === "markdown") {
+      body.innerHTML = '<div class="file-viewer-content md-content">' + renderMarkdown(data.content) + '</div>';
+    } else {
+      body.innerHTML = '<div class="file-viewer-content"><pre class="file-viewer-code"><code>' + esc(data.content) + '</code></pre></div>';
+    }
+  } catch (e) {
+    document.getElementById("diffPanelBody").innerHTML = '<div class="diff-empty">Failed to load file</div>';
+  }
+}
+
+// =====================================================================
 // Message sending
 // =====================================================================
 async function sendMsg() {
@@ -1658,6 +1738,7 @@ Object.assign(window, {
   openTaskPanel,
   closeTaskPanel,
   switchTaskPanelDiffTab,
+  openFilePanel,
   onChatSearchInput,
   onChatFilterChange,
   onTaskSearchInput,

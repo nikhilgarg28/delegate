@@ -784,3 +784,39 @@ body {
 /* Strong & emphasis */
 .md-content strong { font-weight: 600; color: var(--text-primary); }
 .md-content em { font-style: italic; }
+
+/* ---- File path links (clickable shared/ paths) ---- */
+.file-link {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--accent-blue);
+  cursor: pointer;
+  font-size: 0.95em;
+  transition: color 0.15s;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(96,165,250,0.4);
+}
+.file-link:hover { text-decoration-style: solid; text-decoration-color: var(--accent-blue); }
+
+/* ---- File viewer panel content ---- */
+.file-viewer-content { padding: 4px 0; }
+.file-viewer-code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  background: var(--bg-active);
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  white-space: pre;
+  tab-size: 4;
+}
+.file-viewer-code code { background: transparent; padding: 0; font-size: inherit; color: inherit; }
+
+/* File breadcrumb in panel header */
+.file-breadcrumb-dir { color: var(--text-muted); }
+.file-breadcrumb-sep { color: var(--text-faint); margin: 0 2px; }
+.file-breadcrumb-current { color: var(--text-heading); font-weight: 600; }
