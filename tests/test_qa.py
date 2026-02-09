@@ -1,6 +1,7 @@
 """Tests for boss/qa.py — QA agent and review workflow."""
 
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -195,7 +196,7 @@ class TestRunTests:
     def test_passing_tests(self, qa_team):
         hc_home, repo_path = qa_team
         repo_dir = clone_and_checkout(hc_home, TEAM, repo_path, "feature-xyz")
-        result = run_tests(repo_dir, test_command="python -m pytest -v")
+        result = run_tests(repo_dir, test_command=f"{sys.executable} -m pytest -v")
         assert result.approved
         assert "passed" in result.output.lower()
 
@@ -206,7 +207,7 @@ class TestRunTests:
         (repo_dir / "test_app.py").write_text(
             "def test_broken():\n    assert False\n"
         )
-        result = run_tests(repo_dir, test_command="python -m pytest -v")
+        result = run_tests(repo_dir, test_command=f"{sys.executable} -m pytest -v")
         assert not result.approved
 
     def test_no_test_runner(self, tmp_path):
@@ -222,7 +223,7 @@ class TestHandleReviewRequest:
     def test_full_pipeline_approved(self, qa_team):
         hc_home, repo_path = qa_team
         req = ReviewRequest(repo=repo_path, branch="feature-xyz", requester="alice")
-        result = handle_review_request(hc_home, TEAM, req, test_command="python -m pytest -v")
+        result = handle_review_request(hc_home, TEAM, req, test_command=f"{sys.executable} -m pytest -v")
         assert result.approved
 
         # QA should have sent results to alice and manager
@@ -243,7 +244,7 @@ class TestHandleReviewRequest:
         subprocess.run(["git", "checkout", "main"], cwd=repo_path, capture_output=True, check=True)
 
         req = ReviewRequest(repo=repo_path, branch="broken", requester="alice")
-        result = handle_review_request(hc_home, TEAM, req, test_command="python -m pytest -v")
+        result = handle_review_request(hc_home, TEAM, req, test_command=f"{sys.executable} -m pytest -v")
         assert not result.approved
 
         events = get_messages(hc_home, msg_type="event")
@@ -330,7 +331,7 @@ class TestTaskStatusTransitions:
 
         # Mock coverage check to pass (avoid needing pytest-cov in test repo)
         with patch("boss.qa.check_test_coverage", return_value=(True, "Coverage: 85% (minimum: 60%)")):
-            result = handle_review_request(hc_home, TEAM, req, test_command="python -m pytest -v")
+            result = handle_review_request(hc_home, TEAM, req, test_command=f"{sys.executable} -m pytest -v")
 
         assert result.approved
         task = get_task(hc_home, task_id)
@@ -354,7 +355,7 @@ class TestTaskStatusTransitions:
         subprocess.run(["git", "checkout", "main"], cwd=repo_path, capture_output=True, check=True)
 
         req = ReviewRequest(repo=repo_path, branch=branch_name, requester="alice")
-        result = handle_review_request(hc_home, TEAM, req, test_command="python -m pytest -v")
+        result = handle_review_request(hc_home, TEAM, req, test_command=f"{sys.executable} -m pytest -v")
 
         assert not result.approved
         task = get_task(hc_home, task_id)
@@ -367,7 +368,7 @@ class TestTaskStatusTransitions:
 
         # Mock coverage check to fail
         with patch("boss.qa.check_test_coverage", return_value=(False, "Coverage: 30% is below minimum 60%.")):
-            result = handle_review_request(hc_home, TEAM, req, test_command="python -m pytest -v")
+            result = handle_review_request(hc_home, TEAM, req, test_command=f"{sys.executable} -m pytest -v")
 
         assert not result.approved
         assert "Coverage check failed" in result.output
@@ -380,7 +381,7 @@ class TestTaskStatusTransitions:
         req = ReviewRequest(repo=repo_path, branch="feature-xyz", requester="alice")
 
         with patch("boss.qa.check_test_coverage", return_value=(True, "Coverage OK")):
-            result = handle_review_request(hc_home, TEAM, req, test_command="python -m pytest -v")
+            result = handle_review_request(hc_home, TEAM, req, test_command=f"{sys.executable} -m pytest -v")
 
         assert result.approved  # should still pass, just no task status update
 
@@ -392,7 +393,7 @@ class TestUpdatedReviewMessages:
         req = ReviewRequest(repo=repo_path, branch="feature-xyz", requester="alice")
 
         with patch("boss.qa.check_test_coverage", return_value=(True, "Coverage: 85%")):
-            result = handle_review_request(hc_home, TEAM, req, test_command="python -m pytest -v")
+            result = handle_review_request(hc_home, TEAM, req, test_command=f"{sys.executable} -m pytest -v")
 
         assert result.approved
         # Check outbox for the APPROVED message
@@ -412,7 +413,7 @@ class TestUpdatedReviewMessages:
         subprocess.run(["git", "checkout", "main"], cwd=repo_path, capture_output=True, check=True)
 
         req = ReviewRequest(repo=repo_path, branch="broken", requester="alice")
-        result = handle_review_request(hc_home, TEAM, req, test_command="python -m pytest -v")
+        result = handle_review_request(hc_home, TEAM, req, test_command=f"{sys.executable} -m pytest -v")
 
         assert not result.approved
         qa_outbox = read_outbox(hc_home, TEAM, "qa", pending_only=False)
