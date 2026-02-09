@@ -19,13 +19,11 @@ Usage:
 
 import argparse
 import asyncio
-import json
 import logging
 import os
 import re
 import sys
 import time
-import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -57,9 +55,9 @@ class AgentLogger:
         [agent:<name>] [turn:<N>] <message>
     """
 
-    def __init__(self, agent_name: str, logger: logging.Logger | None = None):
+    def __init__(self, agent_name: str, base_logger: logging.Logger | None = None):
         self.agent = agent_name
-        self._logger = logger or logging.getLogger(f"boss.agent.{agent_name}")
+        self._logger = base_logger or logging.getLogger(f"boss.agent.{agent_name}")
         self.turn: int = 0
         self.session_start: float = time.monotonic()
 
@@ -670,7 +668,7 @@ def _extract_tool_calls(msg: Any) -> list[str]:
     """Extract tool call names from a response message."""
     tools = []
     if hasattr(msg, "content"):
-        for block in getattr(msg, "content", []):
+        for block in msg.content:
             if hasattr(block, "name"):
                 tools.append(block.name)
     return tools
@@ -679,7 +677,7 @@ def _extract_tool_calls(msg: Any) -> list[str]:
 def _append_to_worklog(lines: list[str], msg: Any) -> None:
     """Append assistant / tool content from a message to the worklog."""
     if hasattr(msg, "content"):
-        for block in getattr(msg, "content", []):
+        for block in msg.content:
             if hasattr(block, "text"):
                 lines.append(f"**Assistant**: {block.text}\n")
             elif hasattr(block, "name"):
@@ -808,6 +806,8 @@ async def run_agent_loop(
         options_kwargs["max_turns"] = max_turns
 
     options = sdk_options_class(**options_kwargs)
+
+    turn = 0
 
     try:
         alog.client_connecting()
@@ -970,7 +970,7 @@ async def run_agent_loop(
     finally:
         # Log session end summary
         alog.session_end_log(
-            turns=turn if 'turn' in dir() else 0,
+            turns=turn,
             tokens_in=total_tokens_in,
             tokens_out=total_tokens_out,
             cost_usd=total_cost_usd,
@@ -999,7 +999,7 @@ async def run_agent_loop(
         context_path = ad / "context.md"
         context_path.write_text(
             f"Last session: {datetime.now(timezone.utc).isoformat()}\n"
-            f"Turns: {turn if 'turn' in dir() else 0}\n"
+            f"Turns: {turn}\n"
             f"Tokens: {total_tokens_in + total_tokens_out}\n"
         )
 

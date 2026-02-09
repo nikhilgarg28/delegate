@@ -478,7 +478,7 @@ class TestAgentLoggerCustomLogger:
 
     def test_uses_custom_logger(self):
         custom_logger = logging.getLogger("custom.test")
-        alog = AgentLogger("alice", logger=custom_logger)
+        alog = AgentLogger("alice", base_logger=custom_logger)
         assert alog._logger is custom_logger
 
     def test_default_logger_name(self):
