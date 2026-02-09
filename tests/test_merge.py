@@ -224,6 +224,127 @@ class TestMergeTask:
         updated = get_task(hc_home, task["id"])
         assert updated["status"] == "merged"
 
+    def test_rebase_onto_with_base_sha(self, hc_home, tmp_path):
+        """When base_sha is set on the task, rebase uses --onto to replay
+        only the agent's commits (after base_sha) onto current main."""
+        repo = _setup_git_repo(tmp_path)
+
+        # Record the initial commit SHA — this will be our base_sha
+        base_sha_result = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=str(repo),
+            capture_output=True, text=True, check=True,
+        )
+        base_sha = base_sha_result.stdout.strip()
+
+        # Create a feature branch with one commit
+        branch = "alice/T0001-onto"
+        _make_feature_branch(repo, branch, filename="onto_feature.py", content="# onto\n")
+
+        # Advance main with a non-conflicting commit (simulates main moving forward)
+        (repo / "mainfile.txt").write_text("main extra\n")
+        subprocess.run(["git", "add", "."], cwd=str(repo), capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "Advance main"],
+            cwd=str(repo), capture_output=True, check=True,
+        )
+
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        task = _make_needs_merge_task(hc_home, repo="myrepo", branch=branch)
+        update_task(hc_home, task["id"], approval_status="approved", base_sha=base_sha)
+
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
+        assert result.success is True, f"Merge with --onto failed: {result.message}"
+
+        updated = get_task(hc_home, task["id"])
+        assert updated["status"] == "merged"
+        assert (repo / "onto_feature.py").exists()  # Agent's commit landed
+
+    def test_rebase_fallback_without_base_sha(self, hc_home, tmp_path):
+        """When base_sha is empty/None the merge falls back to plain rebase."""
+        repo = _setup_git_repo(tmp_path)
+        branch = "alice/T0001-nobase"
+        _make_feature_branch(repo, branch, filename="nobase.py", content="# no base\n")
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        task = _make_needs_merge_task(hc_home, repo="myrepo", branch=branch)
+        # Explicitly set base_sha to empty string (simulating a task without it)
+        update_task(hc_home, task["id"], approval_status="approved", base_sha="")
+
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
+        assert result.success is True, f"Fallback merge failed: {result.message}"
+
+        updated = get_task(hc_home, task["id"])
+        assert updated["status"] == "merged"
+        assert (repo / "nobase.py").exists()
+
+    def test_rebase_onto_excludes_reverted_commits(self, hc_home, tmp_path):
+        """--onto correctly excludes commits that were reverted from main.
+
+        Scenario:
+        - main: M0 → M1 → M2 (base_sha = M2)
+        - agent branch: M2 → A1
+        - main is then reset to M0 (M1, M2 are reverted)
+        - rebase --onto main M2 branch replays only A1 onto M0
+        """
+        repo = _setup_git_repo(tmp_path)
+
+        # M0 is the initial commit. Add M1 and M2.
+        (repo / "m1.txt").write_text("m1\n")
+        subprocess.run(["git", "add", "."], cwd=str(repo), capture_output=True)
+        subprocess.run(["git", "commit", "-m", "M1"], cwd=str(repo), capture_output=True, check=True)
+
+        (repo / "m2.txt").write_text("m2\n")
+        subprocess.run(["git", "add", "."], cwd=str(repo), capture_output=True)
+        subprocess.run(["git", "commit", "-m", "M2"], cwd=str(repo), capture_output=True, check=True)
+
+        # Record base_sha (M2)
+        base_sha_result = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=str(repo),
+            capture_output=True, text=True, check=True,
+        )
+        base_sha = base_sha_result.stdout.strip()
+
+        # Create agent branch from M2
+        branch = "alice/T0001-revert"
+        subprocess.run(["git", "checkout", "-b", branch], cwd=str(repo), capture_output=True, check=True)
+        (repo / "agent_work.py").write_text("# agent work\n")
+        subprocess.run(["git", "add", "."], cwd=str(repo), capture_output=True)
+        subprocess.run(["git", "commit", "-m", "Agent commit A1"], cwd=str(repo), capture_output=True, check=True)
+        subprocess.run(["git", "checkout", "main"], cwd=str(repo), capture_output=True, check=True)
+
+        # Reset main back to M0 (removing M1 and M2)
+        m0_result = subprocess.run(
+            ["git", "rev-parse", "HEAD~2"], cwd=str(repo),
+            capture_output=True, text=True, check=True,
+        )
+        m0_sha = m0_result.stdout.strip()
+        subprocess.run(
+            ["git", "reset", "--hard", m0_sha], cwd=str(repo),
+            capture_output=True, check=True,
+        )
+
+        # Verify main no longer has m1.txt or m2.txt
+        assert not (repo / "m1.txt").exists()
+        assert not (repo / "m2.txt").exists()
+
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        task = _make_needs_merge_task(hc_home, repo="myrepo", branch=branch)
+        update_task(hc_home, task["id"], approval_status="approved", base_sha=base_sha)
+
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
+        assert result.success is True, f"Rebase --onto with reverted commits failed: {result.message}"
+
+        updated = get_task(hc_home, task["id"])
+        assert updated["status"] == "merged"
+
+        # Agent's work should be on main
+        assert (repo / "agent_work.py").exists()
+        # M1 and M2 files should NOT be on main (they were reverted)
+        assert not (repo / "m1.txt").exists(), "m1.txt should not be on main (reverted commit)"
+        assert not (repo / "m2.txt").exists(), "m2.txt should not be on main (reverted commit)"
+
 
 # ---------------------------------------------------------------------------
 # merge_once tests

@@ -3,7 +3,7 @@
 The merge sequence for a task in ``needs_merge`` with ``approval_status == 'approved'``
 (or ``approval == 'auto'`` on the repo):
 
-1. ``git rebase main <branch>``  — rebase the feature branch onto latest main.
+1. ``git rebase --onto main <base_sha> <branch>``  — rebase the agent's commits onto latest main.
 2. If conflict: set task to ``conflict``, notify manager, abort.
 3. Run test suite on the rebased branch.
 4. If tests fail: set task to ``conflict``, notify manager.
@@ -52,8 +52,17 @@ def _run_git(args: list[str], cwd: str, **kwargs) -> subprocess.CompletedProcess
     )
 
 
-def _rebase_branch(repo_dir: str, branch: str) -> tuple[bool, str]:
+def _rebase_branch(repo_dir: str, branch: str, base_sha: str | None = None) -> tuple[bool, str]:
     """Rebase the branch onto main.
+
+    When *base_sha* is provided the rebase uses ``--onto``::
+
+        git rebase --onto main <base_sha> <branch>
+
+    This ensures only the commits *after* base_sha are replayed onto main,
+    which is important when main has been reset/reverted since the task
+    started.  When base_sha is ``None`` or empty the original behaviour is
+    preserved (``git rebase main <branch>``).
 
     Stashes any unstaged changes before rebasing and restores them after,
     so that untracked/modified files in the working directory (e.g. generated
@@ -65,7 +74,11 @@ def _rebase_branch(repo_dir: str, branch: str) -> tuple[bool, str]:
     stash_result = _run_git(["stash", "--include-untracked"], cwd=repo_dir)
     did_stash = stash_result.returncode == 0 and "No local changes" not in stash_result.stdout
 
-    result = _run_git(["rebase", "main", branch], cwd=repo_dir)
+    if base_sha:
+        rebase_cmd = ["rebase", "--onto", "main", base_sha, branch]
+    else:
+        rebase_cmd = ["rebase", "main", branch]
+    result = _run_git(rebase_cmd, cwd=repo_dir)
     if result.returncode != 0:
         # Abort the failed rebase to leave repo in clean state
         _run_git(["rebase", "--abort"], cwd=repo_dir)
@@ -196,7 +209,8 @@ def merge_task(
             logger.warning("Could not remove worktree for %s before merge: %s", format_task_id(task_id), exc)
 
     # Step 1: Rebase onto main
-    ok, output = _rebase_branch(repo_str, branch)
+    base_sha = task.get("base_sha", "")
+    ok, output = _rebase_branch(repo_str, branch, base_sha=base_sha)
     if not ok:
         change_status(hc_home, task_id, "conflict")
         notify_conflict(hc_home, team, task, conflict_details=output[:500])
