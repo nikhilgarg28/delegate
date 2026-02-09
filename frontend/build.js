@@ -14,6 +14,17 @@ async function build() {
     path.join(outdir, "index.html")
   );
 
+  // Copy public/ assets (favicon, icons, etc.)
+  const publicDir = path.join(__dirname, "public");
+  if (fs.existsSync(publicDir)) {
+    for (const file of fs.readdirSync(publicDir)) {
+      fs.copyFileSync(
+        path.join(publicDir, file),
+        path.join(outdir, file)
+      );
+    }
+  }
+
   const ctx = await esbuild.context({
     entryPoints: [
       path.join(__dirname, "src/app.js"),
@@ -33,12 +44,21 @@ async function build() {
 
   if (watch) {
     await ctx.watch();
-    // Also watch index.html and copy on change
+    // Also watch index.html and public/ — copy on change
     const htmlPath = path.join(__dirname, "index.html");
     fs.watchFile(htmlPath, { interval: 300 }, () => {
       fs.copyFileSync(htmlPath, path.join(outdir, "index.html"));
       console.log("Copied index.html");
     });
+    if (fs.existsSync(publicDir)) {
+      for (const file of fs.readdirSync(publicDir)) {
+        const src = path.join(publicDir, file);
+        fs.watchFile(src, { interval: 300 }, () => {
+          fs.copyFileSync(src, path.join(outdir, file));
+          console.log(`Copied public/${file}`);
+        });
+      }
+    }
     console.log("Watching for changes...");
   } else {
     await ctx.rebuild();
