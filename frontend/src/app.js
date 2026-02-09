@@ -933,10 +933,10 @@ async function loadSidebar() {
         ')"><span class="sidebar-task-dot dot-' + t.status + '" title="' + fmtStatus(t.status) + '"></span>' +
         '<span class="sidebar-task-id">' +
         tid +
+        '</span><span class="sidebar-task-name">' +
+        (t.assignee ? cap(t.assignee) : "") +
         '</span><span class="sidebar-task-title">' +
         esc(t.title) +
-        '</span><span class="sidebar-task-assignee">' +
-        (t.assignee ? cap(t.assignee) : "") +
         "</span></div>";
     }
     document.getElementById("sidebarTaskList").innerHTML = taskHtml;

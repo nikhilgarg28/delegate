@@ -191,6 +191,9 @@ body {
 .sidebar-widget { padding: 16px; border-bottom: 1px solid var(--border-subtle); }
 .sidebar-widget:last-child { border-bottom: none; }
 .sidebar-widget-header { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+/* Status widget: header on own line, stat grid full-width below */
+.sidebar-status-widget { display: flex; flex-direction: column; }
+.sidebar-status-header { font-size: 12px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-heading); margin-bottom: 10px; display: flex; align-items: center; gap: 4px; }
 .sidebar-stat-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
 .sidebar-stat-row .stat-value { color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums; }
 /* Status dot in widget header */
@@ -225,10 +228,8 @@ body {
 .sidebar-task-row { display: flex; align-items: center; gap: 8px; height: 28px; min-height: 28px; font-size: 12px; padding: 0 4px; border-radius: 4px; transition: background 0.15s; }
 .sidebar-task-row:hover { background: var(--bg-hover); }
 .sidebar-task-id { color: var(--text-muted); font-family: 'SF Mono', 'Fira Code', monospace; font-variant-numeric: tabular-nums; flex-shrink: 0; min-width: 42px; font-size: 11px; }
+.sidebar-task-name { color: var(--text-primary); font-size: 11px; font-weight: 500; flex-shrink: 0; width: 60px; min-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-task-title { color: var(--text-secondary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-task-badge { flex-shrink: 0; }
-.sidebar-task-badge .badge { font-size: 10px; padding: 2px 6px; }
-.sidebar-task-assignee { color: var(--text-faint); font-size: 11px; flex-shrink: 0; min-width: 56px; text-align: right; }
 .sidebar-see-all { color: var(--accent-blue); font-size: 11px; cursor: pointer; text-decoration: none; text-transform: none; letter-spacing: normal; }
 .sidebar-see-all:hover { text-decoration: underline; }
 @media (max-width: 900px) { .sidebar { display: none; } }
