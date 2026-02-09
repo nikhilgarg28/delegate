@@ -39,6 +39,7 @@ from boss.paths import (
     home as _default_home,
     agents_dir as _agents_dir,
     agent_dir as _agent_dir,
+    shared_dir as _shared_dir,
     teams_dir as _teams_dir,
 )
 from boss.config import get_boss
@@ -479,6 +480,84 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
         sessions.reverse()
         return {"sessions": sessions}
+
+    # --- Shared files endpoints ---
+
+    MAX_FILE_SIZE = 1_000_000  # 1 MB truncation limit
+
+    @app.get("/teams/{team}/files")
+    def list_shared_files(team: str, path: str | None = None):
+        """List files in the team's shared/ directory or a subdirectory."""
+        base = _shared_dir(hc_home, team)
+        if not base.is_dir():
+            return {"files": []}
+
+        if path:
+            target = (base / path).resolve()
+            try:
+                target.relative_to(base.resolve())
+            except ValueError:
+                raise HTTPException(
+                    status_code=403, detail="Path traversal not allowed"
+                )
+        else:
+            target = base
+
+        if not target.is_dir():
+            raise HTTPException(
+                status_code=404, detail=f"Directory not found: {path}"
+            )
+
+        entries = []
+        for item in target.iterdir():
+            stat = item.stat()
+            entries.append(
+                {
+                    "name": item.name,
+                    "path": str(item.relative_to(base)),
+                    "size": stat.st_size,
+                    "modified": datetime.fromtimestamp(
+                        stat.st_mtime, tz=timezone.utc
+                    ).isoformat(),
+                    "is_dir": item.is_dir(),
+                }
+            )
+
+        entries.sort(key=lambda e: (not e["is_dir"], e["name"].lower()))
+        return {"files": entries}
+
+    @app.get("/teams/{team}/files/content")
+    def read_shared_file(team: str, path: str):
+        """Read a specific file from the team's shared/ directory."""
+        base = _shared_dir(hc_home, team)
+        target = (base / path).resolve()
+
+        try:
+            target.relative_to(base.resolve())
+        except ValueError:
+            raise HTTPException(
+                status_code=403, detail="Path traversal not allowed"
+            )
+
+        if not target.is_file():
+            raise HTTPException(
+                status_code=404, detail=f"File not found: {path}"
+            )
+
+        stat = target.stat()
+        content = target.read_text(errors="replace")
+        if len(content) > MAX_FILE_SIZE:
+            content = content[:MAX_FILE_SIZE]
+
+        return {
+            "path": str(target.relative_to(base)),
+            "name": target.name,
+            "size": stat.st_size,
+            "content": content,
+            "modified": datetime.fromtimestamp(
+                stat.st_mtime, tz=timezone.utc
+            ).isoformat(),
+        }
 
     # --- Static files ---
     _static_dir = Path(__file__).parent / "static"

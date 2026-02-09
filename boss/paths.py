@@ -81,6 +81,11 @@ def agent_worktrees_dir(hc_home: Path, team: str, agent: str) -> Path:
     return agent_dir(hc_home, team, agent) / "worktrees"
 
 
+def shared_dir(hc_home: Path, team: str) -> Path:
+    """Team-level shared knowledge base directory."""
+    return team_dir(hc_home, team) / "shared"
+
+
 def charter_dir(hc_home: Path, team: str) -> Path:
     """Team-level charter directory (for override.md)."""
     return team_dir(hc_home, team)
