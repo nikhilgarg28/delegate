@@ -143,6 +143,18 @@ html, body { height: 100%; }
   :root:not(.light) .d2h-del .d2h-code-line-ctn { color: var(--diff-del-text) !important; }
 }
 
+/* ---- diff2html sticky positioning overrides ----
+   diff2html applies position:sticky to line numbers and file headers,
+   which causes them to freeze while code scrolls in our .diff-panel-body
+   container. Disable sticky so everything scrolls together. */
+.d2h-code-linenumber,
+.d2h-code-side-linenumber {
+  position: static !important;
+}
+.d2h-file-header {
+  position: static !important;
+}
+
 /* ---- Layout ---- */
 body {
   font-family: 'Geist Sans', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
