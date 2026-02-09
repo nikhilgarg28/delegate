@@ -21,8 +21,22 @@ from pathlib import Path
 import yaml
 
 
-VALID_STATUSES = ("open", "in_progress", "review", "done")
+VALID_STATUSES = ("open", "in_progress", "review", "done", "needs_merge", "merged", "rejected", "conflict")
 VALID_PRIORITIES = ("low", "medium", "high", "critical")
+VALID_APPROVAL_STATUSES = ("", "pending", "approved", "rejected")
+
+# Allowed status transitions: from_status -> set of valid to_statuses
+VALID_TRANSITIONS = {
+    "open": {"in_progress"},
+    "in_progress": {"review"},
+    "review": {"done", "needs_merge"},
+    "needs_merge": {"merged", "rejected", "conflict"},
+    "rejected": {"in_progress"},
+    "conflict": {"in_progress"},
+    # done and merged are terminal states — no transitions out
+    "done": set(),
+    "merged": set(),
+}
 
 
 def _tasks_dir(root: Path) -> Path:
@@ -84,6 +98,8 @@ def create_task(
         "depends_on": depends_on or [],
         "branch": "",
         "commits": [],
+        "rejection_reason": "",
+        "approval_status": "",
     }
 
     path = _task_path(tasks_dir, task_id)
@@ -105,6 +121,8 @@ def get_task(root: Path, task_id: int) -> dict:
     task.setdefault("reviewer", "")
     task.setdefault("branch", "")
     task.setdefault("commits", [])
+    task.setdefault("rejection_reason", "")
+    task.setdefault("approval_status", "")
     return task
 
 
@@ -145,13 +163,31 @@ def set_reviewer(root: Path, task_id: int, reviewer: str) -> dict:
 
 
 def change_status(root: Path, task_id: int, status: str) -> dict:
-    """Change task status. Sets completed_at when moving to 'done'."""
+    """Change task status. Sets completed_at when moving to 'done' or 'merged'.
+
+    Validates status transitions according to VALID_TRANSITIONS.
+    """
     if status not in VALID_STATUSES:
         raise ValueError(f"Invalid status '{status}'. Must be one of: {VALID_STATUSES}")
     old_task = get_task(root, task_id)
-    old_status = old_task["status"].replace("_", " ").title()
+    current = old_task["status"]
+
+    # Validate transition
+    allowed = VALID_TRANSITIONS.get(current, set())
+    if allowed and status not in allowed:
+        raise ValueError(
+            f"Invalid transition: '{current}' \u2192 '{status}'. "
+            f"Allowed transitions from '{current}': {sorted(allowed)}"
+        )
+    if not allowed and current in VALID_TRANSITIONS:
+        # Terminal state — no transitions allowed out
+        raise ValueError(
+            f"Cannot transition from terminal status '{current}'."
+        )
+
+    old_status = current.replace("_", " ").title()
     updates: dict = {"status": status}
-    if status == "done":
+    if status in ("done", "merged"):
         updates["completed_at"] = _now()
     task = update_task(root, task_id, **updates)
 
