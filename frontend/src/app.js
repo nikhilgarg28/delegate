@@ -1232,13 +1232,11 @@ async function loadSidebar() {
       if (openCount > 0) statusDot.classList.add("active");
       else statusDot.classList.remove("active");
     }
-    // Render 3-column stat card grid
+    // Render simple stat rows
     document.getElementById("sidebarStatusContent").innerHTML =
-      '<div class="sidebar-stat-grid">' +
-      '<div class="sidebar-stat-card"><div class="sidebar-stat-number">' + doneToday + '</div><div class="sidebar-stat-label">Done today</div></div>' +
-      '<div class="sidebar-stat-card"><div class="sidebar-stat-number">' + openCount + '</div><div class="sidebar-stat-label">Active tasks</div></div>' +
-      '<div class="sidebar-stat-card"><div class="sidebar-stat-number">$' + totalCost.toFixed(2) + '</div><div class="sidebar-stat-label">Spent lifetime</div></div>' +
-      '</div>';
+      '<div class="sidebar-stat-row"><span class="sidebar-stat-label">Done today</span><span class="stat-value">' + doneToday + '</span></div>' +
+      '<div class="sidebar-stat-row"><span class="sidebar-stat-label">Active tasks</span><span class="stat-value">' + openCount + '</span></div>' +
+      '<div class="sidebar-stat-row"><span class="sidebar-stat-label">Spent lifetime</span><span class="stat-value">$' + totalCost.toFixed(2) + '</span></div>';
     // ---- Action Required widget ----
     const actionItems = tasks.filter(function (t) {
       return t.status === "needs_merge" || t.status === "review";
@@ -1293,7 +1291,7 @@ async function loadSidebar() {
           '<span style="color:var(--text-muted)">\u2014</span> ' +
           esc(currentTask.title);
       } else {
-        taskDisplay = '<span style="color:var(--text-faint);font-style:italic">Available</span>';
+        taskDisplay = '<span style="color:var(--text-faint);font-style:italic">Idle</span>';
       }
       // Last active time (only if agent has PID)
       var lastActiveDisplay = "";

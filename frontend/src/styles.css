@@ -244,15 +244,15 @@ body {
 .sidebar { width: 280px; min-width: 280px; height: 100vh; position: sticky; top: 0; background: var(--bg-sidebar); border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; }
 .sidebar-widget { padding: 16px; border-bottom: 1px solid var(--border-subtle); }
 .sidebar-widget:last-child { border-bottom: none; }
-.sidebar-widget-header { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+.sidebar-widget-header { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.sidebar-widget-header > span:first-child { flex: 1; min-width: 0; }
 /* ---- Boss identity bar ---- */
 .sidebar-boss-bar {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 16px;
-  min-height: 48px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
 }
 .sidebar-boss-label {
@@ -337,17 +337,12 @@ body {
   color: var(--text-muted);
   padding: 4px 4px;
 }
-.sidebar-stat-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+.sidebar-stat-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-secondary); padding: 3px 0; }
+.sidebar-stat-row .sidebar-stat-label { color: var(--text-muted); }
 .sidebar-stat-row .stat-value { color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums; }
 /* Status dot in widget header */
 .sidebar-status-dot { font-size: 10px; margin-right: 4px; color: var(--dot-offline); transition: color 0.2s; }
 .sidebar-status-dot.active { color: #22c55e; text-shadow: 0 0 6px rgba(34,197,94,0.4); }
-/* 3-column stat card grid */
-.sidebar-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.sidebar-stat-card { background: var(--bg-hover); border-radius: 8px; padding: 8px 10px; text-align: center; transition: background 0.15s; }
-.sidebar-stat-card:hover { background: var(--bg-active); }
-.sidebar-stat-number { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-primary); line-height: 1.2; }
-.sidebar-stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 /* Task dot indicators (replacing text badges) */
 .sidebar-task-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
 /* Task status dots — use CSS custom properties for automatic dark mode */
@@ -367,7 +362,7 @@ body {
 .sidebar-agent-dot.dot-stale { background: #eab308; }
 .sidebar-agent-dot.dot-stuck { background: #ef4444; box-shadow: 0 0 4px rgba(239,68,68,0.3); }
 .sidebar-agent-dot.dot-offline { background: var(--dot-offline); }
-.sidebar-agent-name { color: var(--text-primary); font-weight: 500; white-space: nowrap; min-width: 48px; flex-shrink: 0; }
+.sidebar-agent-name { color: var(--text-primary); font-weight: 500; white-space: nowrap; width: 60px; min-width: 60px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; }
 .sidebar-agent-activity { color: var(--text-secondary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 /* Agent last-active time (replaces cost in sidebar) */
 .sidebar-agent-time { color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; flex-shrink: 0; white-space: nowrap; }
