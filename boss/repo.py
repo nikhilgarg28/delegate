@@ -247,16 +247,6 @@ def create_agent_worktree(
 
     if wt_path.exists():
         logger.info("Worktree already exists at %s", wt_path)
-        # Ensure base_sha is recorded even if worktree was created externally
-        try:
-            from boss.task import get_task, update_task
-            task_data = get_task(hc_home, task_id)
-            if not task_data.get("base_sha"):
-                base_sha = _get_main_head(real_repo)
-                update_task(hc_home, task_id, base_sha=base_sha)
-                logger.info("Backfilled base_sha=%s for %s", base_sha[:8], task_id)
-        except Exception as exc:
-            logger.warning("Could not backfill base_sha for %s: %s", task_id, exc)
         return wt_path
 
     # Fetch latest before creating worktree (best effort)

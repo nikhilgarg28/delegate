@@ -421,14 +421,6 @@ def get_task_workspace(
     from boss.repo import get_worktree_path
     wt_path = get_worktree_path(hc_home, team, repo_name, agent, task["id"])
     if wt_path.is_dir():
-        # Backfill branch on the task if it wasn't recorded
-        if not task.get("branch"):
-            task_id = task["id"]
-            title = task.get("title", "")
-            branch = _branch_name(agent, task_id, title)
-            from boss.task import set_task_branch
-            set_task_branch(hc_home, task_id, branch)
-            logger.info("Backfilled branch=%s for task %s", branch, task_id)
         return wt_path
 
     # Create it
