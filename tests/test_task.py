@@ -372,27 +372,19 @@ class TestBranchAndCommits:
         assert call_args[0][0] == ["git", "diff", "main...alice/backend/0001-feature-x"]
 
     @patch("boss.task.subprocess.run")
-    def test_get_task_diff_fallback(self, mock_run, tmp_team):
+    def test_get_task_diff_no_fallback(self, mock_run, tmp_team):
         task = create_task(tmp_team, title="Feature X")
         set_task_branch(tmp_team, task["id"], "alice/backend/0001-feature-x")
 
-        # First call (three-dot diff) fails, second call (git log) succeeds, third (git show) succeeds
+        # Three-dot diff fails — no fallback, should return '(no diff available)'
         fail_result = MagicMock()
         fail_result.returncode = 1
         fail_result.stdout = ""
 
-        log_result = MagicMock()
-        log_result.returncode = 0
-        log_result.stdout = "def456 Second commit\nabc123 First commit\n"
-
-        show_result = MagicMock()
-        show_result.returncode = 0
-        show_result.stdout = "commit abc123\nfallback diff content\n"
-
-        mock_run.side_effect = [fail_result, log_result, show_result]
+        mock_run.side_effect = [fail_result]
 
         diff = get_task_diff(tmp_team, task["id"])
-        assert "fallback diff content" in diff
+        assert diff == "(no diff available)"
 
     @patch("boss.task.subprocess.run")
     def test_get_task_diff_no_diff_available(self, mock_run, tmp_team):
