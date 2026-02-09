@@ -69,12 +69,67 @@ def _first_team(hc_home: Path) -> str:
     return teams[0] if teams else "default"
 
 
+def _agent_last_active_at(agent_dir: Path) -> str | None:
+    """Return ISO timestamp of the agent's most recent activity.
+
+    Checks worklog files in the agent's logs/ directory and uses the
+    most recent mtime.  Falls back to the state.yaml mtime if no
+    worklogs exist.  Returns None if nothing is found.
+    """
+    latest_mtime: float | None = None
+
+    logs_dir = agent_dir / "logs"
+    if logs_dir.is_dir():
+        for f in logs_dir.iterdir():
+            if f.suffix == ".md":
+                try:
+                    mt = f.stat().st_mtime
+                    if latest_mtime is None or mt > latest_mtime:
+                        latest_mtime = mt
+                except OSError:
+                    continue
+
+    # Fall back to state.yaml mtime
+    if latest_mtime is None:
+        state_file = agent_dir / "state.yaml"
+        if state_file.exists():
+            try:
+                latest_mtime = state_file.stat().st_mtime
+            except OSError:
+                pass
+
+    if latest_mtime is not None:
+        return datetime.fromtimestamp(latest_mtime, tz=timezone.utc).isoformat()
+    return None
+
+
+def _agent_current_task(hc_home: Path, agent_name: str, ip_tasks: list[dict] | None = None) -> dict | None:
+    """Return {id, title} of the agent's in_progress task, or None.
+
+    When *ip_tasks* is provided it is used directly (avoids re-scanning
+    the tasks directory for every agent).
+    """
+    if ip_tasks is None:
+        ip_tasks = _list_tasks(hc_home, status="in_progress", assignee=agent_name)
+    for t in ip_tasks:
+        if t.get("assignee") == agent_name:
+            return {"id": t["id"], "title": t["title"]}
+    return None
+
+
 def _list_team_agents(hc_home: Path, team: str) -> list[dict]:
     """List AI agents for a team (excludes boss)."""
     ad = _agents_dir(hc_home, team)
     agents = []
     if not ad.is_dir():
         return agents
+
+    # Pre-load all in_progress tasks once (lightweight — avoids per-agent scans)
+    try:
+        ip_tasks = _list_tasks(hc_home, status="in_progress")
+    except FileNotFoundError:
+        ip_tasks = []
+
     for d in sorted(ad.iterdir()):
         state_file = d / "state.yaml"
         if not d.is_dir() or not state_file.exists():
@@ -90,6 +145,8 @@ def _list_team_agents(hc_home: Path, team: str) -> list[dict]:
             "pid": state.get("pid"),
             "unread_inbox": unread,
             "team": team,
+            "last_active_at": _agent_last_active_at(d),
+            "current_task": _agent_current_task(hc_home, d.name, ip_tasks),
         })
     return agents
 
