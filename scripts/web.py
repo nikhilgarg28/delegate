@@ -4,6 +4,8 @@ Provides:
     GET  /            — HTML single-page app
     GET  /tasks       — list tasks (JSON)
     GET  /tasks/{id}/stats — task stats (elapsed, agent time, tokens)
+    POST /tasks/{id}/approve — approve a task for merge
+    POST /tasks/{id}/reject  — reject a task with reason
     GET  /messages    — get chat/event log (JSON)
     POST /messages    — director sends a message to an agent
     GET  /agents      — list agents and their states (JSON)
@@ -30,7 +32,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from scripts.task import list_tasks as _list_tasks, get_task as _get_task, get_task_diff as _get_task_diff, VALID_STATUSES
+from scripts.task import list_tasks as _list_tasks, get_task as _get_task, get_task_diff as _get_task_diff, update_task as _update_task, change_status as _change_status, VALID_STATUSES
 from scripts.chat import get_messages as _get_messages, get_task_stats as _get_task_stats, get_agent_stats as _get_agent_stats
 from scripts.mailbox import send as _send, read_inbox as _read_inbox, read_outbox as _read_outbox
 from scripts.bootstrap import get_member_by_role
@@ -157,6 +159,77 @@ def create_app(root: Path | None = None) -> FastAPI:
             "commits": task.get("commits", []),
             "diff": diff_text,
         }
+
+    @app.post("/tasks/{task_id}/approve")
+    def approve_task(task_id: int):
+        """Approve a task for merge.
+
+        Sets task.approval_status to 'approved'. For manual-approval repos,
+        this signals the daemon to merge on its next cycle.
+        Only tasks in 'needs_merge' status can be approved.
+        """
+        from fastapi import HTTPException
+        try:
+            task = _get_task(root, task_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+        if task["status"] != "needs_merge":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot approve task in '{task['status']}' status. Task must be in 'needs_merge' status.",
+            )
+
+        updated = _update_task(root, task_id, approval_status="approved")
+
+        from scripts.chat import log_event
+        log_event(root, f"T{task_id:04d} approved for merge")
+
+        return updated
+
+    class RejectBody(BaseModel):
+        reason: str
+
+    @app.post("/tasks/{task_id}/reject")
+    def reject_task(task_id: int, body: RejectBody):
+        """Reject a task with a reason.
+
+        Sets task status to 'rejected', stores the rejection reason,
+        and sends a notification to the EM (manager) for triage.
+        """
+        from fastapi import HTTPException
+        try:
+            task = _get_task(root, task_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+        # Transition status to rejected
+        try:
+            updated = _change_status(root, task_id, "rejected")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        # Store rejection reason and approval status
+        updated = _update_task(root, task_id,
+                               rejection_reason=body.reason,
+                               approval_status="rejected")
+
+        # Notify the EM (manager) so they can triage
+        director_name = get_member_by_role(root, "director") or "director"
+        manager_name = get_member_by_role(root, "manager") or "manager"
+        title = task.get("title", f"T{task_id:04d}")
+        assignee = task.get("assignee", "unknown")
+        _send(
+            root,
+            director_name,
+            manager_name,
+            f"Task T{task_id:04d} ({title}) by {assignee} was rejected. Reason: {body.reason}",
+        )
+
+        from scripts.chat import log_event
+        log_event(root, f"T{task_id:04d} rejected: {body.reason}")
+
+        return updated
 
     @app.get("/messages")
     def get_messages(since: str | None = None, between: str | None = None, type: str | None = None, limit: int | None = None):
