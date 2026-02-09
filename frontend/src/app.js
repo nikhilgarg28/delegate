@@ -48,6 +48,82 @@ let _micStopping = false;
 let _micBaseText = "";
 let _micFinalText = "";
 
+// Debounce timers for search inputs
+let _chatSearchTimer = null;
+let _taskSearchTimer = null;
+
+// =====================================================================
+// Filter persistence (sessionStorage)
+// =====================================================================
+function _saveChatFilters() {
+  try {
+    sessionStorage.setItem("chatFilters", JSON.stringify({
+      search: document.getElementById("chatFilterSearch").value,
+      from: document.getElementById("chatFilterFrom").value,
+      to: document.getElementById("chatFilterTo").value,
+      showEvents: document.getElementById("chatShowEvents").checked,
+    }));
+  } catch (e) {}
+}
+function _restoreChatFilters() {
+  try {
+    const raw = sessionStorage.getItem("chatFilters");
+    if (!raw) return;
+    const f = JSON.parse(raw);
+    if (f.search) document.getElementById("chatFilterSearch").value = f.search;
+    if (f.from) document.getElementById("chatFilterFrom").value = f.from;
+    if (f.to) document.getElementById("chatFilterTo").value = f.to;
+    if (f.showEvents === false) document.getElementById("chatShowEvents").checked = false;
+  } catch (e) {}
+}
+function _saveTaskFilters() {
+  try {
+    sessionStorage.setItem("taskFilters", JSON.stringify({
+      search: document.getElementById("taskFilterSearch").value,
+      status: document.getElementById("taskFilterStatus").value,
+      assignee: document.getElementById("taskFilterAssignee").value,
+      priority: document.getElementById("taskFilterPriority").value,
+      repo: document.getElementById("taskFilterRepo").value,
+    }));
+  } catch (e) {}
+}
+function _restoreTaskFilters() {
+  try {
+    const raw = sessionStorage.getItem("taskFilters");
+    if (!raw) return;
+    const f = JSON.parse(raw);
+    if (f.search) document.getElementById("taskFilterSearch").value = f.search;
+    if (f.status) document.getElementById("taskFilterStatus").value = f.status;
+    if (f.assignee) document.getElementById("taskFilterAssignee").value = f.assignee;
+    if (f.priority) document.getElementById("taskFilterPriority").value = f.priority;
+    if (f.repo) document.getElementById("taskFilterRepo").value = f.repo;
+  } catch (e) {}
+}
+
+// Debounced search input handlers
+function onChatSearchInput() {
+  clearTimeout(_chatSearchTimer);
+  _chatSearchTimer = setTimeout(function () {
+    _saveChatFilters();
+    loadChat();
+  }, 300);
+}
+function onChatFilterChange() {
+  _saveChatFilters();
+  loadChat();
+}
+function onTaskSearchInput() {
+  clearTimeout(_taskSearchTimer);
+  _taskSearchTimer = setTimeout(function () {
+    _saveTaskFilters();
+    loadTasks();
+  }, 300);
+}
+function onTaskFilterChange() {
+  _saveTaskFilters();
+  loadTasks();
+}
+
 // =====================================================================
 // Team selector
 // =====================================================================
@@ -441,8 +517,10 @@ async function loadTasks() {
     return;
   }
   const assignees = new Set();
+  const repos = new Set();
   for (const t of allTasks) {
     if (t.assignee) assignees.add(t.assignee);
+    if (t.repo) repos.add(t.repo);
   }
   const assigneeSel = document.getElementById("taskFilterAssignee");
   const prevAssignee = assigneeSel.value;
@@ -453,15 +531,35 @@ async function loadTasks() {
       .map((n) => `<option value="${n}">${cap(n)}</option>`)
       .join("");
   assigneeSel.value = prevAssignee;
+  // Populate repo filter dynamically
+  const repoSel = document.getElementById("taskFilterRepo");
+  const prevRepo = repoSel.value;
+  repoSel.innerHTML =
+    '<option value="">All</option>' +
+    [...repos]
+      .sort()
+      .map((r) => `<option value="${r}">${esc(r)}</option>`)
+      .join("");
+  repoSel.value = prevRepo;
   const filterStatus = document.getElementById("taskFilterStatus").value;
   const filterPriority = document.getElementById("taskFilterPriority").value;
   const filterAssignee = document.getElementById("taskFilterAssignee").value;
+  const filterRepo = document.getElementById("taskFilterRepo").value;
+  const searchQuery = (document.getElementById("taskFilterSearch").value || "").toLowerCase().trim();
   let tasks = allTasks;
   if (filterStatus) tasks = tasks.filter((t) => t.status === filterStatus);
   if (filterPriority)
     tasks = tasks.filter((t) => t.priority === filterPriority);
   if (filterAssignee)
     tasks = tasks.filter((t) => t.assignee === filterAssignee);
+  if (filterRepo)
+    tasks = tasks.filter((t) => t.repo === filterRepo);
+  if (searchQuery)
+    tasks = tasks.filter((t) => {
+      const title = (t.title || "").toLowerCase();
+      const desc = (t.description || "").toLowerCase();
+      return title.indexOf(searchQuery) !== -1 || desc.indexOf(searchQuery) !== -1;
+    });
   tasks.sort((a, b) => b.id - a.id);
   if (!tasks.length) {
     el.innerHTML =
@@ -702,6 +800,7 @@ async function _loadChatInner() {
   const showEvents = document.getElementById("chatShowEvents").checked;
   const filterFrom = document.getElementById("chatFilterFrom").value;
   const filterTo = document.getElementById("chatFilterTo").value;
+  const searchQuery = (document.getElementById("chatFilterSearch").value || "").toLowerCase().trim();
   const params = new URLSearchParams();
   if (!showEvents) params.set("type", "chat");
   const res = await fetch(
@@ -737,11 +836,12 @@ async function _loadChatInner() {
   }
   fromSel.value = prevFrom;
   toSel.value = prevTo;
-  const between = document.getElementById("chatBetween").checked;
+  // Auto-bidirectional when both From and To are set
+  const between = !!(filterFrom && filterTo);
   if (filterFrom || filterTo) {
     msgs = msgs.filter((m) => {
       if (m.type === "event") return true;
-      if (between && filterFrom && filterTo)
+      if (between)
         return (
           (m.sender === filterFrom && m.recipient === filterTo) ||
           (m.sender === filterTo && m.recipient === filterFrom)
@@ -749,6 +849,13 @@ async function _loadChatInner() {
       if (filterFrom && m.sender !== filterFrom) return false;
       if (filterTo && m.recipient !== filterTo) return false;
       return true;
+    });
+  }
+  // Client-side search filter on message content
+  if (searchQuery) {
+    msgs = msgs.filter((m) => {
+      const text = (m.content || "").toLowerCase();
+      return text.indexOf(searchQuery) !== -1;
     });
   }
   const chatMsgs = msgs.filter((m) => m.type === "chat");
@@ -1394,6 +1501,8 @@ window.addEventListener("hashchange", () => {
 // =====================================================================
 initTheme();
 _updateMuteBtn();
+_restoreChatFilters();
+_restoreTaskFilters();
 loadTeams().then(() => {
   initFromHash();
   loadSidebar();
@@ -1427,4 +1536,8 @@ Object.assign(window, {
   openTaskPanel,
   closeTaskPanel,
   switchTaskPanelDiffTab,
+  onChatSearchInput,
+  onChatFilterChange,
+  onTaskSearchInput,
+  onTaskFilterChange,
 });

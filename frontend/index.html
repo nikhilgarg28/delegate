@@ -50,16 +50,19 @@
 <div class="content">
   <div id="chat" class="panel active">
     <div class="chat-filters">
+      <div class="filter-search-wrap">
+        <svg class="filter-search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="4.5"/><line x1="9.5" y1="9.5" x2="13" y2="13"/></svg>
+        <input type="text" class="filter-search" id="chatFilterSearch" placeholder="Search messages..." oninput="onChatSearchInput()">
+      </div>
       <span class="filter-label">From</span>
-      <select id="chatFilterFrom" onchange="loadChat()">
+      <select id="chatFilterFrom" onchange="onChatFilterChange()">
         <option value="">Anyone</option>
       </select>
       <span class="filter-label">To</span>
-      <select id="chatFilterTo" onchange="loadChat()">
+      <select id="chatFilterTo" onchange="onChatFilterChange()">
         <option value="">Anyone</option>
       </select>
-      <label><input type="checkbox" id="chatBetween" onchange="loadChat()"> Between</label>
-      <label><input type="checkbox" id="chatShowEvents" checked onchange="loadChat()"> Activity</label>
+      <label><input type="checkbox" id="chatShowEvents" checked onchange="onChatFilterChange()"> Activity</label>
     </div>
     <div class="chat-log" id="chatLog"></div>
     <div class="chat-input-container">
@@ -88,24 +91,35 @@
   </div>
   <div id="tasks" class="panel">
     <div class="task-filters">
+      <div class="filter-search-wrap">
+        <svg class="filter-search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="4.5"/><line x1="9.5" y1="9.5" x2="13" y2="13"/></svg>
+        <input type="text" class="filter-search" id="taskFilterSearch" placeholder="Search tasks..." oninput="onTaskSearchInput()">
+      </div>
       <span class="filter-label">Status</span>
-      <select id="taskFilterStatus" onchange="loadTasks()">
+      <select id="taskFilterStatus" onchange="onTaskFilterChange()">
         <option value="">All</option>
         <option value="open">Open</option>
         <option value="in_progress">In Progress</option>
         <option value="review">Review</option>
+        <option value="needs_merge">Needs Merge</option>
+        <option value="merged">Merged</option>
         <option value="done">Done</option>
+        <option value="rejected">Rejected</option>
+      </select>
+      <span class="filter-label">Assignee</span>
+      <select id="taskFilterAssignee" onchange="onTaskFilterChange()">
+        <option value="">All</option>
       </select>
       <span class="filter-label">Priority</span>
-      <select id="taskFilterPriority" onchange="loadTasks()">
+      <select id="taskFilterPriority" onchange="onTaskFilterChange()">
         <option value="">All</option>
         <option value="low">Low</option>
         <option value="medium">Medium</option>
         <option value="high">High</option>
         <option value="critical">Critical</option>
       </select>
-      <span class="filter-label">Assignee</span>
-      <select id="taskFilterAssignee" onchange="loadTasks()">
+      <span class="filter-label">Repo</span>
+      <select id="taskFilterRepo" onchange="onTaskFilterChange()">
         <option value="">All</option>
       </select>
     </div>
