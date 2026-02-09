@@ -190,13 +190,102 @@ body {
 .tab.active { background: var(--bg-active); color: var(--text-heading); }
 
 /* ---- Sidebar ---- */
-.sidebar { width: 280px; min-width: 280px; height: 100vh; position: sticky; top: 0; background: var(--bg-sidebar); border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; overflow: hidden; }
+.sidebar { width: 280px; min-width: 280px; height: 100vh; position: sticky; top: 0; background: var(--bg-sidebar); border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; }
 .sidebar-widget { padding: 16px; border-bottom: 1px solid var(--border-subtle); }
 .sidebar-widget:last-child { border-bottom: none; }
-.sidebar-widget-header { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
-/* Status widget: header on own line, stat grid full-width below */
-.sidebar-status-widget { display: flex; flex-direction: column; }
-.sidebar-status-header { font-size: 12px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-heading); margin-bottom: 10px; display: flex; align-items: center; gap: 4px; }
+.sidebar-widget-header { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+/* ---- Boss identity bar ---- */
+.sidebar-boss-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  min-height: 48px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.sidebar-boss-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-heading);
+  letter-spacing: -0.01em;
+}
+
+/* ---- Action Required widget ---- */
+.sidebar-action-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sidebar-action-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+.sidebar-action-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239,68,68,0.12);
+  color: #ef4444;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 10px;
+  min-width: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.sidebar-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: calc(32px * 5);
+  overflow-y: auto;
+}
+.sidebar-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.15s;
+}
+.sidebar-action-row:hover {
+  background: var(--bg-hover);
+}
+.sidebar-action-type-icon {
+  width: 16px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 13px;
+}
+.sidebar-action-desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.sidebar-action-time {
+  color: var(--text-faint);
+  font-size: 11px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.sidebar-action-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 4px;
+}
 .sidebar-stat-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
 .sidebar-stat-row .stat-value { color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums; }
 /* Status dot in widget header */
@@ -210,23 +299,27 @@ body {
 .sidebar-stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 /* Task dot indicators (replacing text badges) */
 .sidebar-task-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
-.sidebar-task-dot.dot-open { background: #059669; }
+/* Task status dots — updated color system (Section 8) */
+.sidebar-task-dot.dot-open { background: #2563eb; }
 .sidebar-task-dot.dot-in_progress { background: #d97706; box-shadow: 0 0 6px rgba(217,119,6,0.4); }
-.sidebar-task-dot.dot-review { background: #2563eb; box-shadow: 0 0 6px rgba(37,99,235,0.4); }
-.sidebar-task-dot.dot-merged { background: #22c55e; }
+.sidebar-task-dot.dot-review { background: #9333ea; box-shadow: 0 0 6px rgba(147,51,234,0.4); }
 .sidebar-task-dot.dot-needs_merge { background: #a855f7; }
-.sidebar-task-dot.dot-conflict { background: #fb923c; }
-.sidebar-task-dot.dot-rejected { background: #ef4444; }
+.sidebar-task-dot.dot-merged { background: #22c55e; }
 .sidebar-task-dot.dot-done { background: var(--dot-offline); }
+.sidebar-task-dot.dot-rejected { background: #ef4444; }
+.sidebar-task-dot.dot-conflict { background: #fb923c; }
 .sidebar-agent-list { display: flex; flex-direction: column; gap: 0; max-height: calc(28px * 7); overflow-y: auto; }
-.sidebar-agent-row { display: flex; align-items: center; gap: 8px; height: 28px; min-height: 28px; font-size: 12px; padding: 0 2px; }
+.sidebar-agent-row { display: flex; align-items: center; gap: 8px; height: 28px; min-height: 28px; font-size: 12px; padding: 0 4px; }
 .sidebar-agent-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.sidebar-agent-dot.dot-working { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.4); }
-.sidebar-agent-dot.dot-queued { background: #60a5fa; }
+/* Agent activity dots (replaces binary online/offline) */
+.sidebar-agent-dot.dot-active { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+.sidebar-agent-dot.dot-stale { background: #eab308; }
+.sidebar-agent-dot.dot-stuck { background: #ef4444; box-shadow: 0 0 4px rgba(239,68,68,0.3); }
 .sidebar-agent-dot.dot-offline { background: var(--dot-offline); }
 .sidebar-agent-name { color: var(--text-primary); font-weight: 500; white-space: nowrap; }
 .sidebar-agent-activity { color: var(--text-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-agent-cost { color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+/* Agent last-active time (replaces cost in sidebar) */
+.sidebar-agent-time { color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; flex-shrink: 0; white-space: nowrap; }
 .sidebar-task-list { display: flex; flex-direction: column; gap: 0; max-height: calc(28px * 7); overflow-y: auto; }
 .sidebar-task-row { display: flex; align-items: center; gap: 8px; height: 28px; min-height: 28px; font-size: 12px; padding: 0 4px; border-radius: 4px; transition: background 0.15s; }
 .sidebar-task-row:hover { background: var(--bg-hover); }
@@ -274,22 +367,27 @@ body {
 
 /* ---- Badges ---- */
 .badge { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; letter-spacing: 0.01em; }
-.badge-open { background: rgba(5,150,105,0.1); color: #059669; }
-.badge-in_progress { background: rgba(217,119,6,0.1); color: #d97706; }
-.badge-review { background: rgba(37,99,235,0.1); color: #2563eb; }
+/* Task status badges — updated color system (Section 8) */
+.badge-open { background: rgba(96,165,250,0.10); color: #2563eb; }
+.badge-in_progress { background: rgba(245,158,11,0.10); color: #d97706; }
+.badge-review { background: rgba(168,85,247,0.10); color: #9333ea; }
 .badge-done { background: var(--bg-active); color: var(--text-muted); }
 .badge-needs_merge { background: rgba(168,85,247,0.12); color: #a855f7; }
 .badge-merged { background: rgba(34,197,94,0.12); color: #22c55e; }
 .badge-rejected { background: rgba(239,68,68,0.12); color: #ef4444; }
 .badge-conflict { background: rgba(251,146,60,0.12); color: #fb923c; }
-/* Dark mode badge overrides — lighter colors for dark backgrounds */
-:root.dark .badge-open { background: rgba(52,211,153,0.12); color: #34d399; }
+/* Dark mode badge overrides — updated status color system */
+:root.dark .badge-open { background: rgba(96,165,250,0.12); color: #60a5fa; }
 :root.dark .badge-in_progress { background: rgba(251,191,36,0.12); color: #fbbf24; }
-:root.dark .badge-review { background: rgba(96,165,250,0.12); color: #60a5fa; }
+:root.dark .badge-review { background: rgba(192,132,252,0.12); color: #c084fc; }
+:root.dark .badge-needs_merge { background: rgba(192,132,252,0.12); color: #c084fc; }
+:root.dark .sidebar-action-count { background: rgba(248,113,113,0.15); color: #fca5a5; }
 @media (prefers-color-scheme: dark) {
-  :root:not(.light) .badge-open { background: rgba(52,211,153,0.12); color: #34d399; }
+  :root:not(.light) .badge-open { background: rgba(96,165,250,0.12); color: #60a5fa; }
   :root:not(.light) .badge-in_progress { background: rgba(251,191,36,0.12); color: #fbbf24; }
-  :root:not(.light) .badge-review { background: rgba(96,165,250,0.12); color: #60a5fa; }
+  :root:not(.light) .badge-review { background: rgba(192,132,252,0.12); color: #c084fc; }
+  :root:not(.light) .badge-needs_merge { background: rgba(192,132,252,0.12); color: #c084fc; }
+  :root:not(.light) .sidebar-action-count { background: rgba(248,113,113,0.15); color: #fca5a5; }
 }
 
 /* ---- Task approval ---- */
@@ -441,8 +539,10 @@ body {
 .agent-card-dot {
   width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
 }
+/* Agent card activity dots (replaces binary online/offline) */
 .agent-card-dot-active { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.4); }
-.agent-card-dot-queued { background: #60a5fa; }
+.agent-card-dot-stale { background: #eab308; }
+.agent-card-dot-stuck { background: #ef4444; box-shadow: 0 0 4px rgba(239,68,68,0.3); }
 .agent-card-dot-offline { background: var(--dot-offline); }
 .agent-card-name { font-weight: 600; font-size: 13px; color: var(--text-primary); }
 /* Role badge pills */

@@ -11,12 +11,44 @@
 <body>
 
 <div class="sidebar" id="sidebar">
-  <div class="sidebar-widget sidebar-status-widget" id="sidebarStatus">
-    <div class="sidebar-status-header">
-      <span><span class="sidebar-status-dot" id="sidebarStatusDot">●</span> Boss</span>
-    </div>
-    <div id="sidebarStatusContent"><span style="color:var(--text-faint);font-size:12px">Loading...</span></div>
+  <!-- 1. Boss identity bar -->
+  <div class="sidebar-boss-bar" id="sidebarBossBar">
+    <span class="sidebar-status-dot" id="sidebarStatusDot">●</span>
+    <span class="sidebar-boss-label">Boss</span>
   </div>
+
+  <!-- 2. Team selector slot (if approved — see team-selector-sidebar.md Option A) -->
+  <!-- <div class="sidebar-widget sidebar-team-widget" id="sidebarTeamSelector">...</div> -->
+
+  <!-- 3. Action Required widget -->
+  <div class="sidebar-widget sidebar-action-widget" id="sidebarActions">
+    <div class="sidebar-widget-header">
+      <span class="sidebar-action-header">
+        <span class="sidebar-action-icon">⚡</span>
+        <span>Action Required</span>
+        <span class="sidebar-action-count" id="sidebarActionCount" style="display:none">0</span>
+      </span>
+      <a class="sidebar-see-all" onclick="switchTab('tasks')" style="display:none">See All &rarr;</a>
+    </div>
+    <div class="sidebar-action-list" id="sidebarActionList">
+      <div class="sidebar-action-empty">
+        <span style="color:var(--accent-green)">✓</span>
+        <span>No items need your attention</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Summary widget (renamed from Status) -->
+  <div class="sidebar-widget" id="sidebarSummary">
+    <div class="sidebar-widget-header">
+      <span>Summary</span>
+    </div>
+    <div id="sidebarStatusContent">
+      <span style="color:var(--text-faint);font-size:12px">Loading...</span>
+    </div>
+  </div>
+
+  <!-- 5. Agents widget -->
   <div class="sidebar-widget" id="sidebarAgents">
     <div class="sidebar-widget-header">
       <span>Agents</span>
@@ -24,6 +56,8 @@
     </div>
     <div class="sidebar-agent-list" id="sidebarAgentList"></div>
   </div>
+
+  <!-- 6. Recent Tasks widget -->
   <div class="sidebar-widget" id="sidebarTasks">
     <div class="sidebar-widget-header">
       <span>Recent Tasks</span>
