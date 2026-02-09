@@ -128,6 +128,23 @@
 </div>
 <div id="diffBackdrop" class="diff-backdrop" onclick="closePanel()"></div>
 
+<div id="taskPanel" class="task-panel">
+  <div class="task-panel-header">
+    <div class="task-panel-title-row">
+      <span class="task-panel-id" id="taskPanelId"></span>
+      <span class="task-panel-title" id="taskPanelTitle"></span>
+    </div>
+    <div class="task-panel-meta-row">
+      <span class="task-panel-status" id="taskPanelStatus"></span>
+      <span class="task-panel-assignee" id="taskPanelAssignee"></span>
+      <span class="task-panel-priority" id="taskPanelPriority"></span>
+    </div>
+    <button class="task-panel-close" onclick="closeTaskPanel()">&times;</button>
+  </div>
+  <div class="task-panel-body" id="taskPanelBody"></div>
+</div>
+<div id="taskBackdrop" class="task-backdrop" onclick="closeTaskPanel()"></div>
+
 <script src="/static/app.js"></script>
 </body>
 </html>

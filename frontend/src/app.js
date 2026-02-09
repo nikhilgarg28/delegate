@@ -28,17 +28,18 @@ let _audioCtx = null;
 let _lastMsgTimestamp = "";
 let _prevTaskStatuses = {};
 let _msgSendCooldown = false;
-let _expandedTasks = new Set();
-let _taskStatsCache = {};
 let _rejectReasonVisible = false;
 
 // Panel state
 let _panelMode = null;
 let _panelAgent = null;
+let _panelTask = null;
 let _agentTabData = {};
 let _agentCurrentTab = "inbox";
 let _diffRawText = "";
 let _diffCurrentTab = "files";
+let _taskPanelDiffTab = "files";
+let _taskPanelDiffRaw = "";
 
 // Voice-to-text state
 let _recognition = null;
@@ -300,79 +301,14 @@ function switchTab(name, pushHash) {
 // Tasks
 // =====================================================================
 function _taskRowHtml(t) {
-  const expanded = _expandedTasks.has(t.id);
-  const s = _taskStatsCache[t.id];
   const tid = "T" + String(t.id).padStart(4, "0");
-  return `<div class="task-row${expanded ? " expanded" : ""}" data-id="${t.id}" onclick="toggleTask(${t.id})">
+  return `<div class="task-row" data-id="${t.id}" onclick="openTaskPanel(${t.id})">
     <div class="task-summary">
       <span class="task-id">${tid}</span>
       <span class="task-title">${esc(t.title)}</span>
       <span><span class="badge badge-${t.status}">${fmtStatus(t.status)}</span></span>
       <span class="task-assignee">${t.assignee ? cap(t.assignee) : "\u2014"}</span>
       <span class="task-priority">${cap(t.priority)}</span>
-    </div>
-    <div class="task-detail" onclick="event.stopPropagation()">
-      <div class="task-detail-grid">
-        <div class="task-detail-item"><div class="task-detail-label">Reviewer</div><div class="task-detail-value">${t.reviewer ? cap(t.reviewer) : "\u2014"}</div></div>
-        <div class="task-detail-item"><div class="task-detail-label">Time</div><div class="task-detail-value">${s ? fmtElapsed(s.elapsed_seconds) : "\u2014"}</div></div>
-        <div class="task-detail-item"><div class="task-detail-label">Tokens (in/out)</div><div class="task-detail-value">${s ? fmtTokens(s.total_tokens_in, s.total_tokens_out) : "\u2014"}</div></div>
-        <div class="task-detail-item"><div class="task-detail-label">Cost</div><div class="task-detail-value">${s ? fmtCost(s.total_cost_usd) : "\u2014"}</div></div>
-      </div>
-      ${
-        s && s.branch
-          ? '<div class="task-vcs-row" onclick="event.stopPropagation()"><span class="task-branch" title="' +
-            esc(s.branch) +
-            '">' +
-            esc(s.branch) +
-            "</span>" +
-            (s.commits && s.commits.length
-              ? s.commits
-                  .map(
-                    (c) =>
-                      '<button class="task-commit" onclick="event.stopPropagation();openDiffPanel(' +
-                      t.id +
-                      ')" title="' +
-                      esc(String(c)) +
-                      '">' +
-                      esc(String(c).substring(0, 7)) +
-                      "</button>"
-                  )
-                  .join("")
-              : "") +
-            '<button class="btn-diff" onclick="event.stopPropagation();openDiffPanel(' +
-            t.id +
-            ')">View Changes</button></div>'
-          : ""
-      }
-      ${
-        t.depends_on && t.depends_on.length
-          ? '<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Depends on: ' +
-            t.depends_on
-              .map(
-                (d) =>
-                  '<span class="badge badge-' +
-                  ((t._dep_statuses && t._dep_statuses[d]) || "open") +
-                  '" style="font-size:11px;margin-right:4px">T' +
-                  String(d).padStart(4, "0") +
-                  "</span>"
-              )
-              .join("") +
-            "</div>"
-          : ""
-      }
-      ${
-        t.base_sha
-          ? '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Base SHA: <code style="font-family:SF Mono,Fira Code,monospace;background:var(--bg-active);padding:2px 6px;border-radius:3px">' +
-            esc(t.base_sha.substring(0, 10)) +
-            "</code></div>"
-          : ""
-      }
-      ${t.description ? '<div class="task-desc md-content">' + renderMarkdown(t.description) + "</div>" : ""}
-      <div class="task-dates">
-        <span>Created: <span class="ts" data-ts="${t.created_at || ""}">${fmtTimestamp(t.created_at)}</span></span>
-        <span>Completed: <span class="ts" data-ts="${t.completed_at || ""}">${fmtTimestamp(t.completed_at)}</span></span>
-      </div>
-      ${renderTaskApproval(t)}
     </div>
   </div>`;
 }
@@ -532,16 +468,6 @@ async function loadTasks() {
       '<p style="color:var(--text-secondary)">No tasks match filters.</p>';
     return;
   }
-  await Promise.all(
-    tasks
-      .filter((t) => _expandedTasks.has(t.id))
-      .map(async (t) => {
-        try {
-          const r = await fetch("/tasks/" + t.id + "/stats");
-          if (r.ok) _taskStatsCache[t.id] = await r.json();
-        } catch (e) {}
-      })
-  );
   el.innerHTML =
     '<div class="task-list">' +
     tasks.map((t) => _taskRowHtml(t)).join("") +
@@ -549,9 +475,188 @@ async function loadTasks() {
 }
 
 function toggleTask(id) {
-  if (_expandedTasks.has(id)) _expandedTasks.delete(id);
-  else _expandedTasks.add(id);
-  loadTasks();
+  // Legacy — now opens the side panel
+  openTaskPanel(id);
+}
+
+// =====================================================================
+// Task detail side panel
+// =====================================================================
+/**
+ * Post-process HTML to make TXXX patterns clickable.
+ * Matches T followed by 4 digits (e.g. T0017) that are NOT already inside
+ * an HTML tag or attribute.
+ */
+function linkifyTaskRefs(html) {
+  // Replace TXXX in text nodes only (between > and <, or at start/end of string)
+  // Split into segments: HTML tags vs text content
+  return html.replace(/(^[^<]+|>[^<]*)/g, function (match) {
+    return match.replace(/\bT(\d{4})\b/g, function (full, digits) {
+      const id = parseInt(digits, 10);
+      return '<span class="task-link" data-task-id="' + id + '" onclick="event.stopPropagation();openTaskPanel(' + id + ')">' + full + '</span>';
+    });
+  });
+}
+
+function switchTaskPanelDiffTab(tab) {
+  _taskPanelDiffTab = tab;
+  const container = document.getElementById("taskPanelBody");
+  if (!container) return;
+  container.querySelectorAll(".task-panel-diff-tabs .diff-tab").forEach(
+    (t) => t.classList.toggle("active", t.dataset.dtab === tab)
+  );
+  const diffContent = document.getElementById("taskPanelDiffContent");
+  if (!diffContent) return;
+  if (tab === "files") {
+    const files = diff2HtmlParse(_taskPanelDiffRaw);
+    if (!files.length) {
+      diffContent.innerHTML = '<div class="diff-empty">No files changed</div>';
+      return;
+    }
+    let h = '<div class="diff-file-list">';
+    for (const f of files) {
+      const name = (f.newName === '/dev/null' ? f.oldName : f.newName) || f.oldName || "unknown";
+      h += '<div class="diff-file-list-item" onclick="switchTaskPanelDiffTab(\'diff\')"><span class="diff-file-list-name">' +
+        esc(name) + '</span><span class="diff-file-stats"><span class="diff-file-add">+' +
+        f.addedLines + '</span><span class="diff-file-del">-' +
+        f.deletedLines + '</span></span></div>';
+    }
+    diffContent.innerHTML = h + '</div>';
+  } else {
+    if (!_taskPanelDiffRaw) {
+      diffContent.innerHTML = '<div class="diff-empty">No changes</div>';
+      return;
+    }
+    diffContent.innerHTML = diff2HtmlRender(_taskPanelDiffRaw, {
+      outputFormat: "line-by-line",
+      drawFileList: false,
+      matching: "lines",
+    });
+  }
+}
+
+async function openTaskPanel(taskId) {
+  _panelTask = taskId;
+  const panel = document.getElementById("taskPanel");
+  const backdrop = document.getElementById("taskBackdrop");
+  // Set loading state
+  document.getElementById("taskPanelId").textContent = "T" + String(taskId).padStart(4, "0");
+  document.getElementById("taskPanelTitle").textContent = "Loading...";
+  document.getElementById("taskPanelStatus").innerHTML = "";
+  document.getElementById("taskPanelAssignee").textContent = "";
+  document.getElementById("taskPanelPriority").textContent = "";
+  document.getElementById("taskPanelBody").innerHTML = '<div class="diff-empty">Loading...</div>';
+  panel.classList.add("open");
+  backdrop.classList.add("open");
+  try {
+    // Fetch task list (we need the full task object)
+    const tasksRes = await fetch("/tasks");
+    const allTasks = await tasksRes.json();
+    const task = allTasks.find((t) => t.id === taskId);
+    if (!task) {
+      document.getElementById("taskPanelBody").innerHTML = '<div class="diff-empty">Task not found</div>';
+      return;
+    }
+    // Fetch stats
+    let stats = null;
+    try {
+      const sRes = await fetch("/tasks/" + taskId + "/stats");
+      if (sRes.ok) stats = await sRes.json();
+    } catch (e) {}
+    // Populate header
+    document.getElementById("taskPanelTitle").textContent = task.title;
+    document.getElementById("taskPanelStatus").innerHTML =
+      '<span class="badge badge-' + task.status + '">' + fmtStatus(task.status) + '</span>';
+    document.getElementById("taskPanelAssignee").textContent =
+      task.assignee ? cap(task.assignee) : "";
+    document.getElementById("taskPanelPriority").textContent =
+      task.priority ? cap(task.priority) : "";
+    // Build body
+    let body = "";
+    // Metadata grid
+    body += '<div class="task-panel-meta-grid">';
+    body += '<div class="task-panel-meta-item"><div class="task-detail-label">Assignee</div><div class="task-detail-value">' + (task.assignee ? cap(task.assignee) : "\u2014") + '</div></div>';
+    body += '<div class="task-panel-meta-item"><div class="task-detail-label">Reviewer</div><div class="task-detail-value">' + (task.reviewer ? cap(task.reviewer) : "\u2014") + '</div></div>';
+    body += '<div class="task-panel-meta-item"><div class="task-detail-label">Priority</div><div class="task-detail-value">' + cap(task.priority) + '</div></div>';
+    body += '<div class="task-panel-meta-item"><div class="task-detail-label">Time</div><div class="task-detail-value">' + (stats ? fmtElapsed(stats.elapsed_seconds) : "\u2014") + '</div></div>';
+    body += '</div>';
+    // Stats row
+    if (stats) {
+      body += '<div class="task-panel-meta-grid">';
+      body += '<div class="task-panel-meta-item"><div class="task-detail-label">Tokens (in/out)</div><div class="task-detail-value">' + fmtTokens(stats.total_tokens_in, stats.total_tokens_out) + '</div></div>';
+      body += '<div class="task-panel-meta-item"><div class="task-detail-label">Cost</div><div class="task-detail-value">' + fmtCost(stats.total_cost_usd) + '</div></div>';
+      body += '</div>';
+    }
+    // Dates
+    body += '<div class="task-panel-dates">';
+    body += '<span>Created: <span class="ts" data-ts="' + (task.created_at || "") + '">' + fmtTimestamp(task.created_at) + '</span></span>';
+    body += '<span>Updated: <span class="ts" data-ts="' + (task.updated_at || "") + '">' + fmtTimestamp(task.updated_at) + '</span></span>';
+    if (task.completed_at) {
+      body += '<span>Completed: <span class="ts" data-ts="' + task.completed_at + '">' + fmtTimestamp(task.completed_at) + '</span></span>';
+    }
+    body += '</div>';
+    // VCS info
+    if (stats && stats.branch) {
+      body += '<div class="task-panel-vcs-row">';
+      body += '<span class="task-branch" title="' + esc(stats.branch) + '">' + esc(stats.branch) + '</span>';
+      if (stats.commits && stats.commits.length) {
+        stats.commits.forEach(function (c) {
+          body += '<span class="diff-panel-commit">' + esc(String(c).substring(0, 7)) + '</span>';
+        });
+      }
+      body += '</div>';
+    }
+    // Base SHA
+    if (task.base_sha) {
+      body += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">Base SHA: <code style="font-family:SF Mono,Fira Code,monospace;background:var(--bg-active);padding:2px 6px;border-radius:3px">' + esc(task.base_sha.substring(0, 10)) + '</code></div>';
+    }
+    // Dependencies
+    if (task.depends_on && task.depends_on.length) {
+      body += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Depends on: ';
+      task.depends_on.forEach(function (d) {
+        const depStatus = (task._dep_statuses && task._dep_statuses[d]) || "open";
+        body += '<span class="task-link" data-task-id="' + d + '" onclick="event.stopPropagation();openTaskPanel(' + d + ')"><span class="badge badge-' + depStatus + '" style="font-size:11px;margin-right:4px;cursor:pointer">T' + String(d).padStart(4, "0") + '</span></span>';
+      });
+      body += '</div>';
+    }
+    // Description
+    if (task.description) {
+      body += '<div class="task-panel-section"><div class="task-panel-section-label">Description</div>';
+      body += '<div class="task-panel-desc md-content">' + linkifyTaskRefs(renderMarkdown(task.description)) + '</div>';
+      body += '</div>';
+    }
+    // Approval actions
+    body += renderTaskApproval(task);
+    // Diff section placeholder
+    body += '<div class="task-panel-diff-section" id="taskPanelDiffSection">';
+    body += '<div class="task-panel-section-label">Changes</div>';
+    body += '<div class="task-panel-diff-tabs"><button class="diff-tab active" data-dtab="files" onclick="switchTaskPanelDiffTab(\'files\')">Files Changed</button><button class="diff-tab" data-dtab="diff" onclick="switchTaskPanelDiffTab(\'diff\')">Full Diff</button></div>';
+    body += '<div id="taskPanelDiffContent"><div class="diff-empty">Loading diff...</div></div>';
+    body += '</div>';
+    document.getElementById("taskPanelBody").innerHTML = body;
+    // Load diff asynchronously
+    _taskPanelDiffRaw = "";
+    _taskPanelDiffTab = "files";
+    try {
+      const diffRes = await fetch("/tasks/" + taskId + "/diff");
+      const diffData = await diffRes.json();
+      _taskPanelDiffRaw = diffData.diff || "";
+      switchTaskPanelDiffTab("files");
+    } catch (e) {
+      const dc = document.getElementById("taskPanelDiffContent");
+      if (dc) dc.innerHTML = '<div class="diff-empty">Failed to load diff</div>';
+    }
+  } catch (e) {
+    document.getElementById("taskPanelBody").innerHTML =
+      '<div class="diff-empty">Failed to load task</div>';
+  }
+}
+
+function closeTaskPanel() {
+  document.getElementById("taskPanel").classList.remove("open");
+  document.getElementById("taskBackdrop").classList.remove("open");
+  _panelTask = null;
+  _taskPanelDiffRaw = "";
 }
 
 // =====================================================================
@@ -631,9 +736,9 @@ async function _loadChatInner() {
   log.innerHTML = msgs
     .map((m) => {
       if (m.type === "event")
-        return `<div class="msg-event"><span class="msg-event-line"></span><span class="msg-event-text">${esc(m.content)}</span><span class="msg-event-line"></span><span class="msg-event-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div>`;
+        return `<div class="msg-event"><span class="msg-event-line"></span><span class="msg-event-text">${linkifyTaskRefs(esc(m.content))}</span><span class="msg-event-line"></span><span class="msg-event-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div>`;
       const c = avatarColor(m.sender);
-      return `<div class="msg"><div class="msg-avatar" style="background:${c}">${avatarInitial(m.sender)}</div><div class="msg-body"><div class="msg-header"><span class="msg-sender" style="cursor:pointer" onclick="openAgentPanel('${m.sender}')">${cap(m.sender)}</span><span class="msg-recipient">\u2192 ${cap(m.recipient)}</span><span class="msg-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div><div class="msg-content md-content">${renderMarkdown(m.content)}</div></div></div>`;
+      return `<div class="msg"><div class="msg-avatar" style="background:${c}">${avatarInitial(m.sender)}</div><div class="msg-body"><div class="msg-header"><span class="msg-sender" style="cursor:pointer" onclick="openAgentPanel('${m.sender}')">${cap(m.sender)}</span><span class="msg-recipient">\u2192 ${cap(m.recipient)}</span><span class="msg-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div><div class="msg-content md-content">${linkifyTaskRefs(renderMarkdown(m.content))}</div></div></div>`;
     })
     .join("");
   if (wasNearBottom) log.scrollTop = log.scrollHeight;
@@ -783,7 +888,9 @@ async function loadSidebar() {
     for (const t of sorted) {
       const tid = "T" + String(t.id).padStart(4, "0");
       taskHtml +=
-        '<div class="sidebar-task-row"><span class="sidebar-task-id">' +
+        '<div class="sidebar-task-row" style="cursor:pointer" onclick="openTaskPanel(' +
+        t.id +
+        ')"><span class="sidebar-task-id">' +
         tid +
         '</span><span class="sidebar-task-title">' +
         esc(t.title) +
@@ -1208,7 +1315,10 @@ function toggleMic() {
 // Keyboard & Polling
 // =====================================================================
 document.addEventListener("keydown", function (e) {
-  if (e.key === "Escape") closePanel();
+  if (e.key === "Escape") {
+    if (_panelTask !== null) closeTaskPanel();
+    else closePanel();
+  }
 });
 
 function refreshTimestamps() {
@@ -1273,4 +1383,7 @@ Object.assign(window, {
   approveTask,
   rejectTask,
   toggleRejectReason,
+  openTaskPanel,
+  closeTaskPanel,
+  switchTaskPanelDiffTab,
 });
