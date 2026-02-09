@@ -139,7 +139,7 @@ class TestOrchestrateOnce:
         _deliver_msg(tmp_team, "alice")
         orchestrate_once(tmp_team, TEAM, spawn_fn=lambda h, t, a: None)
         events = get_messages(tmp_team, msg_type="event")
-        assert any("Alice starting" in e["content"] for e in events)
+        assert any("Paging Alice" in e["content"] for e in events)
 
     def test_handles_spawn_failure(self, tmp_team):
         _deliver_msg(tmp_team, "alice")
@@ -151,4 +151,4 @@ class TestOrchestrateOnce:
         assert result == []  # not added to spawned list
 
         events = get_messages(tmp_team, msg_type="event")
-        assert any("failed to start" in e["content"] for e in events)
+        assert any("Paging Alice failed" in e["content"] for e in events)
