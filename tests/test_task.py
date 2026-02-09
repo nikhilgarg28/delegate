@@ -16,6 +16,8 @@ from scripts.task import (
     add_task_commit,
     get_task_diff,
     VALID_STATUSES,
+    VALID_TRANSITIONS,
+    VALID_APPROVAL_STATUSES,
 )
 
 
@@ -115,22 +117,71 @@ class TestAssignTask:
 
 
 class TestChangeStatus:
-    def test_change_status(self, tmp_team):
+    def test_valid_transition_chain(self, tmp_team):
+        """Test a full valid transition chain: open -> in_progress -> review -> done."""
         task = create_task(tmp_team, title="Work")
-        for status in VALID_STATUSES:
-            updated = change_status(tmp_team, task["id"], status)
-            assert updated["status"] == status
+        assert task["status"] == "open"
+
+        task = change_status(tmp_team, task["id"], "in_progress")
+        assert task["status"] == "in_progress"
+
+        task = change_status(tmp_team, task["id"], "review")
+        assert task["status"] == "review"
+
+        task = change_status(tmp_team, task["id"], "done")
+        assert task["status"] == "done"
+
+    def test_merge_queue_transition_chain(self, tmp_team):
+        """Test merge queue path: open -> in_progress -> review -> needs_merge -> merged."""
+        task = create_task(tmp_team, title="Repo Work")
+
+        task = change_status(tmp_team, task["id"], "in_progress")
+        task = change_status(tmp_team, task["id"], "review")
+        task = change_status(tmp_team, task["id"], "needs_merge")
+        assert task["status"] == "needs_merge"
+
+        task = change_status(tmp_team, task["id"], "merged")
+        assert task["status"] == "merged"
 
     def test_invalid_status_raises(self, tmp_team):
         task = create_task(tmp_team, title="Work")
         with pytest.raises(ValueError, match="Invalid status"):
             change_status(tmp_team, task["id"], "invalid")
 
+    def test_invalid_transition_raises(self, tmp_team):
+        """Cannot skip statuses — e.g. open -> review is invalid."""
+        task = create_task(tmp_team, title="Work")
+        with pytest.raises(ValueError, match="Invalid transition"):
+            change_status(tmp_team, task["id"], "review")
+
+    def test_terminal_status_raises(self, tmp_team):
+        """Cannot transition out of terminal statuses (done, merged)."""
+        task = create_task(tmp_team, title="Work")
+        change_status(tmp_team, task["id"], "in_progress")
+        change_status(tmp_team, task["id"], "review")
+        change_status(tmp_team, task["id"], "done")
+        with pytest.raises(ValueError, match="terminal status"):
+            change_status(tmp_team, task["id"], "in_progress")
+
     def test_completed_at_set_on_done(self, tmp_team):
         task = create_task(tmp_team, title="Work")
         assert task["completed_at"] == ""
 
+        change_status(tmp_team, task["id"], "in_progress")
+        change_status(tmp_team, task["id"], "review")
         updated = change_status(tmp_team, task["id"], "done")
+        assert updated["completed_at"] != ""
+        assert updated["completed_at"].startswith("20")
+
+    def test_completed_at_set_on_merged(self, tmp_team):
+        """completed_at should also be set when status becomes 'merged'."""
+        task = create_task(tmp_team, title="Repo Work")
+        assert task["completed_at"] == ""
+
+        change_status(tmp_team, task["id"], "in_progress")
+        change_status(tmp_team, task["id"], "review")
+        change_status(tmp_team, task["id"], "needs_merge")
+        updated = change_status(tmp_team, task["id"], "merged")
         assert updated["completed_at"] != ""
         assert updated["completed_at"].startswith("20")
 
@@ -138,6 +189,44 @@ class TestChangeStatus:
         task = create_task(tmp_team, title="Work")
         updated = change_status(tmp_team, task["id"], "in_progress")
         assert updated["completed_at"] == ""
+
+    def test_needs_merge_to_rejected(self, tmp_team):
+        """needs_merge -> rejected is a valid transition."""
+        task = create_task(tmp_team, title="Work")
+        change_status(tmp_team, task["id"], "in_progress")
+        change_status(tmp_team, task["id"], "review")
+        change_status(tmp_team, task["id"], "needs_merge")
+        updated = change_status(tmp_team, task["id"], "rejected")
+        assert updated["status"] == "rejected"
+
+    def test_needs_merge_to_conflict(self, tmp_team):
+        """needs_merge -> conflict is a valid transition."""
+        task = create_task(tmp_team, title="Work")
+        change_status(tmp_team, task["id"], "in_progress")
+        change_status(tmp_team, task["id"], "review")
+        change_status(tmp_team, task["id"], "needs_merge")
+        updated = change_status(tmp_team, task["id"], "conflict")
+        assert updated["status"] == "conflict"
+
+    def test_rejected_to_in_progress(self, tmp_team):
+        """rejected -> in_progress (rework) is a valid transition."""
+        task = create_task(tmp_team, title="Work")
+        change_status(tmp_team, task["id"], "in_progress")
+        change_status(tmp_team, task["id"], "review")
+        change_status(tmp_team, task["id"], "needs_merge")
+        change_status(tmp_team, task["id"], "rejected")
+        updated = change_status(tmp_team, task["id"], "in_progress")
+        assert updated["status"] == "in_progress"
+
+    def test_conflict_to_in_progress(self, tmp_team):
+        """conflict -> in_progress (rebase) is a valid transition."""
+        task = create_task(tmp_team, title="Work")
+        change_status(tmp_team, task["id"], "in_progress")
+        change_status(tmp_team, task["id"], "review")
+        change_status(tmp_team, task["id"], "needs_merge")
+        change_status(tmp_team, task["id"], "conflict")
+        updated = change_status(tmp_team, task["id"], "in_progress")
+        assert updated["status"] == "in_progress"
 
 
 class TestListTasks:
@@ -324,3 +413,73 @@ class TestBranchAndCommits:
         assert "commits" in task
         assert isinstance(task["branch"], str)
         assert isinstance(task["commits"], list)
+
+
+class TestMergeQueueFields:
+    """Tests for rejection_reason and approval_status fields."""
+
+    def test_create_task_has_new_fields(self, tmp_team):
+        task = create_task(tmp_team, title="Merge Queue Task")
+        assert task["rejection_reason"] == ""
+        assert task["approval_status"] == ""
+
+    def test_new_fields_persisted(self, tmp_team):
+        task = create_task(tmp_team, title="Merge Queue Task")
+        loaded = get_task(tmp_team, task["id"])
+        assert loaded["rejection_reason"] == ""
+        assert loaded["approval_status"] == ""
+
+    def test_update_rejection_reason(self, tmp_team):
+        task = create_task(tmp_team, title="Work")
+        updated = update_task(tmp_team, task["id"], rejection_reason="Code quality issues")
+        assert updated["rejection_reason"] == "Code quality issues"
+        loaded = get_task(tmp_team, task["id"])
+        assert loaded["rejection_reason"] == "Code quality issues"
+
+    def test_update_approval_status(self, tmp_team):
+        task = create_task(tmp_team, title="Work")
+        updated = update_task(tmp_team, task["id"], approval_status="pending")
+        assert updated["approval_status"] == "pending"
+        loaded = get_task(tmp_team, task["id"])
+        assert loaded["approval_status"] == "pending"
+
+    def test_fields_survive_status_change(self, tmp_team):
+        task = create_task(tmp_team, title="Work")
+        update_task(tmp_team, task["id"], rejection_reason="Needs fixes", approval_status="rejected")
+        updated = change_status(tmp_team, task["id"], "in_progress")
+        assert updated["rejection_reason"] == "Needs fixes"
+        assert updated["approval_status"] == "rejected"
+
+    def test_old_tasks_get_defaults(self, tmp_team):
+        """Tasks created before merge queue fields should get defaults via setdefault."""
+        import yaml
+        task = create_task(tmp_team, title="Old Task")
+        # Simulate an old task file without the new fields
+        tasks_dir = tmp_team / ".standup" / "tasks"
+        path = tasks_dir / f"T{task['id']:04d}.yaml"
+        data = yaml.safe_load(path.read_text())
+        del data["rejection_reason"]
+        del data["approval_status"]
+        path.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+
+        # get_task should fill in defaults
+        loaded = get_task(tmp_team, task["id"])
+        assert loaded["rejection_reason"] == ""
+        assert loaded["approval_status"] == ""
+
+
+class TestValidTransitions:
+    """Tests that verify the VALID_TRANSITIONS map is correct."""
+
+    def test_all_statuses_have_transition_entry(self):
+        """Every valid status should have an entry in VALID_TRANSITIONS."""
+        for status in VALID_STATUSES:
+            assert status in VALID_TRANSITIONS, f"Missing transition entry for '{status}'"
+
+    def test_transition_targets_are_valid(self):
+        """All transition targets should be valid statuses."""
+        for from_status, targets in VALID_TRANSITIONS.items():
+            for target in targets:
+                assert target in VALID_STATUSES, (
+                    f"Transition target '{target}' from '{from_status}' is not a valid status"
+                )
