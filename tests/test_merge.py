@@ -24,7 +24,7 @@ from boss.config import (
     add_repo, get_repo_approval, get_repo_test_cmd, update_repo_test_cmd, set_boss,
     get_repo_pipeline, set_repo_pipeline, add_pipeline_step, remove_pipeline_step,
 )
-from boss.merge import merge_task, merge_once, _run_tests, _run_pipeline, MergeResult
+from boss.merge import merge_task, merge_once, _run_tests, _run_pipeline, _other_unmerged_tasks_on_branch, MergeResult
 from boss.bootstrap import bootstrap
 
 
@@ -814,3 +814,137 @@ class TestRunPipeline:
 
         updated = get_task(hc_home, task["id"])
         assert updated["status"] == "merged"
+
+
+# ---------------------------------------------------------------------------
+# Shared-branch safety tests (T0053)
+# ---------------------------------------------------------------------------
+
+class TestSharedBranchCleanup:
+    """When multiple tasks share a branch, cleanup should only happen once
+    the last task on that branch is merged."""
+
+    def test_other_unmerged_tasks_on_branch_helper(self, hc_home):
+        """_other_unmerged_tasks_on_branch returns True when another task
+        with the same branch is not yet merged."""
+        t1 = create_task(hc_home, title="Task 1")
+        t2 = create_task(hc_home, title="Task 2")
+        update_task(hc_home, t1["id"], branch="shared/branch", repo="myrepo")
+        update_task(hc_home, t2["id"], branch="shared/branch", repo="myrepo")
+        change_status(hc_home, t1["id"], "in_progress")
+        change_status(hc_home, t2["id"], "in_progress")
+
+        # Both in_progress — each should see the other as unmerged
+        assert _other_unmerged_tasks_on_branch(hc_home, "shared/branch", t1["id"]) is True
+        assert _other_unmerged_tasks_on_branch(hc_home, "shared/branch", t2["id"]) is True
+
+    def test_no_other_unmerged_when_all_merged(self, hc_home, tmp_path):
+        """_other_unmerged_tasks_on_branch returns False when the only other
+        task on the branch is already merged."""
+        repo = _setup_git_repo(tmp_path)
+        _make_feature_branch(repo, "shared/branch")
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        t1 = create_task(hc_home, title="Task 1")
+        t2 = create_task(hc_home, title="Task 2")
+        update_task(hc_home, t1["id"], branch="shared/branch", repo="myrepo")
+        update_task(hc_home, t2["id"], branch="shared/branch", repo="myrepo")
+
+        # Advance t1 to merged
+        change_status(hc_home, t1["id"], "in_progress")
+        change_status(hc_home, t1["id"], "review")
+        change_status(hc_home, t1["id"], "needs_merge")
+        change_status(hc_home, t1["id"], "merged")
+
+        # t2 is in_progress — from t2's perspective, t1 is merged, so False
+        change_status(hc_home, t2["id"], "in_progress")
+        assert _other_unmerged_tasks_on_branch(hc_home, "shared/branch", t2["id"]) is False
+
+    def test_no_other_when_different_branch(self, hc_home):
+        """Tasks on different branches do not interfere."""
+        t1 = create_task(hc_home, title="Task 1")
+        t2 = create_task(hc_home, title="Task 2")
+        update_task(hc_home, t1["id"], branch="branch-a", repo="myrepo")
+        update_task(hc_home, t2["id"], branch="branch-b", repo="myrepo")
+        change_status(hc_home, t1["id"], "in_progress")
+        change_status(hc_home, t2["id"], "in_progress")
+
+        assert _other_unmerged_tasks_on_branch(hc_home, "branch-a", t1["id"]) is False
+        assert _other_unmerged_tasks_on_branch(hc_home, "branch-b", t2["id"]) is False
+
+    def test_branch_kept_when_sibling_task_unmerged(self, hc_home, tmp_path):
+        """Merging one task should NOT delete the branch when a sibling task
+        on the same branch is still unmerged."""
+        repo = _setup_git_repo(tmp_path)
+        branch = "shared/T0001-T0002"
+        _make_feature_branch(repo, branch)
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        # Create two tasks sharing the same branch
+        t1 = _make_needs_merge_task(hc_home, repo="myrepo", branch=branch)
+        t2 = _make_needs_merge_task(hc_home, repo="myrepo", branch=branch)
+        update_task(hc_home, t1["id"], approval_status="approved")
+        update_task(hc_home, t2["id"], approval_status="approved")
+
+        # Merge the first task
+        result = merge_task(hc_home, SAMPLE_TEAM, t1["id"], skip_tests=True)
+        assert result.success is True
+        assert get_task(hc_home, t1["id"])["status"] == "merged"
+
+        # The branch must still exist because t2 is not merged yet
+        branch_check = subprocess.run(
+            ["git", "branch", "--list", branch],
+            cwd=str(repo), capture_output=True, text=True,
+        )
+        assert branch in branch_check.stdout, (
+            f"Branch '{branch}' was deleted prematurely — t2 still needs it"
+        )
+
+    def test_branch_deleted_when_last_task_merged(self, hc_home, tmp_path):
+        """Branch should be deleted after the last task on it is merged."""
+        repo = _setup_git_repo(tmp_path)
+        branch = "shared/T0001-T0002"
+        _make_feature_branch(repo, branch)
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        t1 = _make_needs_merge_task(hc_home, repo="myrepo", branch=branch)
+        t2 = _make_needs_merge_task(hc_home, repo="myrepo", branch=branch)
+        update_task(hc_home, t1["id"], approval_status="approved")
+        update_task(hc_home, t2["id"], approval_status="approved")
+
+        # Merge t1 (branch kept because t2 still unmerged)
+        r1 = merge_task(hc_home, SAMPLE_TEAM, t1["id"], skip_tests=True)
+        assert r1.success is True
+
+        # Merge t2 — now last task, branch should be cleaned up
+        r2 = merge_task(hc_home, SAMPLE_TEAM, t2["id"], skip_tests=True)
+        assert r2.success is True
+
+        # Branch should now be deleted
+        branch_check = subprocess.run(
+            ["git", "branch", "--list", branch],
+            cwd=str(repo), capture_output=True, text=True,
+        )
+        assert branch not in branch_check.stdout, (
+            f"Branch '{branch}' should have been deleted after last task merged"
+        )
+
+    def test_single_task_branch_deleted_normally(self, hc_home, tmp_path):
+        """When only one task uses a branch, cleanup proceeds normally."""
+        repo = _setup_git_repo(tmp_path)
+        branch = "alice/T0001"
+        _make_feature_branch(repo, branch)
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        task = _make_needs_merge_task(hc_home, repo="myrepo", branch=branch)
+        update_task(hc_home, task["id"], approval_status="approved")
+
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
+        assert result.success is True
+
+        # Branch should be deleted (only one task)
+        branch_check = subprocess.run(
+            ["git", "branch", "--list", branch],
+            cwd=str(repo), capture_output=True, text=True,
+        )
+        assert branch not in branch_check.stdout

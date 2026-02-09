@@ -204,6 +204,25 @@ def _ff_merge(repo_dir: str, branch: str) -> tuple[bool, str]:
     return True, result.stdout
 
 
+def _other_unmerged_tasks_on_branch(
+    hc_home: Path,
+    branch: str,
+    exclude_task_id: int,
+) -> bool:
+    """Check whether any other task shares *branch* and is not yet merged.
+
+    Returns ``True`` when at least one other task on the same branch still
+    has a non-``merged`` status, meaning the branch should be kept alive.
+    """
+    all_tasks = list_tasks(hc_home)
+    for t in all_tasks:
+        if t["id"] == exclude_task_id:
+            continue
+        if t.get("branch") == branch and t.get("status") != "merged":
+            return True
+    return False
+
+
 def _cleanup_branch(repo_dir: str, branch: str) -> None:
     """Delete the merged branch and prune worktrees."""
     _run_git(["branch", "-d", branch], cwd=repo_dir)
@@ -298,15 +317,29 @@ def merge_task(
     change_status(hc_home, task_id, "merged")
     log_event(hc_home, f"{format_task_id(task_id)} merged to main \u2713")
 
-    # Step 5: Clean up branch (best effort)
-    _cleanup_branch(repo_str, branch)
+    # Step 5: Clean up branch (best effort).
+    # Only delete the branch if no other unmerged tasks still reference it.
+    if _other_unmerged_tasks_on_branch(hc_home, branch, exclude_task_id=task_id):
+        logger.info(
+            "Skipping branch deletion for %s — other unmerged tasks share branch %s",
+            format_task_id(task_id), branch,
+        )
+    else:
+        _cleanup_branch(repo_str, branch)
 
-    # Step 6: Clean up the agent's worktree (best effort, may already be removed in Step 0)
+    # Step 6: Clean up the agent's worktree (best effort, may already be removed in Step 0).
+    # Same guard: skip if other unmerged tasks share the branch (they may need the worktree).
     if assignee:
-        try:
-            remove_agent_worktree(hc_home, team, repo_name, assignee, task_id)
-        except Exception as exc:
-            logger.warning("Could not remove worktree for %s: %s", task_id, exc)
+        if _other_unmerged_tasks_on_branch(hc_home, branch, exclude_task_id=task_id):
+            logger.info(
+                "Skipping worktree removal for %s — other unmerged tasks share branch %s",
+                format_task_id(task_id), branch,
+            )
+        else:
+            try:
+                remove_agent_worktree(hc_home, team, repo_name, assignee, task_id)
+            except Exception as exc:
+                logger.warning("Could not remove worktree for %s: %s", task_id, exc)
 
     return MergeResult(task_id, True, "Merged successfully")
 
