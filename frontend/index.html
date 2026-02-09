@@ -14,14 +14,18 @@
     <div id="sidebarStatusContent"><span style="color:var(--text-faint);font-size:12px">Loading...</span></div>
   </div>
   <div class="sidebar-widget" id="sidebarAgents">
-    <div class="sidebar-widget-header">Agents</div>
+    <div class="sidebar-widget-header">
+      <span>Agents</span>
+      <a class="sidebar-see-all" onclick="switchTab('agents')">See All &rarr;</a>
+    </div>
     <div class="sidebar-agent-list" id="sidebarAgentList"></div>
-    <a class="sidebar-see-all" onclick="switchTab('agents')">See All &rarr;</a>
   </div>
   <div class="sidebar-widget" id="sidebarTasks">
-    <div class="sidebar-widget-header">Recent Tasks</div>
+    <div class="sidebar-widget-header">
+      <span>Recent Tasks</span>
+      <a class="sidebar-see-all" onclick="switchTab('tasks')">See All &rarr;</a>
+    </div>
     <div class="sidebar-task-list" id="sidebarTaskList"></div>
-    <a class="sidebar-see-all" onclick="switchTab('tasks')">See All &rarr;</a>
   </div>
 </div>
 
