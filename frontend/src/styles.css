@@ -316,10 +316,13 @@ body {
 .msg-recipient { color: var(--text-muted); font-size: 12px; font-weight: 400; }
 .msg-time { color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; margin-left: auto; flex-shrink: 0; }
 .msg-content { color: var(--text-primary); font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
-.msg-event { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px 12px; margin: 4px 0; }
-.msg-event-line { flex: 1; height: 1px; background: var(--border-subtle); }
-.msg-event-text { color: var(--text-faint); font-size: 11px; white-space: nowrap; }
-.msg-event-time { color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
+.msg-event { display: flex; align-items: flex-start; gap: 12px; padding: 4px 12px; margin: 2px 0; }
+.msg-event-icon { width: 32px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--text-faint); padding-top: 1px; }
+.msg-event-text { flex: 1; color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+.msg-event-time { color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; margin-left: auto; }
+/* Agent name links in events */
+.agent-link { color: var(--text-primary); font-weight: 500; cursor: pointer; transition: color 0.15s; }
+.agent-link:hover { color: var(--accent-blue); }
 /* ---- Chat Input Container (unified bordered container) ---- */
 .chat-input-container {
   border: 1px solid var(--border-input);

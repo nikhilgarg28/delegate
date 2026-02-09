@@ -247,7 +247,7 @@ class TestHandleReviewRequest:
         assert not result.approved
 
         events = get_messages(hc_home, msg_type="event")
-        assert any("CHANGES_REQUESTED" in e["content"] for e in events)
+        assert any("changes requested" in e["content"] for e in events)
 
     def test_nonexistent_repo(self, qa_team):
         hc_home, _ = qa_team

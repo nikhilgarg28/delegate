@@ -98,7 +98,7 @@ def route_once(
                 )
                 log_event(
                     hc_home,
-                    f"Failed to deliver: {msg.sender} -> {msg.recipient}: {e}",
+                    f"Message delivery failed: {msg.sender.capitalize()} \u2192 {msg.recipient.capitalize()}",
                 )
 
             if msg.filename:
@@ -120,7 +120,7 @@ def route_once(
                 )
                 log_event(
                     hc_home,
-                    f"Failed to deliver: {msg.sender} -> {msg.recipient}: {e}",
+                    f"Message delivery failed: {msg.sender.capitalize()} \u2192 {msg.recipient.capitalize()}",
                 )
 
             # Notify the web UI when a message arrives for the boss

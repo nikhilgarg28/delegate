@@ -60,11 +60,12 @@ class TestCheckAndClearStalePids:
         cleared = check_and_clear_stale_pids(tmp_team, TEAM)
         assert cleared == []
 
-    def test_logs_event_on_clear(self, tmp_team):
+    def test_no_event_on_clear(self, tmp_team):
+        """Stale PID clearing is internal housekeeping — no event logged."""
         _set_pid(tmp_team, "alice", 999999)
         check_and_clear_stale_pids(tmp_team, TEAM)
         events = get_messages(tmp_team, msg_type="event")
-        assert any("stale PID" in e["content"] for e in events)
+        assert not any("stale PID" in e["content"] for e in events)
 
 
 class TestGetAgentsNeedingSpawn:
@@ -138,7 +139,7 @@ class TestOrchestrateOnce:
         _deliver_msg(tmp_team, "alice")
         orchestrate_once(tmp_team, TEAM, spawn_fn=lambda h, t, a: None)
         events = get_messages(tmp_team, msg_type="event")
-        assert any("Spawning agent alice" in e["content"] for e in events)
+        assert any("Alice starting" in e["content"] for e in events)
 
     def test_handles_spawn_failure(self, tmp_team):
         _deliver_msg(tmp_team, "alice")
@@ -150,4 +151,4 @@ class TestOrchestrateOnce:
         assert result == []  # not added to spawned list
 
         events = get_messages(tmp_team, msg_type="event")
-        assert any("Failed to spawn" in e["content"] for e in events)
+        assert any("failed to start" in e["content"] for e in events)

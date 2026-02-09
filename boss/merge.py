@@ -245,7 +245,7 @@ def merge_task(
 
     repo_str = str(real_repo)
 
-    log_event(hc_home, f"Merge: starting {format_task_id(task_id)} branch={branch}")
+    log_event(hc_home, f"{format_task_id(task_id)} merge started ({branch})")
 
     # Step 0: Remove agent worktree if branch is still checked out there.
     # The worktree is no longer needed once the task is in needs_merge status,
@@ -264,7 +264,7 @@ def merge_task(
     if not ok:
         change_status(hc_home, task_id, "conflict")
         notify_conflict(hc_home, team, task, conflict_details=output[:500])
-        log_event(hc_home, f"Merge: {format_task_id(task_id)} rebase conflict")
+        log_event(hc_home, f"{format_task_id(task_id)} merge conflict during rebase")
         return MergeResult(task_id, False, f"Rebase conflict: {output[:200]}")
 
     # Step 2: Run pipeline / tests (optional)
@@ -273,7 +273,7 @@ def merge_task(
         if not ok:
             change_status(hc_home, task_id, "conflict")
             notify_conflict(hc_home, team, task, conflict_details=f"Pipeline failed:\n{output[:500]}")
-            log_event(hc_home, f"Merge: {format_task_id(task_id)} pipeline failed")
+            log_event(hc_home, f"{format_task_id(task_id)} merge blocked \u2014 pipeline failed")
             return MergeResult(task_id, False, f"Pipeline failed: {output[:200]}")
 
     # Step 3: Fast-forward merge
@@ -286,7 +286,7 @@ def merge_task(
     if not ok:
         change_status(hc_home, task_id, "conflict")
         notify_conflict(hc_home, team, task, conflict_details=output[:500])
-        log_event(hc_home, f"Merge: {format_task_id(task_id)} ff-merge failed")
+        log_event(hc_home, f"{format_task_id(task_id)} merge failed (fast-forward)")
         return MergeResult(task_id, False, f"Merge failed: {output[:200]}")
 
     # Capture HEAD of main after the merge (merge_tip)
@@ -296,7 +296,7 @@ def merge_task(
     # Step 4: Record merge_base and merge_tip, then mark as merged
     update_task(hc_home, task_id, merge_base=merge_base_sha, merge_tip=merge_tip_sha)
     change_status(hc_home, task_id, "merged")
-    log_event(hc_home, f"Merge: {format_task_id(task_id)} merged to main ✓")
+    log_event(hc_home, f"{format_task_id(task_id)} merged to main \u2713")
 
     # Step 5: Clean up branch (best effort)
     _cleanup_branch(repo_str, branch)

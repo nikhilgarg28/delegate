@@ -87,7 +87,7 @@ class TestApproveEndpoint:
 
         from boss.chat import get_messages
         events = get_messages(tmp_team, msg_type="event")
-        assert any("approved for merge" in e["content"] for e in events)
+        assert any("approved" in e["content"] for e in events)
 
 
 # ---------------------------------------------------------------------------

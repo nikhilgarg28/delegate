@@ -96,7 +96,7 @@ def check_and_clear_stale_pids(hc_home: Path, team: str) -> list[str]:
             logger.warning("Agent %s has stale PID %d, clearing", agent, pid)
             state["pid"] = None
             _write_state(ad, state)
-            log_event(hc_home, f"Cleared stale PID {pid} for agent {agent}")
+            # Stale PID cleared — internal housekeeping, no event logged
             cleared.append(agent)
 
     return cleared
@@ -157,7 +157,7 @@ def orchestrate_once(
     spawned = []
     for agent in to_spawn:
         logger.info("Spawning agent: %s", agent)
-        log_event(hc_home, f"Spawning agent {agent}")
+        log_event(hc_home, f"{agent.capitalize()} starting")
 
         if spawn_fn is not None:
             try:
@@ -165,7 +165,7 @@ def orchestrate_once(
                 spawned.append(agent)
             except Exception:
                 logger.exception("Failed to spawn agent %s", agent)
-                log_event(hc_home, f"Failed to spawn agent {agent}")
+                log_event(hc_home, f"{agent.capitalize()} failed to start")
         else:
             spawned.append(agent)
 

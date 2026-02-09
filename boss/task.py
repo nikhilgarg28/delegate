@@ -127,7 +127,7 @@ def create_task(
     path.write_text(yaml.dump(task, default_flow_style=False, sort_keys=False))
 
     from boss.chat import log_event
-    log_event(hc_home, f"Created {format_task_id(task_id)}: {title}")
+    log_event(hc_home, f"{format_task_id(task_id)} created \u2014 {title}")
 
     return task
 
@@ -183,7 +183,7 @@ def set_reviewer(hc_home: Path, task_id: int, reviewer: str) -> dict:
     task = update_task(hc_home, task_id, reviewer=reviewer)
 
     from boss.chat import log_event
-    log_event(hc_home, f"{format_task_id(task_id)} reviewer set to {reviewer.capitalize()}")
+    log_event(hc_home, f"{format_task_id(task_id)} reviewer \u2192 {reviewer.capitalize()}")
 
     return task
 
@@ -219,7 +219,7 @@ def change_status(hc_home: Path, task_id: int, status: str) -> dict:
 
     new_status = status.replace("_", " ").title()
     from boss.chat import log_event
-    log_event(hc_home, f"Status of {format_task_id(task_id)} changed from {old_status} \u2192 {new_status}")
+    log_event(hc_home, f"{format_task_id(task_id)} {old_status} \u2192 {new_status}")
 
     return task
 

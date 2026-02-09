@@ -307,7 +307,7 @@ class TestOrchestration:
 
         # Also check events were logged
         events = get_messages(hc, msg_type="event")
-        assert any("Spawning agent alice" in e["content"] for e in events)
+        assert any("Alice starting" in e["content"] for e in events)
 
     def test_concurrency_limit_respected(self, hc):
         """Orchestrator respects max_concurrent across the team."""

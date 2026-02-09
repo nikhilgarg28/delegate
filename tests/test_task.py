@@ -290,7 +290,7 @@ class TestEventLogging:
         from boss.chat import get_messages
         create_task(tmp_team, title="Build API", project="backend", priority="high")
         events = get_messages(tmp_team, msg_type="event")
-        assert any("Created T0001:" in e["content"] for e in events)
+        assert any("T0001 created" in e["content"] for e in events)
 
     def test_assign_task_logs_event(self, tmp_team):
         from boss.chat import get_messages
@@ -304,7 +304,7 @@ class TestEventLogging:
         t = create_task(tmp_team, title="Build API")
         change_status(tmp_team, t["id"], "in_progress")
         events = get_messages(tmp_team, msg_type="event")
-        assert any("Status of T0001 changed from Open" in e["content"] and "In Progress" in e["content"] for e in events)
+        assert any("T0001 Open" in e["content"] and "In Progress" in e["content"] for e in events)
 
 
 class TestBranchAndCommits:

@@ -341,7 +341,7 @@ def handle_review_request(
     """
     _auto_detect_task_branch(hc_home, req.branch)
     task_id = _extract_task_id_from_branch(req.branch)
-    log_event(hc_home, f"QA: Reviewing {req.requester}'s changes — repo={req.repo} branch={req.branch}")
+    log_event(hc_home, f"QA reviewing {req.requester.capitalize()}'s changes ({req.branch})")
 
     try:
         wt_path = checkout_branch(hc_home, team, req.repo, req.branch)
@@ -442,7 +442,10 @@ def _report_result(hc_home: Path, team: str, req: ReviewRequest, result: ReviewR
     except ValueError:
         logger.warning("Could not send result to manager")
 
-    log_event(hc_home, f"QA {verdict}: repo={result.repo} branch={result.branch}")
+    if result.approved:
+        log_event(hc_home, f"QA approved ({result.branch}) \u2713")
+    else:
+        log_event(hc_home, f"QA changes requested ({result.branch})")
 
 
 def process_inbox(hc_home: Path, team: str) -> list[ReviewResult]:

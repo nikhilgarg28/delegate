@@ -528,7 +528,7 @@ async def run_agent_loop(
     current_task_id = current_task["id"] if current_task else None
     session_id = start_session(hc_home, agent, task_id=current_task_id)
     task_label = f" on {format_task_id(current_task_id)}" if current_task_id else ""
-    log_event(hc_home, f"Agent {agent} session started{task_label}")
+    log_event(hc_home, f"{agent.capitalize()} started{task_label}")
 
     total_tokens_in = 0
     total_tokens_out = 0
@@ -662,8 +662,9 @@ async def run_agent_loop(
             cost_usd=total_cost_usd,
         )
         total_tokens = total_tokens_in + total_tokens_out
-        cost_str = f", ${total_cost_usd:.4f}" if total_cost_usd else ""
-        log_event(hc_home, f"Agent {agent} session ended ({total_tokens} tokens{cost_str})")
+        tokens_fmt = f"{total_tokens:,}"
+        cost_str = f" \u00b7 ${total_cost_usd:.4f}" if total_cost_usd else ""
+        log_event(hc_home, f"{agent.capitalize()} finished ({tokens_fmt} tokens{cost_str})")
 
         # Write worklog
         worklog_content = "\n".join(worklog_lines)
@@ -730,7 +731,7 @@ async def _run_agent_oneshot(
     from boss.chat import start_session, end_session, log_event
     session_id = start_session(hc_home, agent, task_id=current_task_id)
     task_label = f" on {format_task_id(current_task_id)}" if current_task_id else ""
-    log_event(hc_home, f"Agent {agent} session started{task_label}")
+    log_event(hc_home, f"{agent.capitalize()} started{task_label}")
 
     total_tokens_in = 0
     total_tokens_out = 0
@@ -793,8 +794,9 @@ async def _run_agent_oneshot(
             cost_usd=total_cost_usd,
         )
         total_tokens = total_tokens_in + total_tokens_out
-        cost_str = f", ${total_cost_usd:.4f}" if total_cost_usd else ""
-        log_event(hc_home, f"Agent {agent} session ended ({total_tokens} tokens{cost_str})")
+        tokens_fmt = f"{total_tokens:,}"
+        cost_str = f" \u00b7 ${total_cost_usd:.4f}" if total_cost_usd else ""
+        log_event(hc_home, f"{agent.capitalize()} finished ({tokens_fmt} tokens{cost_str})")
 
         state = _read_state(ad)
         state["pid"] = None

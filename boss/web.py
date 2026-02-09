@@ -321,7 +321,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
             )
 
         updated = _update_task(hc_home, task_id, approval_status="approved")
-        _log_event(hc_home, f"{format_task_id(task_id)} approved for merge")
+        _log_event(hc_home, f"{format_task_id(task_id)} approved \u2713")
         return updated
 
     class RejectBody(BaseModel):
@@ -352,7 +352,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         from boss.notify import notify_rejection
         notify_rejection(hc_home, _first_team(hc_home), task, reason=body.reason)
 
-        _log_event(hc_home, f"{format_task_id(task_id)} rejected: {body.reason}")
+        _log_event(hc_home, f"{format_task_id(task_id)} rejected \u2014 {body.reason}")
         return updated
 
     # --- Message endpoints (global) ---

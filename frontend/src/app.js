@@ -498,6 +498,26 @@ function linkifyTaskRefs(html) {
   });
 }
 
+/**
+ * Make known agent names clickable in event text.
+ * Caches the agent name list from the sidebar agent data.
+ */
+let _knownAgentNames = [];
+function updateKnownAgents(agents) {
+  _knownAgentNames = (agents || []).map(function (a) { return a.name; });
+}
+function agentifyRefs(html) {
+  if (!_knownAgentNames.length) return html;
+  // Build a regex that matches capitalized agent names in text nodes
+  var pattern = new RegExp("\\b(" + _knownAgentNames.map(function (n) { return n.charAt(0).toUpperCase() + n.slice(1); }).join("|") + ")\\b", "g");
+  return html.replace(/(^[^<]+|>[^<]*)/g, function (match) {
+    return match.replace(pattern, function (full) {
+      var name = full.toLowerCase();
+      return '<span class="agent-link" onclick="event.stopPropagation();openAgentPanel(\'' + name + '\')">' + full + '</span>';
+    });
+  });
+}
+
 function switchTaskPanelDiffTab(tab) {
   _taskPanelDiffTab = tab;
   const container = document.getElementById("taskPanelBody");
@@ -744,7 +764,7 @@ async function _loadChatInner() {
   log.innerHTML = msgs
     .map((m) => {
       if (m.type === "event")
-        return `<div class="msg-event"><span class="msg-event-line"></span><span class="msg-event-text">${linkifyTaskRefs(esc(m.content))}</span><span class="msg-event-line"></span><span class="msg-event-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div>`;
+        return `<div class="msg-event"><div class="msg-event-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 7a6 6 0 1 0 2-4.5"/><polyline points="1 1 1 3.5 3.5 3.5"/></svg></div><span class="msg-event-text">${agentifyRefs(linkifyTaskRefs(esc(m.content)))}</span><span class="msg-event-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div>`;
       const c = avatarColor(m.sender);
       return `<div class="msg"><div class="msg-avatar" style="background:${c}">${avatarInitial(m.sender)}</div><div class="msg-body"><div class="msg-header"><span class="msg-sender" style="cursor:pointer" onclick="openAgentPanel('${m.sender}')">${cap(m.sender)}</span><span class="msg-recipient">\u2192 ${cap(m.recipient)}</span><span class="msg-time ts" data-ts="${m.timestamp}">${fmtTimestamp(m.timestamp)}</span></div><div class="msg-content md-content">${linkifyTaskRefs(renderMarkdown(m.content))}</div></div></div>`;
     })
@@ -813,6 +833,7 @@ async function loadSidebar() {
       typeof agentsRes.json === "function"
         ? await agentsRes.json()
         : agentsRes;
+    updateKnownAgents(agents);
     const statsMap = {};
     await Promise.all(
       (agents || []).map(async (a) => {
