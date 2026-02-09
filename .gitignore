@@ -24,6 +24,7 @@ build/
 
 # Frontend
 frontend/node_modules/
+boss/static/
 
 # OS
 .DS_Store
