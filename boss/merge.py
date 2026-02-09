@@ -55,13 +55,29 @@ def _run_git(args: list[str], cwd: str, **kwargs) -> subprocess.CompletedProcess
 def _rebase_branch(repo_dir: str, branch: str) -> tuple[bool, str]:
     """Rebase the branch onto main.
 
+    Stashes any unstaged changes before rebasing and restores them after,
+    so that untracked/modified files in the working directory (e.g. generated
+    static assets) don't cause ``git rebase`` to fail.
+
     Returns (success, output).
     """
+    # Stash any uncommitted changes (including untracked files) as a safety net
+    stash_result = _run_git(["stash", "--include-untracked"], cwd=repo_dir)
+    did_stash = stash_result.returncode == 0 and "No local changes" not in stash_result.stdout
+
     result = _run_git(["rebase", "main", branch], cwd=repo_dir)
     if result.returncode != 0:
         # Abort the failed rebase to leave repo in clean state
         _run_git(["rebase", "--abort"], cwd=repo_dir)
+        # Restore stashed changes even on failure
+        if did_stash:
+            _run_git(["stash", "pop"], cwd=repo_dir)
         return False, result.stderr + result.stdout
+
+    # Restore stashed changes after successful rebase
+    if did_stash:
+        _run_git(["stash", "pop"], cwd=repo_dir)
+
     return True, result.stdout
 
 
@@ -168,6 +184,17 @@ def merge_task(
 
     log_event(hc_home, f"Merge: starting {format_task_id(task_id)} branch={branch}")
 
+    # Step 0: Remove agent worktree if branch is still checked out there.
+    # The worktree is no longer needed once the task is in needs_merge status,
+    # and git refuses to rebase/checkout a branch that is checked out elsewhere.
+    assignee = task.get("assignee", "")
+    if assignee:
+        try:
+            remove_agent_worktree(hc_home, team, repo_name, assignee, task_id)
+            logger.info("Removed worktree for %s before merge", format_task_id(task_id))
+        except Exception as exc:
+            logger.warning("Could not remove worktree for %s before merge: %s", format_task_id(task_id), exc)
+
     # Step 1: Rebase onto main
     ok, output = _rebase_branch(repo_str, branch)
     if not ok:
@@ -200,8 +227,7 @@ def merge_task(
     # Step 5: Clean up branch (best effort)
     _cleanup_branch(repo_str, branch)
 
-    # Step 6: Clean up the agent's worktree (best effort)
-    assignee = task.get("assignee", "")
+    # Step 6: Clean up the agent's worktree (best effort, may already be removed in Step 0)
     if assignee:
         try:
             remove_agent_worktree(hc_home, team, repo_name, assignee, task_id)

@@ -155,6 +155,75 @@ class TestMergeTask:
         assert result.success is False
         assert "no repo" in result.message.lower()
 
+    def test_merge_removes_worktree_before_rebase(self, hc_home, tmp_path):
+        """Merge should remove agent worktree before rebasing so git doesn't
+        refuse to rebase a branch checked out in another worktree."""
+        repo = _setup_git_repo(tmp_path)
+        branch = "alice/T0001-wt"
+        _make_feature_branch(repo, branch)
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        # Create a worktree for the agent (simulating what happens during task work)
+        wt_dir = hc_home / "teams" / SAMPLE_TEAM / "agents" / "alice" / "worktrees"
+        wt_dir.mkdir(parents=True, exist_ok=True)
+        wt_path = wt_dir / "myrepo-T0001"
+        subprocess.run(
+            ["git", "worktree", "add", str(wt_path), branch],
+            cwd=str(repo), capture_output=True, check=True,
+        )
+        assert wt_path.exists()
+
+        task = _make_needs_merge_task(hc_home, repo="myrepo", branch=branch)
+        update_task(hc_home, task["id"], assignee="alice", approval_status="approved")
+
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
+        assert result.success is True, f"Merge failed: {result.message}"
+        assert not wt_path.exists(), "Worktree should have been removed"
+
+        updated = get_task(hc_home, task["id"])
+        assert updated["status"] == "merged"
+
+    def test_merge_succeeds_with_unstaged_changes(self, hc_home, tmp_path):
+        """Merge should stash unstaged changes before rebasing and restore after."""
+        repo = _setup_git_repo(tmp_path)
+        branch = "alice/T0001-unstaged"
+        _make_feature_branch(repo, branch)
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        # Create an unstaged change in the repo working directory
+        (repo / "untracked_file.js").write_text("// generated\n")
+
+        task = _make_needs_merge_task(hc_home, repo="myrepo", branch=branch)
+        update_task(hc_home, task["id"], approval_status="approved")
+
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
+        assert result.success is True, f"Merge failed: {result.message}"
+
+        updated = get_task(hc_home, task["id"])
+        assert updated["status"] == "merged"
+
+        # The untracked file should still be present after merge
+        assert (repo / "untracked_file.js").exists(), "Stashed file should be restored"
+
+    def test_merge_succeeds_with_modified_tracked_file(self, hc_home, tmp_path):
+        """Merge should stash modified tracked files before rebasing."""
+        repo = _setup_git_repo(tmp_path)
+        branch = "alice/T0001-modified"
+        _make_feature_branch(repo, branch)
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        # Modify a tracked file without staging it
+        (repo / "README.md").write_text("# Modified but not staged\n")
+
+        task = _make_needs_merge_task(hc_home, repo="myrepo", branch=branch)
+        update_task(hc_home, task["id"], approval_status="approved")
+
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
+        assert result.success is True, f"Merge failed: {result.message}"
+
+        updated = get_task(hc_home, task["id"])
+        assert updated["status"] == "merged"
+
 
 # ---------------------------------------------------------------------------
 # merge_once tests
