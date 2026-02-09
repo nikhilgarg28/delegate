@@ -204,7 +204,7 @@ body {
 .task-assignee { color: var(--text-secondary); font-size: 12px; min-width: 70px; text-align: right; }
 .task-priority { color: var(--text-secondary); font-size: 12px; min-width: 60px; text-align: right; }
 .task-detail { max-height: 0; overflow: hidden; transition: max-height 0.25s ease-out, padding 0.25s ease-out; padding: 0 14px; }
-.task-row.expanded .task-detail { max-height: 400px; padding: 0 14px 14px; transition: max-height 0.3s ease-in, padding 0.2s ease-in; }
+.task-row.expanded .task-detail { max-height: 2000px; padding: 0 14px 14px; transition: max-height 0.3s ease-in, padding 0.2s ease-in; }
 .task-detail-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
 .task-detail-item { background: var(--bg-hover); border-radius: 8px; padding: 10px 14px; }
 .task-detail-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 4px; }
