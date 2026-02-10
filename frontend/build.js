@@ -27,7 +27,7 @@ async function build() {
 
   const ctx = await esbuild.context({
     entryPoints: [
-      path.join(__dirname, "src/app.js"),
+      path.join(__dirname, "src/app.jsx"),
       path.join(__dirname, "src/styles.css"),
     ],
     bundle: true,
@@ -36,6 +36,8 @@ async function build() {
     sourcemap: watch,
     format: "iife",
     target: ["es2020"],
+    jsx: "automatic",
+    jsxImportSource: "preact",
     loader: {
       ".woff": "file",
       ".woff2": "file",
