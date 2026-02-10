@@ -23,6 +23,7 @@ function renderMarkdown(text) {
 // =====================================================================
 let _currentTeam = "";
 let _teams = [];
+let _bossName = "boss"; // fetched from /config
 let _isMuted = localStorage.getItem("delegate-muted") === "true";
 let _audioCtx = null;
 let _lastMsgTimestamp = "";
@@ -872,8 +873,8 @@ async function openTaskPanel(taskId) {
     let body = "";
     // Metadata grid
     body += '<div class="task-panel-meta-grid">';
+    body += '<div class="task-panel-meta-item"><div class="task-detail-label">DRI</div><div class="task-detail-value">' + (task.dri ? cap(task.dri) : "\u2014") + '</div></div>';
     body += '<div class="task-panel-meta-item"><div class="task-detail-label">Assignee</div><div class="task-detail-value">' + (task.assignee ? cap(task.assignee) : "\u2014") + '</div></div>';
-    body += '<div class="task-panel-meta-item"><div class="task-detail-label">Reviewer</div><div class="task-detail-value">' + (task.reviewer ? cap(task.reviewer) : "\u2014") + '</div></div>';
     body += '<div class="task-panel-meta-item"><div class="task-detail-label">Priority</div><div class="task-detail-value">' + cap(task.priority) + '</div></div>';
     body += '<div class="task-panel-meta-item"><div class="task-detail-label">Time</div><div class="task-detail-value">' + (stats ? fmtElapsed(stats.elapsed_seconds) : "\u2014") + '</div></div>';
     body += '</div>';
@@ -1370,8 +1371,10 @@ async function loadSidebar() {
       '<div class="sidebar-stat-row"><span class="sidebar-stat-label">Active tasks</span><span class="stat-value">' + openCount + '</span></div>' +
       '<div class="sidebar-stat-row"><span class="sidebar-stat-label">Spent lifetime</span><span class="stat-value">$' + totalCost.toFixed(2) + '</span></div>';
     // ---- Action Required widget ----
+    // Tasks where the boss is the current assignee (i.e. waiting on human action)
     const actionItems = tasks.filter(function (t) {
-      return t.status === "needs_merge";
+      return t.assignee && t.assignee.toLowerCase() === _bossName.toLowerCase() &&
+             t.status !== "merged" && t.status !== "done";
     }).sort(function (a, b) {
       return (a.updated_at || "").localeCompare(b.updated_at || "");
     });
@@ -1394,7 +1397,7 @@ async function loadSidebar() {
       let actionHtml = "";
       for (const t of actionItems) {
         const tid = "T" + String(t.id).padStart(4, "0");
-        const icon = t.status === "needs_merge" ? "\uD83D\uDD00" : "\uD83D\uDC41";
+        const icon = t.status === "needs_merge" ? "\uD83D\uDD00" : (t.status === "review" ? "\uD83D\uDC41" : "\u26A1");
         const timeWaiting = _fmtRelativeTime(t.updated_at);
         actionHtml +=
           '<div class="sidebar-action-row" onclick="openTaskPanel(' + t.id + ')">' +
@@ -2005,9 +2008,15 @@ initTheme();
 _updateMuteBtn();
 _restoreChatFilters();
 _restoreTaskFilters();
-loadTeams().then(() => {
-  initFromHash();
-  loadSidebar();
+
+// Fetch app config (boss name) then bootstrap
+fetch("/config").then(r => r.ok ? r.json() : {}).then(cfg => {
+  if (cfg.boss_name) _bossName = cfg.boss_name;
+}).catch(() => {}).finally(() => {
+  loadTeams().then(() => {
+    initFromHash();
+    loadSidebar();
+  });
 });
 
 // =====================================================================

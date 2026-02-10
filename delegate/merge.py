@@ -269,10 +269,11 @@ def merge_task(
     # Step 0: Remove agent worktree if branch is still checked out there.
     # The worktree is no longer needed once the task is in needs_merge status,
     # and git refuses to rebase/checkout a branch that is checked out elsewhere.
-    assignee = task.get("assignee", "")
-    if assignee:
+    # Use DRI (not current assignee) since the worktree lives under the DRI's dir.
+    dri = task.get("dri", "") or task.get("assignee", "")
+    if dri:
         try:
-            remove_agent_worktree(hc_home, team, repo_name, assignee, task_id)
+            remove_agent_worktree(hc_home, team, repo_name, dri, task_id)
             logger.info("Removed worktree for %s before merge", format_task_id(task_id))
         except Exception as exc:
             logger.warning("Could not remove worktree for %s before merge: %s", format_task_id(task_id), exc)
@@ -329,7 +330,7 @@ def merge_task(
 
     # Step 6: Clean up the agent's worktree (best effort, may already be removed in Step 0).
     # Same guard: skip if other unmerged tasks share the branch (they may need the worktree).
-    if assignee:
+    if dri:
         if _other_unmerged_tasks_on_branch(hc_home, branch, exclude_task_id=task_id):
             logger.info(
                 "Skipping worktree removal for %s — other unmerged tasks share branch %s",
@@ -337,7 +338,7 @@ def merge_task(
             )
         else:
             try:
-                remove_agent_worktree(hc_home, team, repo_name, assignee, task_id)
+                remove_agent_worktree(hc_home, team, repo_name, dri, task_id)
             except Exception as exc:
                 logger.warning("Could not remove worktree for %s: %s", task_id, exc)
 

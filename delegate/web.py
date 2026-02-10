@@ -302,6 +302,13 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     app = FastAPI(title="Delegate UI", lifespan=_lifespan)
     app.state.hc_home = hc_home
 
+    # --- Config endpoint ---
+
+    @app.get("/config")
+    def get_config():
+        """Return app configuration (boss name, etc.) for the frontend."""
+        return {"boss_name": get_boss(hc_home) or "boss"}
+
     # --- Team endpoints ---
 
     @app.get("/teams")

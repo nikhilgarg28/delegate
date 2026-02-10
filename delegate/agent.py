@@ -300,12 +300,14 @@ def _slugify(title: str, max_len: int = 40) -> str:
     return slug[:max_len].rstrip("-")
 
 
-def _branch_name(agent: str, task_id: int, title: str = "") -> str:
-    """Compute the branch name for an agent's task.
+def _branch_name(dri: str, task_id: int, title: str = "") -> str:
+    """Compute the branch name for a task using the DRI.
 
-    Format: ``<agent>/T<task_id>``
+    Format: ``<dri>/T<task_id>``
+    The DRI (Directly Responsible Individual) never changes, keeping the
+    branch name stable for the lifetime of the task.
     """
-    return f"{agent}/{format_task_id(task_id)}"
+    return f"{dri}/{format_task_id(task_id)}"
 
 
 def setup_task_worktree(
@@ -317,8 +319,9 @@ def setup_task_worktree(
     """Set up a git worktree for the agent's current task if it has a repo.
 
     Creates the worktree, sets the task's ``branch`` field, and returns the
-    worktree path.  Returns *None* if the task has no repo or the repo isn't
-    registered.
+    worktree path.  The branch name is derived from the task's DRI (not the
+    current agent), keeping it stable across reassignments.  Returns *None*
+    if the task has no repo or the repo isn't registered.
     """
     repo_name = task.get("repo", "")
     if not repo_name:
@@ -326,7 +329,8 @@ def setup_task_worktree(
 
     task_id = task["id"]
     title = task.get("title", "")
-    branch = _branch_name(agent, task_id, title)
+    dri = task.get("dri", "") or agent  # fallback for old tasks without dri
+    branch = _branch_name(dri, task_id, title)
 
     try:
         from delegate.repo import create_agent_worktree
@@ -413,9 +417,10 @@ def _ensure_task_branch_metadata(
     needs_update = False
     updates: dict = {}
 
-    # Backfill branch name
+    # Backfill branch name (use DRI for stable naming)
     if not task.get("branch"):
-        branch = _branch_name(agent, task_id, task.get("title", ""))
+        dri = task.get("dri", "") or agent
+        branch = _branch_name(dri, task_id, task.get("title", ""))
         updates["branch"] = branch
         needs_update = True
         logger.info("Backfilling branch=%s on task %s", branch, task_id)

@@ -235,7 +235,8 @@ def create_agent_worktree(
     if not real_repo.is_dir():
         raise FileNotFoundError(f"Repo not found at {real_repo} (symlink: {repo_dir})")
 
-    # Default branch name
+    # Default branch name — caller should pass branch explicitly (derived
+    # from DRI), but fall back to agent name for backwards compat.
     if branch is None:
         branch = f"{agent}/{format_task_id(task_id)}"
 

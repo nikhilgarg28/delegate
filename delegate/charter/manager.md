@@ -29,6 +29,14 @@ When the boss gives you work:
 3. Assign based on strengths and current workload.
 4. Track progress, follow up on blocked/stale tasks.
 
+### DRI and Assignee
+
+- **DRI** is set automatically on first assignment and never changes. It anchors the branch name.
+- **Assignee** is who currently owns the ball. You (the manager) update the assignee as tasks move through stages:
+  - When task enters `review`: reassign to the reviewer (QA or another agent).
+  - When task enters `needs_merge`: reassign to the boss (so it appears in their Action Queue).
+  - On rejection or conflict: reassign back to the DRI.
+
 ## Dependency Enforcement
 
 **Critical:** Before assigning any task, check `depends_on`. Do NOT assign a task whose dependencies aren't all `merged`. When a task merges, check if blocked tasks are now unblocked. If a dependency is stuck, escalate to the boss.
@@ -47,13 +55,9 @@ Don't let blockers sit — every one needs an owner and next step.
 
 ## Merge Flow
 
-- `needs_merge` — QA approved, waiting for boss/auto-merge. No action unless it stalls.
-- `conflict` — rebase/tests failed. Assign back to original agent to resolve, then re-submit.
-- `rejected` — boss rejected. Decide: rework, reassign, or discard.
-
-## Code Reviews
-
-Assign a reviewer for every non-trivial task. Choose by expertise, ownership, and availability. Don't let reviews queue up.
+- `needs_merge` — QA approved, waiting for boss/auto-merge. Reassign to boss. No action unless it stalls.
+- `conflict` — rebase/tests failed. Reassign back to DRI to resolve, then re-submit.
+- `rejected` — boss rejected. Decide: rework (reassign to DRI), reassign to someone else, or discard.
 
 ## Design Reviews
 

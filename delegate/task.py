@@ -2,12 +2,16 @@
 
 Tasks are stored as individual YAML files under ``~/.delegate/tasks/``.
 
+Each task has a **DRI** (Directly Responsible Individual) set on first
+assignment — the DRI never changes and anchors the branch name
+(``<dri>/T<NNNN>``).  The **assignee** field tracks who currently owns
+the ball and is updated by the manager as the task moves through stages.
+
 Usage:
     python -m delegate.task create <home> --title "Build API" [--priority high]
     python -m delegate.task list <home> [--status open] [--assignee alice]
     python -m delegate.task update <home> <task_id> [--title ...] [--description ...] [--priority ...]
     python -m delegate.task assign <home> <task_id> <assignee>
-    python -m delegate.task reviewer <home> <task_id> <reviewer>
     python -m delegate.task status <home> <task_id> <status>
     python -m delegate.task show <home> <task_id>
 """
@@ -82,7 +86,6 @@ def create_task(
     description: str = "",
     project: str = "",
     priority: str = "medium",
-    reviewer: str = "",
     depends_on: list[int] | None = None,
     repo: str = "",
     tags: list[str] | None = None,
@@ -104,8 +107,8 @@ def create_task(
         "title": title,
         "description": description,
         "status": "open",
+        "dri": "",
         "assignee": "",
-        "reviewer": reviewer,
         "project": project,
         "priority": priority,
         "repo": repo,
@@ -139,7 +142,7 @@ def get_task(hc_home: Path, task_id: int) -> dict:
     if not path.exists():
         raise FileNotFoundError(f"Task {task_id} not found at {path}")
     task = yaml.safe_load(path.read_text())
-    task.setdefault("reviewer", "")
+    task.setdefault("dri", task.get("assignee", ""))  # backfill: old tasks without dri
     task.setdefault("repo", "")
     task.setdefault("branch", "")
     task.setdefault("commits", [])
@@ -169,21 +172,20 @@ def update_task(hc_home: Path, task_id: int, **updates) -> dict:
 
 
 def assign_task(hc_home: Path, task_id: int, assignee: str) -> dict:
-    """Assign a task to an agent."""
-    task = update_task(hc_home, task_id, assignee=assignee)
+    """Assign a task to an agent.
+
+    On the first assignment (when ``dri`` is empty), the assignee is also
+    recorded as the DRI (Directly Responsible Individual). The DRI never
+    changes and is used for branch naming.
+    """
+    task = get_task(hc_home, task_id)
+    updates: dict[str, str] = {"assignee": assignee}
+    if not task.get("dri"):
+        updates["dri"] = assignee
+    task = update_task(hc_home, task_id, **updates)
 
     from delegate.chat import log_event
     log_event(hc_home, f"{format_task_id(task_id)} assigned to {assignee.capitalize()}")
-
-    return task
-
-
-def set_reviewer(hc_home: Path, task_id: int, reviewer: str) -> dict:
-    """Set the reviewer for a task."""
-    task = update_task(hc_home, task_id, reviewer=reviewer)
-
-    from delegate.chat import log_event
-    log_event(hc_home, f"{format_task_id(task_id)} reviewer \u2192 {reviewer.capitalize()}")
 
     return task
 
@@ -194,7 +196,7 @@ def _backfill_branch_metadata(hc_home: Path, task: dict, updates: dict) -> None:
     Called as a safety net when a task enters ``review`` or ``needs_merge``
     status.  If the task already has both fields populated, this is a no-op.
 
-    For ``branch``, derives the name from the assignee and task ID.
+    For ``branch``, derives the name from the DRI and task ID.
     For ``base_sha``, computes ``git merge-base main <branch>`` in the repo.
     """
     import logging
@@ -204,13 +206,13 @@ def _backfill_branch_metadata(hc_home: Path, task: dict, updates: dict) -> None:
     if not repo_name:
         return
 
-    assignee = task.get("assignee", "")
+    dri = task.get("dri", "")
     task_id = task["id"]
 
     # Backfill branch name
     if not task.get("branch") and "branch" not in updates:
-        if assignee:
-            branch = f"{assignee}/{format_task_id(task_id)}"
+        if dri:
+            branch = f"{dri}/{format_task_id(task_id)}"
             updates["branch"] = branch
             _log.info("Backfilling branch=%s on task %s during status change", branch, task_id)
 
@@ -404,7 +406,6 @@ def main():
     p_create.add_argument("--description", default="")
     p_create.add_argument("--project", default="")
     p_create.add_argument("--priority", default="medium", choices=VALID_PRIORITIES)
-    p_create.add_argument("--reviewer", default="")
     p_create.add_argument("--repo", default="", help="Registered repo name for this task")
     p_create.add_argument("--tags", nargs="*", default=[], help="Free-form labels for the task")
 
@@ -430,12 +431,6 @@ def main():
     p_assign.add_argument("task_id", type=int)
     p_assign.add_argument("assignee")
 
-    # reviewer
-    p_reviewer = sub.add_parser("reviewer", help="Set task reviewer")
-    p_reviewer.add_argument("home", type=Path)
-    p_reviewer.add_argument("task_id", type=int)
-    p_reviewer.add_argument("reviewer_name")
-
     # status
     p_status = sub.add_parser("status", help="Change task status")
     p_status.add_argument("home", type=Path)
@@ -456,7 +451,6 @@ def main():
             description=args.description,
             project=args.project,
             priority=args.priority,
-            reviewer=args.reviewer,
             repo=args.repo,
             tags=args.tags or None,
         )
@@ -490,10 +484,6 @@ def main():
     elif args.command == "assign":
         task = assign_task(args.home, args.task_id, args.assignee)
         print(f"Assigned {format_task_id(task['id'])} to {args.assignee}")
-
-    elif args.command == "reviewer":
-        task = set_reviewer(args.home, args.task_id, args.reviewer_name)
-        print(f"{format_task_id(task['id'])} reviewer -> {args.reviewer_name}")
 
     elif args.command == "status":
         task = change_status(args.home, args.task_id, args.new_status)

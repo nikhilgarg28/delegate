@@ -6,13 +6,13 @@ Each agent works in their own git worktree, created automatically for tasks with
 
 ## Branches
 
-All work on feature branches: `<agent>/T<NNNN>` (e.g., `alice/T0012`). No direct pushes to main.
+All work on feature branches: `<dri>/T<NNNN>` (e.g., `alice/T0012`). The branch name is derived from the DRI (Directly Responsible Individual), not the current assignee, so it stays stable even when the task is reassigned for review. No direct pushes to main.
 
 ## Merge Flow
 
-1. Agent completes work → sets task to `review`, sends QA: `REVIEW_REQUEST: repo=<repo> branch=<branch>`
-2. QA reviews diff (base_sha → branch tip), runs tests, checks quality.
-3. Approved → `needs_merge`. Rejected → `in_progress` with feedback.
+1. Agent completes work → sets task to `review`. Manager reassigns to the reviewer.
+2. Reviewer reviews diff (base_sha → branch tip), runs tests, checks quality.
+3. Approved → `needs_merge`, manager reassigns to boss. Rejected → `in_progress`, manager reassigns to DRI with feedback.
 4. Boss approves (manual) or auto-merge (auto repos).
 5. Merge worker rebases onto main, runs tests. Conflicts → task becomes `conflict`, manager notified.
 6. Clean rebase + tests pass → fast-forward merge → `merged`, worktree cleaned up.
