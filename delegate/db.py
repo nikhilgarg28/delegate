@@ -83,14 +83,14 @@ CREATE TABLE IF NOT EXISTS tasks (
     project          TEXT    NOT NULL DEFAULT '',
     priority         TEXT    NOT NULL DEFAULT 'medium',
     repo             TEXT    NOT NULL DEFAULT '',
-    tags             TEXT    NOT NULL DEFAULT '[]',
+    tags             TEXT    NOT NULL DEFAULT '[]',  -- JSON array of strings
     created_at       TEXT    NOT NULL,
     updated_at       TEXT    NOT NULL,
     completed_at     TEXT    NOT NULL DEFAULT '',
-    depends_on       TEXT    NOT NULL DEFAULT '[]',
+    depends_on       TEXT    NOT NULL DEFAULT '[]',  -- JSON array of ints (task IDs)
     branch           TEXT    NOT NULL DEFAULT '',
     base_sha         TEXT    NOT NULL DEFAULT '',
-    commits          TEXT    NOT NULL DEFAULT '[]',
+    commits          TEXT    NOT NULL DEFAULT '[]',  -- JSON array of strings (SHAs)
     rejection_reason TEXT    NOT NULL DEFAULT '',
     approval_status  TEXT    NOT NULL DEFAULT '',
     merge_base       TEXT    NOT NULL DEFAULT '',
@@ -290,7 +290,13 @@ def _import_yaml_tasks(conn: sqlite3.Connection, hc_home: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def task_row_to_dict(row: sqlite3.Row) -> dict:
-    """Convert a tasks table row to a plain dict, deserializing JSON columns."""
+    """Convert a tasks table row to a plain dict, deserializing JSON columns.
+
+    Enforces element types:
+      depends_on → list[int]   (task IDs)
+      commits    → list[str]   (commit SHAs)
+      tags       → list[str]
+    """
     d = dict(row)
     for col in _JSON_COLUMNS:
         raw = d.get(col, "[]")
@@ -299,4 +305,11 @@ def task_row_to_dict(row: sqlite3.Row) -> dict:
                 d[col] = json.loads(raw)
             except (json.JSONDecodeError, TypeError):
                 d[col] = []
+    # Coerce element types
+    if d.get("depends_on"):
+        d["depends_on"] = [int(x) for x in d["depends_on"]]
+    if d.get("commits"):
+        d["commits"] = [str(x) for x in d["commits"]]
+    if d.get("tags"):
+        d["tags"] = [str(x) for x in d["tags"]]
     return d

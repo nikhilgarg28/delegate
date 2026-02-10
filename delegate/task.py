@@ -107,9 +107,9 @@ def create_task(
             (
                 title, description,
                 project, priority, repo,
-                json.dumps(list(tags) if tags else []),
+                json.dumps([str(t) for t in tags] if tags else []),
                 now, now,
-                json.dumps(depends_on or []),
+                json.dumps([int(d) for d in depends_on] if depends_on else []),
             ),
         )
         conn.commit()
@@ -157,13 +157,17 @@ def update_task(hc_home: Path, task_id: int, **updates) -> dict:
 
     updates["updated_at"] = _now()
 
-    # Serialize JSON columns
+    # Serialize JSON columns with type coercion
     set_parts = []
     params: list = []
     for key, value in updates.items():
         set_parts.append(f"{key} = ?")
-        if key in _JSON_COLUMNS:
-            params.append(json.dumps(value))
+        if key == "depends_on":
+            params.append(json.dumps([int(x) for x in value] if value else []))
+        elif key == "commits":
+            params.append(json.dumps([str(x) for x in value] if value else []))
+        elif key == "tags":
+            params.append(json.dumps([str(x) for x in value] if value else []))
         else:
             params.append(value)
     params.append(task_id)
