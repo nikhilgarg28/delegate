@@ -22,7 +22,7 @@ from pathlib import Path
 
 import yaml
 
-from delegate.mailbox import read_inbox, mark_inbox_read, send as mailbox_send
+from delegate.mailbox import read_inbox, mark_processed, send as mailbox_send
 from delegate.config import get_boss
 
 logger = logging.getLogger(__name__)
@@ -162,7 +162,7 @@ async def _process_inbox(
 
         # Mark the message as read
         if msg.filename:
-            mark_inbox_read(hc_home, team, boss_name, msg.filename)
+            mark_processed(hc_home, msg.filename)
 
         processed += 1
 

@@ -4,8 +4,7 @@ Each message is a row in the ``mailbox`` table with lifecycle columns:
     created_at   — when the sender wrote the message
     delivered_at — when it was made available to the recipient
     seen_at      — when the agent's control loop picked it up (turn start)
-    processed_at — when the agent finished the turn that handled it
-    read_at      — when the message was marked read (conceptually "done")
+    processed_at — when the agent finished the turn (message is "done")
 
 ``send()`` inserts with ``delivered_at = NOW`` (immediate delivery).
 The router is no longer required for delivery — it only handles
@@ -37,7 +36,6 @@ class Message:
     delivered_at: str | None = None
     seen_at: str | None = None
     processed_at: str | None = None
-    read_at: str | None = None
 
     def serialize(self) -> str:
         """Serialize message to the legacy file format (used in tests/logs)."""
@@ -76,7 +74,6 @@ def _row_to_message(row) -> Message:
         delivered_at=row["delivered_at"],
         seen_at=row["seen_at"],
         processed_at=row["processed_at"],
-        read_at=row["read_at"],
     )
 
 
@@ -119,14 +116,14 @@ def read_inbox(
 ) -> list[Message]:
     """Read messages from an agent's inbox (messages addressed to them).
 
-    If *unread_only* is True, returns only unread (``read_at IS NULL``) messages.
+    If *unread_only* is True, returns only unprocessed messages.
     Messages must be delivered (``delivered_at IS NOT NULL``) to be visible.
     """
     conn = get_connection(hc_home)
     try:
         if unread_only:
             rows = conn.execute(
-                "SELECT * FROM mailbox WHERE recipient = ? AND delivered_at IS NOT NULL AND read_at IS NULL ORDER BY id ASC",
+                "SELECT * FROM mailbox WHERE recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL ORDER BY id ASC",
                 (agent,),
             ).fetchall()
         else:
@@ -162,25 +159,6 @@ def read_outbox(
     finally:
         conn.close()
     return [_row_to_message(r) for r in rows]
-
-
-def mark_inbox_read(
-    hc_home: Path, team: str, agent: str, msg_identifier: str,
-) -> None:
-    """Mark a message as read.
-
-    *msg_identifier* is the message id (as a string, for backward compat).
-    """
-    msg_id = int(msg_identifier)
-    conn = get_connection(hc_home)
-    try:
-        conn.execute(
-            "UPDATE mailbox SET read_at = ? WHERE id = ? AND read_at IS NULL",
-            (_now(), msg_id),
-        )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def mark_seen(hc_home: Path, msg_identifier: str) -> None:
@@ -301,7 +279,7 @@ def has_unread(hc_home: Path, agent: str) -> bool:
     conn = get_connection(hc_home)
     try:
         row = conn.execute(
-            "SELECT 1 FROM mailbox WHERE recipient = ? AND delivered_at IS NOT NULL AND read_at IS NULL LIMIT 1",
+            "SELECT 1 FROM mailbox WHERE recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL LIMIT 1",
             (agent,),
         ).fetchone()
     finally:
@@ -314,7 +292,7 @@ def count_unread(hc_home: Path, agent: str) -> int:
     conn = get_connection(hc_home)
     try:
         row = conn.execute(
-            "SELECT COUNT(*) FROM mailbox WHERE recipient = ? AND delivered_at IS NOT NULL AND read_at IS NULL",
+            "SELECT COUNT(*) FROM mailbox WHERE recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL",
             (agent,),
         ).fetchone()
     finally:

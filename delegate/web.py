@@ -485,8 +485,6 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 "delivered_at": m.delivered_at,
                 "seen_at": m.seen_at,
                 "processed_at": m.processed_at,
-                "read_at": m.read_at,
-                "read": m.read_at is not None,
             }
             for m in all_msgs
         ]
@@ -506,7 +504,6 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 "delivered_at": m.delivered_at,
                 "seen_at": m.seen_at,
                 "processed_at": m.processed_at,
-                "read_at": m.read_at,
             }
             for m in all_msgs
         ]

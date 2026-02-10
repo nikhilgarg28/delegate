@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from delegate.paths import agent_dir as _resolve_agent_dir
-from delegate.mailbox import send, read_inbox, mark_inbox_read, Message
+from delegate.mailbox import send, read_inbox, mark_processed, Message
 from delegate.chat import log_event
 from delegate.task import list_tasks, set_task_branch, change_status, get_task, format_task_id
 from delegate.config import get_repo_test_cmd, get_repo_pipeline
@@ -463,7 +463,7 @@ def process_inbox(hc_home: Path, team: str) -> list[ReviewResult]:
             logger.warning("Unrecognized message in QA inbox: %s", msg.body[:100])
 
         if msg.filename:
-            mark_inbox_read(hc_home, team, qa_name, msg.filename)
+            mark_processed(hc_home, msg.filename)
 
     return results
 

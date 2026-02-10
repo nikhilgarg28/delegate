@@ -32,7 +32,7 @@ from typing import Any
 import yaml
 
 from delegate.paths import agent_dir as _resolve_agent_dir, agents_dir, base_charter_dir
-from delegate.mailbox import read_inbox, mark_inbox_read, mark_seen_batch, mark_processed, has_unread
+from delegate.mailbox import read_inbox, mark_seen_batch, mark_processed, has_unread
 from delegate.task import format_task_id
 
 logger = logging.getLogger(__name__)
@@ -1082,12 +1082,11 @@ def _finish_turn(
         cost_usd=ctx.total_cost_usd,
     )
 
-    # Mark the first unread message as processed + read (one-at-a-time)
+    # Mark the first unread message as processed (one-at-a-time)
     _first = read_inbox(ctx.hc_home, ctx.team, ctx.agent, unread_only=True)
     if _first and _first[0].filename:
         msg_id = _first[0].filename
         mark_processed(ctx.hc_home, msg_id)
-        mark_inbox_read(ctx.hc_home, ctx.team, ctx.agent, msg_id)
         ctx.alog.mail_marked_read(msg_id)
 
     # Re-check task association (may set up worktree if task acquired a repo)

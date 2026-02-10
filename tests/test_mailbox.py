@@ -7,7 +7,6 @@ from delegate.mailbox import (
     send,
     read_inbox,
     read_outbox,
-    mark_inbox_read,
     mark_seen,
     mark_seen_batch,
     mark_processed,
@@ -103,9 +102,9 @@ class TestReadInbox:
 
     def test_read_inbox_unread_only(self, tmp_team):
         msg_id = send(tmp_team, TEAM, "alice", "bob", "Hello!")
-        mark_inbox_read(tmp_team, TEAM, "bob", msg_id)
+        mark_processed(tmp_team, msg_id)
 
-        # Unread only should return nothing
+        # Unread only should return nothing (message is processed)
         assert read_inbox(tmp_team, TEAM, "bob", unread_only=True) == []
         # All should return the message
         all_msgs = read_inbox(tmp_team, TEAM, "bob", unread_only=False)
@@ -125,17 +124,17 @@ class TestReadOutbox:
         assert all_msgs[0].body == "Hello"
 
 
-class TestMarkRead:
-    def test_mark_inbox_read(self, tmp_team):
+class TestMarkProcessed:
+    def test_mark_processed_removes_from_unread(self, tmp_team):
         msg_id = send(tmp_team, TEAM, "alice", "bob", "Hello!")
         assert len(read_inbox(tmp_team, TEAM, "bob", unread_only=True)) == 1
 
-        mark_inbox_read(tmp_team, TEAM, "bob", msg_id)
+        mark_processed(tmp_team, msg_id)
         assert len(read_inbox(tmp_team, TEAM, "bob", unread_only=True)) == 0
         # Message still exists when reading all
         all_msgs = read_inbox(tmp_team, TEAM, "bob", unread_only=False)
         assert len(all_msgs) == 1
-        assert all_msgs[0].read_at is not None
+        assert all_msgs[0].processed_at is not None
 
 
 class TestSeenAndProcessed:
@@ -162,7 +161,7 @@ class TestSeenAndProcessed:
         mark_seen(tmp_team, msg_id)
         mark_processed(tmp_team, msg_id)
 
-        inbox = read_inbox(tmp_team, TEAM, "bob")
+        inbox = read_inbox(tmp_team, TEAM, "bob", unread_only=False)
         assert inbox[0].seen_at is not None
         assert inbox[0].processed_at is not None
 
@@ -171,31 +170,27 @@ class TestSeenAndProcessed:
         id2 = send(tmp_team, TEAM, "alice", "bob", "Second")
         mark_processed_batch(tmp_team, [id1, id2])
 
-        inbox = read_inbox(tmp_team, TEAM, "bob")
+        inbox = read_inbox(tmp_team, TEAM, "bob", unread_only=False)
         assert all(m.processed_at is not None for m in inbox)
 
     def test_full_lifecycle(self, tmp_team):
-        """Message goes through delivered → seen → processed → read."""
+        """Message goes through delivered → seen → processed."""
         msg_id = send(tmp_team, TEAM, "alice", "bob", "Hello")
 
         msg = read_inbox(tmp_team, TEAM, "bob")[0]
         assert msg.delivered_at is not None
         assert msg.seen_at is None
         assert msg.processed_at is None
-        assert msg.read_at is None
 
         mark_seen(tmp_team, msg_id)
         msg = read_inbox(tmp_team, TEAM, "bob")[0]
         assert msg.seen_at is not None
 
         mark_processed(tmp_team, msg_id)
-        msg = read_inbox(tmp_team, TEAM, "bob")[0]
-        assert msg.processed_at is not None
-
-        mark_inbox_read(tmp_team, TEAM, "bob", msg_id)
+        # processed = done, no longer unread
         assert read_inbox(tmp_team, TEAM, "bob", unread_only=True) == []
         msg = read_inbox(tmp_team, TEAM, "bob", unread_only=False)[0]
-        assert msg.read_at is not None
+        assert msg.processed_at is not None
 
 
 class TestDeliver:
@@ -222,9 +217,9 @@ class TestHasUnread:
         send(tmp_team, TEAM, "alice", "bob", "Hey")
         assert has_unread(tmp_team, "bob")
 
-    def test_no_unread_after_read(self, tmp_team):
+    def test_no_unread_after_processed(self, tmp_team):
         msg_id = send(tmp_team, TEAM, "alice", "bob", "Hey")
-        mark_inbox_read(tmp_team, TEAM, "bob", msg_id)
+        mark_processed(tmp_team, msg_id)
         assert not has_unread(tmp_team, "bob")
 
 

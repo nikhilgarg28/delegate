@@ -115,8 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_project
     # Lifecycle: created → delivered → seen → processed → read
     #   delivered_at  — router/send marked it ready for recipient
     #   seen_at       — agent control loop picked it up at turn start
-    #   processed_at  — agent finished the turn that handled this message
-    #   read_at       — marked read (moved to "cur" conceptually)
+    #   processed_at  — agent finished the turn (message is "done")
     """\
 CREATE TABLE IF NOT EXISTS mailbox (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -126,13 +125,12 @@ CREATE TABLE IF NOT EXISTS mailbox (
     created_at     TEXT    NOT NULL,
     delivered_at   TEXT,
     seen_at        TEXT,
-    processed_at   TEXT,
-    read_at        TEXT
+    processed_at   TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_mailbox_recipient_unread
     ON mailbox(recipient, delivered_at)
-    WHERE read_at IS NULL;
+    WHERE processed_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_mailbox_sender
     ON mailbox(sender);
 CREATE INDEX IF NOT EXISTS idx_mailbox_undelivered
