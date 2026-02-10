@@ -31,7 +31,7 @@ from delegate.paths import agent_dir as _resolve_agent_dir
 from delegate.mailbox import send, read_inbox, mark_processed, Message
 from delegate.chat import log_event
 from delegate.task import list_tasks, set_task_branch, change_status, get_task, format_task_id
-from delegate.config import get_repo_test_cmd, get_repo_pipeline
+from delegate.config import get_repo_pipeline
 from delegate.bootstrap import get_member_by_role
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ def checkout_branch(hc_home: Path, team: str, repo_name: str, branch: str) -> Pa
     """
     from delegate.repo import get_repo_path
 
-    repo_dir = get_repo_path(hc_home, repo_name)
+    repo_dir = get_repo_path(hc_home, team, repo_name)
     real_repo = repo_dir.resolve()
     if not real_repo.is_dir():
         raise FileNotFoundError(f"Repo '{repo_name}' not found at {real_repo}")
@@ -288,11 +288,16 @@ def _extract_task_id_from_branch(branch: str) -> int | None:
     """Extract a task ID from a branch name, if present.
 
     Supports formats:
-        <agent>/T<id>            (current convention)
-        <agent>/T<id>-<slug>     (legacy)
+        delegate/<team>/T<id>          (current convention)
+        <agent>/T<id>                  (legacy)
+        <agent>/T<id>-<slug>           (legacy)
         <agent>/<project>/<id>-<slug>  (legacy)
     """
-    # Try current naming convention: <agent>/T<id> (with optional legacy slug)
+    # Try new convention: delegate/<team>/T<id>
+    match = re.match(r"delegate/[^/]+/T(\d+)(?:-|$)", branch)
+    if match:
+        return int(match.group(1))
+    # Try legacy naming convention: <agent>/T<id> (with optional legacy slug)
     match = re.match(r"[^/]+/T(\d+)(?:-|$)", branch)
     if match:
         return int(match.group(1))
@@ -303,23 +308,23 @@ def _extract_task_id_from_branch(branch: str) -> int | None:
     return None
 
 
-def _auto_detect_task_branch(hc_home: Path, branch: str) -> None:
+def _auto_detect_task_branch(hc_home: Path, team: str, branch: str) -> None:
     """Try to match a branch name to a task and store it."""
     branch_match = re.match(r"([^/]+)/([^/]+)/(\d+)-", branch)
     if not branch_match:
-        # Also try the new naming convention: <agent>/T<id>-<slug>
-        branch_match = re.match(r"([^/]+)/T(\d+)-", branch)
+        # Also try the new naming convention: <team>/T<id>
+        branch_match = re.match(r"([^/]+)/T(\d+)", branch)
         if branch_match:
             task_number = int(branch_match.group(2))
             try:
-                set_task_branch(hc_home, task_number, branch)
+                set_task_branch(hc_home, team, task_number, branch)
             except FileNotFoundError:
                 logger.debug("No task %s found for branch %s", task_number, branch)
             return
         return
     task_number = int(branch_match.group(3))
     try:
-        set_task_branch(hc_home, task_number, branch)
+        set_task_branch(hc_home, team, task_number, branch)
     except FileNotFoundError:
         logger.debug("No task %s found for branch %s", task_number, branch)
 
@@ -339,9 +344,9 @@ def handle_review_request(
         - Sets task status back to 'in_progress'
         - Reports CHANGES_REQUESTED to requester and manager
     """
-    _auto_detect_task_branch(hc_home, req.branch)
+    _auto_detect_task_branch(hc_home, team, req.branch)
     task_id = _extract_task_id_from_branch(req.branch)
-    log_event(hc_home, f"QA reviewing {req.requester.capitalize()}'s changes ({req.branch})")
+    log_event(hc_home, team, f"QA reviewing {req.requester.capitalize()}'s changes ({req.branch})")
 
     try:
         wt_path = checkout_branch(hc_home, team, req.repo, req.branch)
@@ -353,11 +358,11 @@ def handle_review_request(
             branch=req.branch,
         )
         _report_result(hc_home, team, req, result)
-        _update_task_on_rejection(hc_home, task_id, req)
+        _update_task_on_rejection(hc_home, team, task_id, req)
         return result
 
     # Check for a configured pipeline first, then fall back to test_command
-    pipeline = get_repo_pipeline(hc_home, req.repo)
+    pipeline = get_repo_pipeline(hc_home, team, req.repo)
     if test_command is not None:
         # Explicit test_command overrides pipeline
         result = run_tests(wt_path, test_command)
@@ -380,33 +385,33 @@ def handle_review_request(
 
     # Update task status based on result
     if result.approved and task_id is not None:
-        _update_task_on_approval(hc_home, task_id)
+        _update_task_on_approval(hc_home, team, task_id)
     elif not result.approved and task_id is not None:
-        _update_task_on_rejection(hc_home, task_id, req)
+        _update_task_on_rejection(hc_home, team, task_id, req)
 
     _report_result(hc_home, team, req, result)
     return result
 
 
-def _update_task_on_approval(hc_home: Path, task_id: int) -> None:
+def _update_task_on_approval(hc_home: Path, team: str, task_id: int) -> None:
     """Set task status to needs_merge when QA approves."""
     try:
-        task = get_task(hc_home, task_id)
+        task = get_task(hc_home, team, task_id)
         if task["status"] == "review":
-            change_status(hc_home, task_id, "needs_merge")
+            change_status(hc_home, team, task_id, "needs_merge")
             logger.info("%s: QA approved, status set to needs_merge", task_id)
     except (FileNotFoundError, ValueError) as e:
         logger.warning("Could not update task %s on approval: %s", task_id, e)
 
 
-def _update_task_on_rejection(hc_home: Path, task_id: int | None, req: ReviewRequest) -> None:
+def _update_task_on_rejection(hc_home: Path, team: str, task_id: int | None, req: ReviewRequest) -> None:
     """Set task status back to in_progress when QA rejects."""
     if task_id is None:
         return
     try:
-        task = get_task(hc_home, task_id)
+        task = get_task(hc_home, team, task_id)
         if task["status"] == "review":
-            change_status(hc_home, task_id, "in_progress")
+            change_status(hc_home, team, task_id, "in_progress")
             logger.info("%s: QA rejected, status set back to in_progress", task_id)
     except (FileNotFoundError, ValueError) as e:
         logger.warning("Could not update task %s on rejection: %s", task_id, e)
@@ -443,9 +448,9 @@ def _report_result(hc_home: Path, team: str, req: ReviewRequest, result: ReviewR
         logger.warning("Could not send result to manager")
 
     if result.approved:
-        log_event(hc_home, f"QA approved ({result.branch}) \u2713")
+        log_event(hc_home, team, f"QA approved ({result.branch}) \u2713")
     else:
-        log_event(hc_home, f"QA changes requested ({result.branch})")
+        log_event(hc_home, team, f"QA changes requested ({result.branch})")
 
 
 def process_inbox(hc_home: Path, team: str) -> list[ReviewResult]:
@@ -463,7 +468,7 @@ def process_inbox(hc_home: Path, team: str) -> list[ReviewResult]:
             logger.warning("Unrecognized message in QA inbox: %s", msg.body[:100])
 
         if msg.filename:
-            mark_processed(hc_home, msg.filename)
+            mark_processed(hc_home, team, msg.filename)
 
     return results
 

@@ -48,74 +48,74 @@ def local_repo(tmp_path):
 
 class TestRegisterRepo:
     def test_creates_symlink(self, hc_home, local_repo):
-        name = register_repo(hc_home, str(local_repo))
-        link = get_repo_path(hc_home, name)
+        name = register_repo(hc_home, TEAM, str(local_repo))
+        link = get_repo_path(hc_home, TEAM, name)
         assert link.is_symlink()
         assert link.resolve() == local_repo.resolve()
 
     def test_derives_name_from_path(self, hc_home, local_repo):
-        name = register_repo(hc_home, str(local_repo))
+        name = register_repo(hc_home, TEAM, str(local_repo))
         assert name == local_repo.name
 
     def test_custom_name(self, hc_home, local_repo):
-        name = register_repo(hc_home, str(local_repo), name="custom")
+        name = register_repo(hc_home, TEAM, str(local_repo), name="custom")
         assert name == "custom"
-        link = get_repo_path(hc_home, "custom")
+        link = get_repo_path(hc_home, TEAM, "custom")
         assert link.is_symlink()
 
     def test_rejects_remote_url(self, hc_home):
         with pytest.raises(ValueError, match="Remote URLs are not supported"):
-            register_repo(hc_home, "https://github.com/org/repo.git")
+            register_repo(hc_home, TEAM, "https://github.com/org/repo.git")
 
     def test_rejects_missing_path(self, hc_home, tmp_path):
         with pytest.raises(FileNotFoundError):
-            register_repo(hc_home, str(tmp_path / "nonexistent"))
+            register_repo(hc_home, TEAM, str(tmp_path / "nonexistent"))
 
     def test_rejects_no_git_dir(self, hc_home, tmp_path):
         no_git = tmp_path / "not_a_repo"
         no_git.mkdir()
         with pytest.raises(FileNotFoundError, match="No .git"):
-            register_repo(hc_home, str(no_git))
+            register_repo(hc_home, TEAM, str(no_git))
 
     def test_registers_in_config(self, hc_home, local_repo):
-        register_repo(hc_home, str(local_repo))
-        repos = list_repos(hc_home)
+        register_repo(hc_home, TEAM, str(local_repo))
+        repos = list_repos(hc_home, TEAM)
         assert local_repo.name in repos
 
     def test_idempotent(self, hc_home, local_repo):
-        name1 = register_repo(hc_home, str(local_repo))
-        name2 = register_repo(hc_home, str(local_repo))
+        name1 = register_repo(hc_home, TEAM, str(local_repo))
+        name2 = register_repo(hc_home, TEAM, str(local_repo))
         assert name1 == name2
 
     def test_updates_symlink_on_move(self, hc_home, local_repo, tmp_path):
-        register_repo(hc_home, str(local_repo))
+        register_repo(hc_home, TEAM, str(local_repo))
         new_loc = tmp_path / "moved_repo"
         local_repo.rename(new_loc)
         # Re-register with same name pointing to new location
-        register_repo(hc_home, str(new_loc), name=local_repo.name)
-        link = get_repo_path(hc_home, local_repo.name)
+        register_repo(hc_home, TEAM, str(new_loc), name=local_repo.name)
+        link = get_repo_path(hc_home, TEAM, local_repo.name)
         assert link.resolve() == new_loc.resolve()
 
 
 class TestUpdateRepoPath:
     def test_updates_symlink(self, hc_home, local_repo, tmp_path):
-        register_repo(hc_home, str(local_repo))
+        register_repo(hc_home, TEAM, str(local_repo))
         new_loc = tmp_path / "moved"
         new_loc.mkdir()
         subprocess.run(["git", "init"], cwd=str(new_loc), capture_output=True, check=True)
 
-        update_repo_path(hc_home, local_repo.name, str(new_loc))
-        link = get_repo_path(hc_home, local_repo.name)
+        update_repo_path(hc_home, TEAM, local_repo.name, str(new_loc))
+        link = get_repo_path(hc_home, TEAM, local_repo.name)
         assert link.resolve() == new_loc.resolve()
 
     def test_raises_for_unknown_repo(self, hc_home, tmp_path):
         with pytest.raises(FileNotFoundError):
-            update_repo_path(hc_home, "nonexistent", str(tmp_path))
+            update_repo_path(hc_home, TEAM, "nonexistent", str(tmp_path))
 
 
 class TestWorktree:
     def test_create_and_get_worktree(self, hc_home, local_repo):
-        register_repo(hc_home, str(local_repo))
+        register_repo(hc_home, TEAM, str(local_repo))
         repo_name = local_repo.name
 
         wt_path = create_agent_worktree(
@@ -128,23 +128,23 @@ class TestWorktree:
         assert wt_path == expected
 
     def test_records_base_sha(self, hc_home, local_repo):
-        register_repo(hc_home, str(local_repo))
+        register_repo(hc_home, TEAM, str(local_repo))
         repo_name = local_repo.name
 
         # Create a task to receive the base_sha
-        task = create_task(hc_home, title="Test task")
-        update_task(hc_home, task["id"], repo=repo_name)
+        task = create_task(hc_home, TEAM, title="Test task")
+        update_task(hc_home, TEAM, task["id"], repo=repo_name)
 
         create_agent_worktree(
             hc_home, TEAM, repo_name, "alice", task_id=task["id"], branch="alice/T0001",
         )
 
-        updated = get_task(hc_home, task["id"])
+        updated = get_task(hc_home, TEAM, task["id"])
         assert updated["base_sha"] != ""
         assert len(updated["base_sha"]) == 40  # Full SHA
 
     def test_remove_worktree(self, hc_home, local_repo):
-        register_repo(hc_home, str(local_repo))
+        register_repo(hc_home, TEAM, str(local_repo))
         repo_name = local_repo.name
 
         wt_path = create_agent_worktree(
@@ -156,7 +156,7 @@ class TestWorktree:
         assert not wt_path.exists()
 
     def test_idempotent_create(self, hc_home, local_repo):
-        register_repo(hc_home, str(local_repo))
+        register_repo(hc_home, TEAM, str(local_repo))
         repo_name = local_repo.name
 
         wt1 = create_agent_worktree(
@@ -169,29 +169,29 @@ class TestWorktree:
 
     def test_backfills_base_sha_on_existing_worktree(self, hc_home, local_repo):
         """When worktree already exists but task has no base_sha, backfill it."""
-        register_repo(hc_home, str(local_repo))
+        register_repo(hc_home, TEAM, str(local_repo))
         repo_name = local_repo.name
 
         # Create a task
-        task = create_task(hc_home, title="Backfill test")
-        update_task(hc_home, task["id"], repo=repo_name)
+        task = create_task(hc_home, TEAM, title="Backfill test")
+        update_task(hc_home, TEAM, task["id"], repo=repo_name)
 
         # First call creates the worktree and sets base_sha
         create_agent_worktree(
             hc_home, TEAM, repo_name, "alice", task_id=task["id"], branch="alice/T0001",
         )
-        t1 = get_task(hc_home, task["id"])
+        t1 = get_task(hc_home, TEAM, task["id"])
         assert t1["base_sha"] != ""
 
         # Clear base_sha to simulate the bug
-        update_task(hc_home, task["id"], base_sha="")
-        t_cleared = get_task(hc_home, task["id"])
+        update_task(hc_home, TEAM, task["id"], base_sha="")
+        t_cleared = get_task(hc_home, TEAM, task["id"])
         assert t_cleared["base_sha"] == ""
 
         # Second call should backfill base_sha even though worktree exists
         create_agent_worktree(
             hc_home, TEAM, repo_name, "alice", task_id=task["id"], branch="alice/T0001",
         )
-        t2 = get_task(hc_home, task["id"])
+        t2 = get_task(hc_home, TEAM, task["id"])
         assert t2["base_sha"] != ""
         assert len(t2["base_sha"]) == 40

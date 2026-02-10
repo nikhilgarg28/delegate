@@ -1,18 +1,18 @@
-"""Centralized SQLite database with versioned migrations.
+"""Per-team SQLite database with versioned migrations.
 
-All state lives in ``~/.delegate/db.sqlite``.  On first access, the
-``schema_meta`` table is created and pending migrations are applied in
-order.  Each migration is idempotent (uses ``IF NOT EXISTS``).
+Each team has its own database at ``~/.delegate/teams/<team>/db.sqlite``.
+On first access the ``schema_meta`` table is created and pending migrations
+are applied in order.  Each migration is idempotent (uses ``IF NOT EXISTS``).
 
 Usage::
 
     from delegate.db import get_connection, ensure_schema
 
     # At daemon startup (or lazily on first query):
-    ensure_schema(hc_home)
+    ensure_schema(hc_home, team)
 
     # For individual operations:
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     ...
     conn.close()
 """
@@ -22,9 +22,7 @@ import logging
 import sqlite3
 from pathlib import Path
 
-import yaml
-
-from delegate.paths import db_path, tasks_dir as _yaml_tasks_dir
+from delegate.paths import db_path
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +34,7 @@ logger = logging.getLogger(__name__)
 # NEVER reorder or modify existing entries — only append.
 
 MIGRATIONS: list[str] = [
-    # --- V1: messages + sessions (previously inline in chat.py / bootstrap.py) ---
+    # --- V1: messages + sessions ---
     """\
 CREATE TABLE IF NOT EXISTS messages (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,18 +81,19 @@ CREATE TABLE IF NOT EXISTS tasks (
     project          TEXT    NOT NULL DEFAULT '',
     priority         TEXT    NOT NULL DEFAULT 'medium',
     repo             TEXT    NOT NULL DEFAULT '',
-    tags             TEXT    NOT NULL DEFAULT '[]',  -- JSON array of strings
+    tags             TEXT    NOT NULL DEFAULT '[]',
     created_at       TEXT    NOT NULL,
     updated_at       TEXT    NOT NULL,
     completed_at     TEXT    NOT NULL DEFAULT '',
-    depends_on       TEXT    NOT NULL DEFAULT '[]',  -- JSON array of ints (task IDs)
+    depends_on       TEXT    NOT NULL DEFAULT '[]',
     branch           TEXT    NOT NULL DEFAULT '',
     base_sha         TEXT    NOT NULL DEFAULT '',
-    commits          TEXT    NOT NULL DEFAULT '[]',  -- JSON array of strings (SHAs)
+    commits          TEXT    NOT NULL DEFAULT '[]',
     rejection_reason TEXT    NOT NULL DEFAULT '',
     approval_status  TEXT    NOT NULL DEFAULT '',
     merge_base       TEXT    NOT NULL DEFAULT '',
-    merge_tip        TEXT    NOT NULL DEFAULT ''
+    merge_tip        TEXT    NOT NULL DEFAULT '',
+    attachments      TEXT    NOT NULL DEFAULT '[]'
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_status
@@ -111,11 +110,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_project
     ON tasks(project);
 """,
 
-    # --- V3: mailbox table (replaces Maildir filesystem) ---
-    # Lifecycle: created → delivered → seen → processed → read
-    #   delivered_at  — router/send marked it ready for recipient
-    #   seen_at       — agent control loop picked it up at turn start
-    #   processed_at  — agent finished the turn (message is "done")
+    # --- V3: mailbox table ---
     """\
 CREATE TABLE IF NOT EXISTS mailbox (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,21 +131,12 @@ CREATE INDEX IF NOT EXISTS idx_mailbox_sender
 CREATE INDEX IF NOT EXISTS idx_mailbox_undelivered
     ON mailbox(id)
     WHERE delivered_at IS NULL;
-""",
-
-    # --- V4: index for recent-processed context queries ---
-    """\
 CREATE INDEX IF NOT EXISTS idx_mailbox_recipient_processed
     ON mailbox(recipient, processed_at)
     WHERE processed_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_mailbox_recipient_sender_processed
     ON mailbox(recipient, sender, processed_at)
     WHERE processed_at IS NOT NULL;
-""",
-
-    # --- V5: add attachments column to tasks ---
-    """\
-ALTER TABLE tasks ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]';
 """,
 ]
 
@@ -170,13 +156,13 @@ def _current_version(conn: sqlite3.Connection) -> int:
     return row[0] or 0
 
 
-def ensure_schema(hc_home: Path) -> None:
-    """Apply any pending migrations to the database.
+def ensure_schema(hc_home: Path, team: str) -> None:
+    """Apply any pending migrations to the team's database.
 
     Safe to call repeatedly — each migration runs at most once.
     Call this at daemon startup or lazily before first DB access.
     """
-    path = db_path(hc_home)
+    path = db_path(hc_home, team)
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path))
     conn.execute("PRAGMA journal_mode=WAL")
@@ -195,7 +181,7 @@ def ensure_schema(hc_home: Path) -> None:
     pending = MIGRATIONS[current:]
 
     for i, sql in enumerate(pending, start=current + 1):
-        logger.info("Applying migration V%d …", i)
+        logger.info("Applying migration V%d to team DB …", i)
         conn.executescript(sql)
         conn.execute(
             "INSERT INTO schema_meta (version) VALUES (?)", (i,)
@@ -203,101 +189,20 @@ def ensure_schema(hc_home: Path) -> None:
         conn.commit()
         logger.info("Migration V%d applied", i)
 
-    # One-time: import any leftover YAML tasks into SQLite.
-    if current < 2:
-        _import_yaml_tasks(conn, hc_home)
-
     conn.close()
 
 
-def get_connection(hc_home: Path) -> sqlite3.Connection:
-    """Open a connection with row_factory and ensure schema is current.
+def get_connection(hc_home: Path, team: str) -> sqlite3.Connection:
+    """Open a connection to the team's DB with row_factory and ensure schema is current.
 
     Callers are responsible for closing the connection.
     """
-    ensure_schema(hc_home)
-    path = db_path(hc_home)
+    ensure_schema(hc_home, team)
+    path = db_path(hc_home, team)
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
-
-
-# ---------------------------------------------------------------------------
-# YAML → SQLite one-time data migration
-# ---------------------------------------------------------------------------
-
-def _import_yaml_tasks(conn: sqlite3.Connection, hc_home: Path) -> None:
-    """Import existing YAML task files into the tasks table.
-
-    Only runs when the tasks table is empty and YAML files exist.
-    After importing, the YAML files are left in place (harmless).
-    """
-    td = _yaml_tasks_dir(hc_home)
-    if not td.is_dir():
-        return
-
-    yaml_files = sorted(td.glob("T*.yaml"))
-    if not yaml_files:
-        return
-
-    # Check if tasks table already has data
-    row = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()
-    if row[0] > 0:
-        return
-
-    imported = 0
-    for f in yaml_files:
-        try:
-            task = yaml.safe_load(f.read_text())
-        except Exception:
-            logger.warning("Skipping unreadable YAML task: %s", f)
-            continue
-        if not task or "id" not in task:
-            continue
-
-        conn.execute(
-            """\
-            INSERT INTO tasks (
-                id, title, description, status, dri, assignee,
-                project, priority, repo, tags, created_at, updated_at,
-                completed_at, depends_on, branch, base_sha, commits,
-                rejection_reason, approval_status, merge_base, merge_tip
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?,
-                ?, ?, ?, ?
-            )""",
-            (
-                task["id"],
-                task.get("title", ""),
-                task.get("description", ""),
-                task.get("status", "open"),
-                task.get("dri", task.get("assignee", "")),
-                task.get("assignee", ""),
-                task.get("project", ""),
-                task.get("priority", "medium"),
-                task.get("repo", ""),
-                json.dumps(task.get("tags", [])),
-                task.get("created_at", ""),
-                task.get("updated_at", ""),
-                task.get("completed_at", ""),
-                json.dumps(task.get("depends_on", [])),
-                task.get("branch", ""),
-                task.get("base_sha", ""),
-                json.dumps(task.get("commits", [])),
-                task.get("rejection_reason", ""),
-                task.get("approval_status", ""),
-                task.get("merge_base", ""),
-                task.get("merge_tip", ""),
-            ),
-        )
-        imported += 1
-
-    conn.commit()
-    if imported:
-        logger.info("Imported %d YAML tasks into SQLite", imported)
 
 
 # ---------------------------------------------------------------------------

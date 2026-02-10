@@ -8,7 +8,7 @@ import yaml
 from delegate.bootstrap import bootstrap, add_agent, AGENT_SUBDIRS, get_member_by_role
 from delegate.config import set_boss, get_boss
 from delegate.paths import (
-    team_dir, agents_dir, agent_dir, tasks_dir, db_path,
+    team_dir, agents_dir, agent_dir, db_path,
     roster_path, boss_person_dir, base_charter_dir,
 )
 
@@ -29,7 +29,6 @@ def test_creates_directory_structure(tmp_team):
     hc_home = tmp_team
     td = team_dir(hc_home, TEAM)
     assert td.is_dir()
-    assert tasks_dir(hc_home).is_dir()
     assert agents_dir(hc_home, TEAM).is_dir()
 
     for name in ["manager", "alice", "bob"]:
@@ -43,7 +42,7 @@ def test_creates_starter_files(tmp_team):
     """Bootstrap creates all expected files with content."""
     hc_home = tmp_team
     assert roster_path(hc_home, TEAM).is_file()
-    assert db_path(hc_home).is_file()
+    assert db_path(hc_home, TEAM).is_file()
 
     for name in ["manager", "alice", "bob"]:
         ad = agent_dir(hc_home, TEAM, name)
@@ -120,7 +119,7 @@ def test_workspace_exists_per_agent(tmp_team):
 
 def test_db_schema_created(tmp_team):
     """SQLite database has the messages and sessions tables."""
-    conn = sqlite3.connect(str(db_path(tmp_team)))
+    conn = sqlite3.connect(str(db_path(tmp_team, TEAM)))
 
     cursor = conn.execute("PRAGMA table_info(messages)")
     msg_columns = {row[1] for row in cursor.fetchall()}

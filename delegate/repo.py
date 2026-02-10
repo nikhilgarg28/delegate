@@ -1,7 +1,8 @@
-"""Repository management — registration via symlinks and git worktrees.
+"""Repository management — per-team registration via symlinks and git worktrees.
 
-Registered repos are stored as **symlinks** in ``~/.delegate/repos/<name>/``
-pointing to the real local repository root.  No clones are made.
+Registered repos are stored as **symlinks** in
+``~/.delegate/teams/<team>/repos/<name>/`` pointing to the real local
+repository root.  No clones are made.
 
 Only local repos are supported (the ``.git/`` directory must exist on disk).
 If the repo has its own remote, that's fine — delegate doesn't care.
@@ -9,9 +10,9 @@ If the repo has its own remote, that's fine — delegate doesn't care.
 When a repo moves on disk, update the symlink with ``delegate repo update``.
 
 Usage:
-    delegate repo add <local_path> [--name NAME]
-    delegate repo list
-    delegate repo update <name> <new_path>
+    delegate repo add <team> <local_path> [--name NAME]
+    delegate repo list <team>
+    delegate repo update <team> <name> <new_path>
 """
 
 import logging
@@ -22,7 +23,12 @@ from pathlib import Path
 from delegate.task import format_task_id
 
 from delegate.paths import repos_dir as _repos_dir, repo_path as _repo_path, agent_worktrees_dir
-from delegate.config import add_repo as _config_add_repo, get_repos as _config_get_repos, update_repo_approval as _config_update_approval, update_repo_test_cmd as _config_update_test_cmd
+from delegate.config import (
+    add_repo as _config_add_repo,
+    get_repos as _config_get_repos,
+    update_repo_approval as _config_update_approval,
+    update_repo_test_cmd as _config_update_test_cmd,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,29 +46,29 @@ def _derive_name(source: str) -> str:
     return name or "repo"
 
 
-def _resolve_repo_dir(hc_home: Path, name: str) -> Path:
-    """Return the canonical repo path (symlink location) inside ~/.delegate/repos/."""
-    return _repo_path(hc_home, name)
+def _resolve_repo_dir(hc_home: Path, team: str, name: str) -> Path:
+    """Return the canonical repo path (symlink location) inside team/repos/."""
+    return _repo_path(hc_home, team, name)
 
 
 def register_repo(
     hc_home: Path,
+    team: str,
     source: str,
     name: str | None = None,
     approval: str | None = None,
     test_cmd: str | None = None,
 ) -> str:
-    """Register a local repository by creating a symlink in ~/.delegate/repos/.
+    """Register a local repository for a team.
 
     Args:
         hc_home: Delegate home directory.
+        team: Team name.
         source: Local path to the repository root (must contain .git/).
         name: Name for the repo (default: derived from source).
         approval: Merge approval mode — 'auto' or 'manual'.
                   Defaults to 'manual' for new repos.
-                  If None on re-registration, leaves existing setting unchanged.
         test_cmd: Optional shell command to run tests.
-                  If None on re-registration, leaves existing setting unchanged.
 
     Returns:
         The name used for the repo.
@@ -90,7 +96,7 @@ def register_repo(
         )
 
     name = name or _derive_name(source)
-    link_path = _resolve_repo_dir(hc_home, name)
+    link_path = _resolve_repo_dir(hc_home, team, name)
 
     if link_path.is_symlink() or link_path.exists():
         # Already registered — update symlink target if different
@@ -107,12 +113,12 @@ def register_repo(
 
         # Update approval setting if explicitly provided
         if approval is not None:
-            _config_update_approval(hc_home, name, approval)
+            _config_update_approval(hc_home, team, name, approval)
             logger.info("Updated approval for '%s' to '%s'", name, approval)
 
         # Update test_cmd setting if explicitly provided
         if test_cmd is not None:
-            _config_update_test_cmd(hc_home, name, test_cmd)
+            _config_update_test_cmd(hc_home, team, name, test_cmd)
             logger.info("Updated test_cmd for '%s'", name)
     else:
         # Create symlink
@@ -120,29 +126,28 @@ def register_repo(
         link_path.symlink_to(source_path)
         logger.info("Created symlink %s -> %s", link_path, source_path)
 
-        # Register in config (new repo — default approval to 'manual')
-        _config_add_repo(hc_home, name, str(source_path), approval=approval or "manual", test_cmd=test_cmd)
+        # Register in team config (new repo — default approval to 'manual')
+        _config_add_repo(hc_home, team, name, str(source_path), approval=approval or "manual", test_cmd=test_cmd)
 
-    logger.info("Registered repo '%s' from %s", name, source_path)
+    logger.info("Registered repo '%s' for team '%s' from %s", name, team, source_path)
     return name
 
 
-def update_repo_path(hc_home: Path, name: str, new_path: str) -> None:
+def update_repo_path(hc_home: Path, team: str, name: str, new_path: str) -> None:
     """Update the symlink for a registered repo to point to a new location.
-
-    Use this when a repo moves on disk.
 
     Args:
         hc_home: Delegate home directory.
+        team: Team name.
         name: Repo name.
         new_path: New local path to the repository root.
 
     Raises:
         FileNotFoundError: If repo isn't registered or new path doesn't exist.
     """
-    link_path = _resolve_repo_dir(hc_home, name)
+    link_path = _resolve_repo_dir(hc_home, team, name)
     if not link_path.is_symlink() and not link_path.exists():
-        raise FileNotFoundError(f"Repo '{name}' is not registered")
+        raise FileNotFoundError(f"Repo '{name}' is not registered for team '{team}'")
 
     new_source = Path(new_path).resolve()
     if not new_source.is_dir():
@@ -154,32 +159,31 @@ def update_repo_path(hc_home: Path, name: str, new_path: str) -> None:
         link_path.unlink()
     link_path.symlink_to(new_source)
 
-    # Update config
-    from delegate.config import _read, _write
-    data = _read(hc_home)
-    repos = data.get("repos", {})
-    if name in repos:
-        repos[name]["source"] = str(new_source)
-        _write(hc_home, data)
+    # Update team config
+    from delegate.config import _read_repos, _write_repos
+    data = _read_repos(hc_home, team)
+    if name in data:
+        data[name]["source"] = str(new_source)
+        _write_repos(hc_home, team, data)
 
     logger.info("Updated repo '%s' symlink -> %s", name, new_source)
 
 
-def list_repos(hc_home: Path) -> dict:
-    """List registered repos from config.
+def list_repos(hc_home: Path, team: str) -> dict:
+    """List registered repos for a team from config.
 
     Returns:
         Dict of name -> metadata (source, approval, etc.).
     """
-    return _config_get_repos(hc_home)
+    return _config_get_repos(hc_home, team)
 
 
-def get_repo_path(hc_home: Path, repo_name: str) -> Path:
-    """Get the canonical path to a repo (the symlink in ~/.delegate/repos/).
+def get_repo_path(hc_home: Path, team: str, repo_name: str) -> Path:
+    """Get the canonical path to a repo (the symlink in team/repos/).
 
     The symlink resolves to the real repo root on disk.
     """
-    return _resolve_repo_dir(hc_home, repo_name)
+    return _resolve_repo_dir(hc_home, team, repo_name)
 
 
 # Keep old name as alias for compatibility
@@ -221,7 +225,7 @@ def create_agent_worktree(
         repo_name: Name of the registered repo.
         agent: Agent name.
         task_id: Task ID number.
-        branch: Branch name (default: <agent>/T<task_id>).
+        branch: Branch name (default: delegate/<team>/T<task_id>).
 
     Returns:
         Path to the created worktree directory.
@@ -230,15 +234,14 @@ def create_agent_worktree(
         FileNotFoundError: If the repo isn't registered.
         subprocess.CalledProcessError: If git worktree add fails.
     """
-    repo_dir = get_repo_path(hc_home, repo_name)
+    repo_dir = get_repo_path(hc_home, team, repo_name)
     real_repo = repo_dir.resolve()
     if not real_repo.is_dir():
         raise FileNotFoundError(f"Repo not found at {real_repo} (symlink: {repo_dir})")
 
-    # Default branch name — caller should pass branch explicitly (derived
-    # from DRI), but fall back to agent name for backwards compat.
+    # Default branch name
     if branch is None:
-        branch = f"{agent}/{format_task_id(task_id)}"
+        branch = f"delegate/{team}/{format_task_id(task_id)}"
 
     # Worktree destination
     wt_dir = agent_worktrees_dir(hc_home, team, agent)
@@ -250,10 +253,10 @@ def create_agent_worktree(
         # Worktree exists — still backfill base_sha if missing on the task
         try:
             from delegate.task import get_task as _get_task, update_task as _update_task
-            task = _get_task(hc_home, task_id)
+            task = _get_task(hc_home, team, task_id)
             if not task.get("base_sha"):
                 base_sha = _get_main_head(real_repo)
-                _update_task(hc_home, task_id, base_sha=base_sha)
+                _update_task(hc_home, team, task_id, base_sha=base_sha)
                 logger.info("Backfilled base_sha=%s for existing worktree %s", base_sha[:8], task_id)
         except Exception as exc:
             logger.warning("Could not backfill base_sha for %s: %s", task_id, exc)
@@ -272,7 +275,7 @@ def create_agent_worktree(
     try:
         base_sha = _get_main_head(real_repo)
         from delegate.task import update_task
-        update_task(hc_home, task_id, base_sha=base_sha)
+        update_task(hc_home, team, task_id, base_sha=base_sha)
         logger.info("Recorded base_sha=%s for %s", base_sha[:8], task_id)
     except Exception as exc:
         logger.warning("Could not record base_sha for %s: %s", task_id, exc)
@@ -305,7 +308,7 @@ def remove_agent_worktree(
         agent: Agent name.
         task_id: Task ID number.
     """
-    repo_dir = get_repo_path(hc_home, repo_name)
+    repo_dir = get_repo_path(hc_home, team, repo_name)
     real_repo = repo_dir.resolve()
     wt_dir = agent_worktrees_dir(hc_home, team, agent)
     wt_name = f"{repo_name}-{format_task_id(task_id)}"
@@ -358,6 +361,7 @@ def get_worktree_path(
 
 def push_branch(
     hc_home: Path,
+    team: str,
     repo_name: str,
     branch: str,
     remote: str = "origin",
@@ -369,7 +373,7 @@ def push_branch(
     Returns:
         True if push succeeded, False otherwise.
     """
-    repo_dir = get_repo_path(hc_home, repo_name)
+    repo_dir = get_repo_path(hc_home, team, repo_name)
     real_repo = repo_dir.resolve()
     if not real_repo.is_dir():
         logger.error("Repo not found: %s", real_repo)

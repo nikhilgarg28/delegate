@@ -231,12 +231,8 @@ def _collect_db_metrics(db_file: Path) -> dict:
     return metrics
 
 
-def _collect_task_metrics(hc_home_or_td: Path) -> dict:
-    """Collect task completion metrics.
-
-    Accepts either an ``hc_home`` directory (reads from SQLite) or a
-    legacy ``tasks/`` directory (reads YAML files as fallback).
-    """
+def _collect_task_metrics(hc_home: Path, team: str = EVAL_TEAM) -> dict:
+    """Collect task completion metrics from the team's SQLite database."""
     from delegate.task import list_tasks
 
     metrics: dict = {}
@@ -244,15 +240,9 @@ def _collect_task_metrics(hc_home_or_td: Path) -> dict:
     failed = 0
 
     try:
-        all_tasks = list_tasks(hc_home_or_td)
+        all_tasks = list_tasks(hc_home, team)
     except Exception:
-        # Fallback: maybe it's a raw tasks/ directory path (legacy tests)
         all_tasks = []
-        if hc_home_or_td.is_dir():
-            for f in sorted(hc_home_or_td.glob("T*.yaml")):
-                task = yaml.safe_load(f.read_text())
-                if task:
-                    all_tasks.append(task)
 
     for task in all_tasks:
         status = task.get("status", "")
@@ -420,7 +410,7 @@ def _compute_complexity(run_dir: Path, changed_files: list[str]) -> float | None
     return None
 
 
-def collect_metrics(hc_home: Path, run_dir: Path | None = None) -> dict:
+def collect_metrics(hc_home: Path, run_dir: Path | None = None, team: str = EVAL_TEAM) -> dict:
     """Collect all metrics from a completed eval run.
 
     Gathers data from:
@@ -438,10 +428,10 @@ def collect_metrics(hc_home: Path, run_dir: Path | None = None) -> dict:
         Suitable for JSON serialization.
     """
     # DB metrics
-    metrics = _collect_db_metrics(_db_path(hc_home))
+    metrics = _collect_db_metrics(_db_path(hc_home, team))
 
     # Task metrics
-    task_metrics = _collect_task_metrics(hc_home)
+    task_metrics = _collect_task_metrics(hc_home, team)
     metrics.update(task_metrics)
 
     # Compute messages_per_task
@@ -635,7 +625,7 @@ def judge_diff(diff: str, task_spec: str, rubric: str = DEFAULT_RUBRIC) -> dict:
     raise ValueError(f"Failed to parse judge response after 2 attempts: {last_error}")
 
 
-def judge_run(hc_home: Path, reps: int = 3, run_dir: Path | None = None) -> dict:
+def judge_run(hc_home: Path, reps: int = 3, run_dir: Path | None = None, team: str = EVAL_TEAM) -> dict:
     """Score all tasks in an eval run using LLM-as-judge.
 
     For each task, extracts the git diff and task spec, calls judge_diff()
@@ -653,7 +643,7 @@ def judge_run(hc_home: Path, reps: int = 3, run_dir: Path | None = None) -> dict
     """
     from delegate.task import list_tasks as _lt, format_task_id as _fmt
 
-    all_tasks = _lt(hc_home)
+    all_tasks = _lt(hc_home, team)
 
     # Collect task specs
     tasks_data = {}
@@ -829,7 +819,7 @@ def load_benchmark_specs(suite_dir: Path) -> list[dict]:
     return specs
 
 
-def seed_tasks(hc_home: Path, specs: list[dict]) -> list[dict]:
+def seed_tasks(hc_home: Path, specs: list[dict], team: str = EVAL_TEAM) -> list[dict]:
     """Create tasks from benchmark specs via the task system.
 
     Args:
@@ -845,6 +835,7 @@ def seed_tasks(hc_home: Path, specs: list[dict]) -> list[dict]:
     for spec in specs:
         task = create_task(
             hc_home,
+            team,
             title=spec["title"],
             description=spec.get("description", ""),
             priority="high",
@@ -1037,7 +1028,7 @@ def _run_daemon_loop(
     logger.info("Eval daemon loop stopped")
 
 
-def _poll_tasks_done(hc_home: Path, task_count: int, timeout: float) -> bool:
+def _poll_tasks_done(hc_home: Path, task_count: int, timeout: float, team: str = EVAL_TEAM) -> bool:
     """Poll until all tasks reach 'done' status or timeout.
 
     Returns True if all tasks completed, False on timeout.
@@ -1046,7 +1037,7 @@ def _poll_tasks_done(hc_home: Path, task_count: int, timeout: float) -> bool:
 
     start = time.monotonic()
     while time.monotonic() - start < timeout:
-        tasks = list_tasks(hc_home)
+        tasks = list_tasks(hc_home, team)
         done_count = sum(1 for t in tasks if t["status"] == "done")
         total = len(tasks)
 
@@ -1149,7 +1140,7 @@ def run_eval(
         setup_repo(run_dir, specs)
 
         # 5. Seed the task queue
-        created_tasks = seed_tasks(hc_home, specs)
+        created_tasks = seed_tasks(hc_home, specs, team=team)
         results["tasks_seeded"] = len(created_tasks)
         logger.info("Seeded %d tasks", len(created_tasks))
 
@@ -1200,7 +1191,7 @@ def run_eval(
 
         try:
             # 8. Poll until all tasks reach 'done' or timeout
-            all_done = _poll_tasks_done(hc_home, len(created_tasks), timeout)
+            all_done = _poll_tasks_done(hc_home, len(created_tasks), timeout, team=team)
             results["completed"] = all_done
             results["timed_out"] = not all_done
 
@@ -1217,7 +1208,7 @@ def run_eval(
         results["acceptance"] = acceptance
 
         # 11. Collect raw metrics
-        metrics = collect_metrics(hc_home, run_dir=run_dir)
+        metrics = collect_metrics(hc_home, run_dir=run_dir, team=team)
         results["metrics"] = metrics
 
     finally:
@@ -1394,6 +1385,10 @@ def main():
         help="Path to the eval run's boss home directory",
     )
     p_metrics.add_argument(
+        "--team", default=EVAL_TEAM,
+        help=f"Team name (default: {EVAL_TEAM})",
+    )
+    p_metrics.add_argument(
         "--run-dir", type=Path, default=None,
         help="Path to working directory for git-based metrics",
     )
@@ -1405,6 +1400,10 @@ def main():
     p_judge.add_argument(
         "--home", type=Path, required=True,
         help="Path to the eval run's boss home directory",
+    )
+    p_judge.add_argument(
+        "--team", default=EVAL_TEAM,
+        help=f"Team name (default: {EVAL_TEAM})",
     )
     p_judge.add_argument(
         "--run-dir", type=Path, default=None,
@@ -1497,12 +1496,14 @@ def main():
 
     elif args.command == "metrics":
         hc_home = args.home
-        metrics = collect_metrics(hc_home, run_dir=getattr(args, "run_dir", None))
+        team = getattr(args, "team", EVAL_TEAM)
+        metrics = collect_metrics(hc_home, run_dir=getattr(args, "run_dir", None), team=team)
         print_metrics_table(metrics)
 
     elif args.command == "judge":
         hc_home = args.home
-        results = judge_run(hc_home, reps=args.reps, run_dir=getattr(args, "run_dir", None))
+        team = getattr(args, "team", EVAL_TEAM)
+        results = judge_run(hc_home, reps=args.reps, run_dir=getattr(args, "run_dir", None), team=team)
         print_judge_results(results)
 
     elif args.command == "run":

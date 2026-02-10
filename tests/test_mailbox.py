@@ -83,7 +83,7 @@ class TestSend:
         """send() also writes to the chat messages table."""
         from delegate.chat import get_messages
         send(tmp_team, TEAM, "alice", "bob", "Logged msg")
-        msgs = get_messages(tmp_team, msg_type="chat")
+        msgs = get_messages(tmp_team, TEAM, msg_type="chat")
         assert len(msgs) == 1
         assert msgs[0]["sender"] == "alice"
 
@@ -102,7 +102,7 @@ class TestReadInbox:
 
     def test_read_inbox_unread_only(self, tmp_team):
         msg_id = send(tmp_team, TEAM, "alice", "bob", "Hello!")
-        mark_processed(tmp_team, msg_id)
+        mark_processed(tmp_team, TEAM, msg_id)
 
         # Unread only should return nothing (message is processed)
         assert read_inbox(tmp_team, TEAM, "bob", unread_only=True) == []
@@ -129,7 +129,7 @@ class TestMarkProcessed:
         msg_id = send(tmp_team, TEAM, "alice", "bob", "Hello!")
         assert len(read_inbox(tmp_team, TEAM, "bob", unread_only=True)) == 1
 
-        mark_processed(tmp_team, msg_id)
+        mark_processed(tmp_team, TEAM, msg_id)
         assert len(read_inbox(tmp_team, TEAM, "bob", unread_only=True)) == 0
         # Message still exists when reading all
         all_msgs = read_inbox(tmp_team, TEAM, "bob", unread_only=False)
@@ -142,7 +142,7 @@ class TestSeenAndProcessed:
 
     def test_mark_seen(self, tmp_team):
         msg_id = send(tmp_team, TEAM, "alice", "bob", "Hello")
-        mark_seen(tmp_team, msg_id)
+        mark_seen(tmp_team, TEAM, msg_id)
 
         inbox = read_inbox(tmp_team, TEAM, "bob")
         assert inbox[0].seen_at is not None
@@ -151,15 +151,15 @@ class TestSeenAndProcessed:
     def test_mark_seen_batch(self, tmp_team):
         id1 = send(tmp_team, TEAM, "alice", "bob", "First")
         id2 = send(tmp_team, TEAM, "alice", "bob", "Second")
-        mark_seen_batch(tmp_team, [id1, id2])
+        mark_seen_batch(tmp_team, TEAM, [id1, id2])
 
         inbox = read_inbox(tmp_team, TEAM, "bob")
         assert all(m.seen_at is not None for m in inbox)
 
     def test_mark_processed(self, tmp_team):
         msg_id = send(tmp_team, TEAM, "alice", "bob", "Hello")
-        mark_seen(tmp_team, msg_id)
-        mark_processed(tmp_team, msg_id)
+        mark_seen(tmp_team, TEAM, msg_id)
+        mark_processed(tmp_team, TEAM, msg_id)
 
         inbox = read_inbox(tmp_team, TEAM, "bob", unread_only=False)
         assert inbox[0].seen_at is not None
@@ -168,7 +168,7 @@ class TestSeenAndProcessed:
     def test_mark_processed_batch(self, tmp_team):
         id1 = send(tmp_team, TEAM, "alice", "bob", "First")
         id2 = send(tmp_team, TEAM, "alice", "bob", "Second")
-        mark_processed_batch(tmp_team, [id1, id2])
+        mark_processed_batch(tmp_team, TEAM, [id1, id2])
 
         inbox = read_inbox(tmp_team, TEAM, "bob", unread_only=False)
         assert all(m.processed_at is not None for m in inbox)
@@ -182,11 +182,11 @@ class TestSeenAndProcessed:
         assert msg.seen_at is None
         assert msg.processed_at is None
 
-        mark_seen(tmp_team, msg_id)
+        mark_seen(tmp_team, TEAM, msg_id)
         msg = read_inbox(tmp_team, TEAM, "bob")[0]
         assert msg.seen_at is not None
 
-        mark_processed(tmp_team, msg_id)
+        mark_processed(tmp_team, TEAM, msg_id)
         # processed = done, no longer unread
         assert read_inbox(tmp_team, TEAM, "bob", unread_only=True) == []
         msg = read_inbox(tmp_team, TEAM, "bob", unread_only=False)[0]
@@ -211,26 +211,26 @@ class TestDeliver:
 
 class TestHasUnread:
     def test_no_unread(self, tmp_team):
-        assert not has_unread(tmp_team, "bob")
+        assert not has_unread(tmp_team, TEAM, "bob")
 
     def test_has_unread(self, tmp_team):
         send(tmp_team, TEAM, "alice", "bob", "Hey")
-        assert has_unread(tmp_team, "bob")
+        assert has_unread(tmp_team, TEAM, "bob")
 
     def test_no_unread_after_processed(self, tmp_team):
         msg_id = send(tmp_team, TEAM, "alice", "bob", "Hey")
-        mark_processed(tmp_team, msg_id)
-        assert not has_unread(tmp_team, "bob")
+        mark_processed(tmp_team, TEAM, msg_id)
+        assert not has_unread(tmp_team, TEAM, "bob")
 
 
 class TestCountUnread:
     def test_count_zero(self, tmp_team):
-        assert count_unread(tmp_team, "bob") == 0
+        assert count_unread(tmp_team, TEAM, "bob") == 0
 
     def test_count_matches(self, tmp_team):
         send(tmp_team, TEAM, "alice", "bob", "First")
         send(tmp_team, TEAM, "alice", "bob", "Second")
-        assert count_unread(tmp_team, "bob") == 2
+        assert count_unread(tmp_team, TEAM, "bob") == 2
 
 
 class TestMessageEscaping:

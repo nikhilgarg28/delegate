@@ -132,9 +132,9 @@ class TestCurrentTask:
 
     def test_current_task_with_in_progress_task(self, client, tmp_team):
         """Assigning an in_progress task to an agent should populate current_task."""
-        task = create_task(tmp_team, title="Build the widget")
-        assign_task(tmp_team, task["id"], "alice")
-        change_status(tmp_team, task["id"], "in_progress")
+        task = create_task(tmp_team, TEAM, title="Build the widget")
+        assign_task(tmp_team, TEAM, task["id"], "alice")
+        change_status(tmp_team, TEAM, task["id"], "in_progress")
 
         resp = client.get(f"/teams/{TEAM}/agents")
         agents = resp.json()
@@ -146,8 +146,8 @@ class TestCurrentTask:
 
     def test_current_task_null_for_open_task(self, client, tmp_team):
         """An 'open' task assigned to an agent should NOT appear as current_task."""
-        task = create_task(tmp_team, title="Pending task")
-        assign_task(tmp_team, task["id"], "bob")
+        task = create_task(tmp_team, TEAM, title="Pending task")
+        assign_task(tmp_team, TEAM, task["id"], "bob")
         # Task is still 'open', not 'in_progress'
 
         resp = client.get(f"/teams/{TEAM}/agents")
@@ -157,10 +157,10 @@ class TestCurrentTask:
 
     def test_current_task_null_after_review(self, client, tmp_team):
         """A task moved to 'review' should no longer be the current_task."""
-        task = create_task(tmp_team, title="Review me")
-        assign_task(tmp_team, task["id"], "alice")
-        change_status(tmp_team, task["id"], "in_progress")
-        change_status(tmp_team, task["id"], "review")
+        task = create_task(tmp_team, TEAM, title="Review me")
+        assign_task(tmp_team, TEAM, task["id"], "alice")
+        change_status(tmp_team, TEAM, task["id"], "in_progress")
+        change_status(tmp_team, TEAM, task["id"], "review")
 
         resp = client.get(f"/teams/{TEAM}/agents")
         agents = resp.json()
@@ -169,9 +169,9 @@ class TestCurrentTask:
 
     def test_current_task_structure(self, client, tmp_team):
         """current_task should have exactly 'id' and 'title' keys."""
-        task = create_task(tmp_team, title="Structured task")
-        assign_task(tmp_team, task["id"], "bob")
-        change_status(tmp_team, task["id"], "in_progress")
+        task = create_task(tmp_team, TEAM, title="Structured task")
+        assign_task(tmp_team, TEAM, task["id"], "bob")
+        change_status(tmp_team, TEAM, task["id"], "in_progress")
 
         resp = client.get(f"/teams/{TEAM}/agents")
         agents = resp.json()
@@ -181,9 +181,9 @@ class TestCurrentTask:
 
     def test_other_agents_unaffected(self, client, tmp_team):
         """Only the assigned agent should show current_task — others stay null."""
-        task = create_task(tmp_team, title="Alice's task")
-        assign_task(tmp_team, task["id"], "alice")
-        change_status(tmp_team, task["id"], "in_progress")
+        task = create_task(tmp_team, TEAM, title="Alice's task")
+        assign_task(tmp_team, TEAM, task["id"], "alice")
+        change_status(tmp_team, TEAM, task["id"], "in_progress")
 
         resp = client.get(f"/teams/{TEAM}/agents")
         agents = resp.json()

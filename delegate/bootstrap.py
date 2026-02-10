@@ -17,7 +17,7 @@ from delegate.paths import (
     team_dir as _team_dir,
     teams_dir as _teams_dir,
     agents_dir as _agents_dir,
-    tasks_dir as _tasks_dir,
+    repos_dir as _repos_dir,
     roster_path as _roster_path,
     boss_person_dir as _boss_person_dir,
     base_charter_dir,
@@ -171,13 +171,15 @@ def bootstrap(
             f"Agent names already used in other teams: {overlap}"
         )
 
-    # Ensure top-level bossies exist
+    # Ensure top-level directories exist
     hc_home.mkdir(parents=True, exist_ok=True)
-    _tasks_dir(hc_home).mkdir(parents=True, exist_ok=True)
 
     # Team directory
     td = _team_dir(hc_home, team_name)
     td.mkdir(parents=True, exist_ok=True)
+
+    # Per-team repos directory
+    _repos_dir(hc_home, team_name).mkdir(parents=True, exist_ok=True)
 
     # Interactive: charter override
     if interactive:
@@ -226,8 +228,8 @@ def bootstrap(
         if not state_file.exists():
             state_file.write_text(yaml.dump(_default_state(role), default_flow_style=False))
 
-    # --- Global SQLite DB (shared across all teams) ---
-    ensure_schema(hc_home)
+    # --- Per-team SQLite DB ---
+    ensure_schema(hc_home, team_name)
 
     # --- Boss mailbox (org-wide, outside any team) ---
     # Ensure a boss name is configured (default to "boss" if not set).

@@ -549,7 +549,7 @@ function toggleRejectReason(taskId) {
 
 async function approveTask(taskId) {
   try {
-    const res = await fetch("/tasks/" + taskId + "/approve", {
+    const res = await fetch("/teams/" + _currentTeam + "/tasks/" + taskId + "/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
     });
@@ -570,7 +570,7 @@ async function rejectTask(taskId) {
   const reasonEl = document.getElementById("rejectReasonInput");
   const reason = reasonEl ? reasonEl.value.trim() : "";
   try {
-    const res = await fetch("/tasks/" + taskId + "/reject", {
+    const res = await fetch("/teams/" + _currentTeam + "/tasks/" + taskId + "/reject", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reason: reason || "(no reason)" }),
@@ -589,9 +589,10 @@ async function rejectTask(taskId) {
 }
 
 async function loadTasks() {
+  if (!_currentTeam) return;
   let res;
   try {
-    res = await fetch("/tasks");
+    res = await fetch("/teams/" + _currentTeam + "/tasks");
   } catch (e) {
     console.warn("loadTasks fetch failed:", e);
     return;
@@ -791,7 +792,7 @@ async function loadTaskActivity(taskId, task) {
   }
   // 4. Chat messages mentioning this task
   try {
-    const msgs = await fetch("/messages").then(function (r) { return r.json(); });
+    const msgs = await fetch("/teams/" + _currentTeam + "/messages").then(function (r) { return r.json(); });
     const taskRef = "T" + String(taskId).padStart(4, "0");
     for (const m of msgs) {
       if (m.type === "chat" && m.content && m.content.indexOf(taskRef) !== -1) {
@@ -848,7 +849,7 @@ async function openTaskPanel(taskId) {
   backdrop.classList.add("open");
   try {
     // Fetch task list (we need the full task object)
-    const tasksRes = await fetch("/tasks");
+    const tasksRes = await fetch("/teams/" + _currentTeam + "/tasks");
     const allTasks = await tasksRes.json();
     const task = allTasks.find((t) => t.id === taskId);
     if (!task) {
@@ -858,7 +859,7 @@ async function openTaskPanel(taskId) {
     // Fetch stats
     let stats = null;
     try {
-      const sRes = await fetch("/tasks/" + taskId + "/stats");
+      const sRes = await fetch("/teams/" + _currentTeam + "/tasks/" + taskId + "/stats");
       if (sRes.ok) stats = await sRes.json();
     } catch (e) { }
     // Populate header
@@ -972,7 +973,7 @@ async function openTaskPanel(taskId) {
     _taskPanelDiffRaw = "";
     _taskPanelDiffTab = "files";
     try {
-      const diffRes = await fetch("/tasks/" + taskId + "/diff");
+      const diffRes = await fetch("/teams/" + _currentTeam + "/tasks/" + taskId + "/diff");
       const diffData = await diffRes.json();
       _taskPanelDiffRaw = diffData.diff || "";
       switchTaskPanelDiffTab("files");
@@ -1011,8 +1012,9 @@ async function _loadChatInner() {
   const searchQuery = (document.getElementById("chatFilterSearch").value || "").toLowerCase().trim();
   const params = new URLSearchParams();
   if (!showEvents) params.set("type", "chat");
+  if (!_currentTeam) return;
   const res = await fetch(
-    "/messages" + (params.toString() ? "?" + params : "")
+    "/teams/" + _currentTeam + "/messages" + (params.toString() ? "?" + params : "")
   );
   if (!res.ok) return;
   let msgs = await res.json();
@@ -1235,7 +1237,7 @@ async function loadAgents() {
   try {
     [agentsRes, tasksRes] = await Promise.all([
       fetch("/teams/" + _currentTeam + "/agents"),
-      fetch("/tasks"),
+      fetch("/teams/" + _currentTeam + "/tasks"),
     ]);
   } catch (e) {
     return;
@@ -1337,17 +1339,13 @@ async function loadAgents() {
 // =====================================================================
 async function loadSidebar() {
   try {
+    if (!_currentTeam) return;
     const [tasksRes, agentsRes] = await Promise.all([
-      fetch("/tasks"),
-      _currentTeam
-        ? fetch("/teams/" + _currentTeam + "/agents")
-        : Promise.resolve({ json: () => [] }),
+      fetch("/teams/" + _currentTeam + "/tasks"),
+      fetch("/teams/" + _currentTeam + "/agents"),
     ]);
     const tasks = await tasksRes.json();
-    const agents =
-      typeof agentsRes.json === "function"
-        ? await agentsRes.json()
-        : agentsRes;
+    const agents = await agentsRes.json();
     updateKnownAgents(agents);
     const statsMap = {};
     await Promise.all(
@@ -1571,7 +1569,7 @@ async function openDiffPanel(taskId) {
   panel.classList.add("open");
   backdrop.classList.add("open");
   try {
-    const res = await fetch("/tasks/" + taskId + "/diff");
+    const res = await fetch("/teams/" + _currentTeam + "/tasks/" + taskId + "/diff");
     const data = await res.json();
     // Show merge_base..merge_tip range if available, otherwise branch name
     if (data.merge_base && data.merge_tip) {
@@ -1885,11 +1883,10 @@ async function sendMsg() {
     _msgSendCooldown = false;
   }, 4000);
   try {
-    const res = await fetch("/messages", {
+    const res = await fetch("/teams/" + _currentTeam + "/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        team: _currentTeam,
         recipient,
         content: input.value,
       }),

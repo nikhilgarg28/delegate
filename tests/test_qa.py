@@ -92,10 +92,10 @@ def qa_team_with_task(qa_team):
     hc_home, repo_path = qa_team
 
     # Create a task and move it through the workflow to 'review'
-    task = create_task(hc_home, title="Add multiply feature", repo="myapp")
-    assign_task(hc_home, task["id"], "alice")
-    change_status(hc_home, task["id"], "in_progress")
-    change_status(hc_home, task["id"], "review")
+    task = create_task(hc_home, TEAM, title="Add multiply feature", repo="myapp")
+    assign_task(hc_home, TEAM, task["id"], "alice")
+    change_status(hc_home, TEAM, task["id"], "in_progress")
+    change_status(hc_home, TEAM, task["id"], "review")
 
     # Create a branch that matches the task ID pattern
     branch_name = f"alice/{format_task_id(task['id'])}"
@@ -139,6 +139,10 @@ class TestExtractTaskIdFromBranch:
 
     def test_no_match_no_slash(self):
         assert _extract_task_id_from_branch("main") is None
+
+    def test_delegate_team_convention(self):
+        """New convention: delegate/<team>/T<NNNN>."""
+        assert _extract_task_id_from_branch("delegate/myteam/T0042") == 42
 
 
 class TestParseReviewRequest:
@@ -231,7 +235,7 @@ class TestHandleReviewRequest:
         assert len(qa_outbox) >= 1
 
         # Event should be logged
-        events = get_messages(hc_home, msg_type="event")
+        events = get_messages(hc_home, TEAM, msg_type="event")
         assert any("QA" in e["content"] for e in events)
 
     def test_full_pipeline_changes_requested(self, qa_team):
@@ -247,7 +251,7 @@ class TestHandleReviewRequest:
         result = handle_review_request(hc_home, TEAM, req, test_command=f"{sys.executable} -m pytest -v")
         assert not result.approved
 
-        events = get_messages(hc_home, msg_type="event")
+        events = get_messages(hc_home, TEAM, msg_type="event")
         assert any("changes requested" in e["content"] for e in events)
 
     def test_nonexistent_repo(self, qa_team):
@@ -334,7 +338,7 @@ class TestTaskStatusTransitions:
             result = handle_review_request(hc_home, TEAM, req, test_command=f"{sys.executable} -m pytest -v")
 
         assert result.approved
-        task = get_task(hc_home, task_id)
+        task = get_task(hc_home, TEAM, task_id)
         assert task["status"] == "needs_merge"
 
     def test_rejection_sets_in_progress(self, qa_team_with_task):
@@ -358,7 +362,7 @@ class TestTaskStatusTransitions:
         result = handle_review_request(hc_home, TEAM, req, test_command=f"{sys.executable} -m pytest -v")
 
         assert not result.approved
-        task = get_task(hc_home, task_id)
+        task = get_task(hc_home, TEAM, task_id)
         assert task["status"] == "in_progress"
 
     def test_coverage_failure_sets_in_progress(self, qa_team_with_task):
@@ -372,7 +376,7 @@ class TestTaskStatusTransitions:
 
         assert not result.approved
         assert "Coverage check failed" in result.output
-        task = get_task(hc_home, task_id)
+        task = get_task(hc_home, TEAM, task_id)
         assert task["status"] == "in_progress"
 
     def test_no_task_id_still_works(self, qa_team):

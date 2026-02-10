@@ -134,7 +134,7 @@ class TestBootstrapWithVariant:
         )
         assert root.is_dir()
         assert (root / "teams" / "eval" / "roster.md").is_file()
-        assert (root / "db.sqlite").is_file()
+        assert (root / "teams" / "eval" / "db.sqlite").is_file()
         assert (root / "teams" / "eval" / "agents" / "mgr").is_dir()
         assert (root / "teams" / "eval" / "agents" / "alice").is_dir()
         # Boss dir is global, outside any team
@@ -253,6 +253,30 @@ def _create_db(db_path: Path, sessions=None, messages=None):
             content TEXT NOT NULL,
             type TEXT NOT NULL CHECK(type IN ('chat', 'event'))
         );
+        CREATE TABLE IF NOT EXISTS tasks (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            title            TEXT    NOT NULL,
+            description      TEXT    NOT NULL DEFAULT '',
+            status           TEXT    NOT NULL DEFAULT 'open',
+            dri              TEXT    NOT NULL DEFAULT '',
+            assignee         TEXT    NOT NULL DEFAULT '',
+            project          TEXT    NOT NULL DEFAULT '',
+            priority         TEXT    NOT NULL DEFAULT 'medium',
+            repo             TEXT    NOT NULL DEFAULT '',
+            tags             TEXT    NOT NULL DEFAULT '[]',
+            created_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            completed_at     TEXT    NOT NULL DEFAULT '',
+            depends_on       TEXT    NOT NULL DEFAULT '[]',
+            branch           TEXT    NOT NULL DEFAULT '',
+            base_sha         TEXT    NOT NULL DEFAULT '',
+            commits          TEXT    NOT NULL DEFAULT '[]',
+            rejection_reason TEXT    NOT NULL DEFAULT '',
+            approval_status  TEXT    NOT NULL DEFAULT '',
+            merge_base       TEXT    NOT NULL DEFAULT '',
+            merge_tip        TEXT    NOT NULL DEFAULT '',
+            attachments      TEXT    NOT NULL DEFAULT '[]'
+        );
     """)
     if sessions:
         for s in sessions:
@@ -278,8 +302,7 @@ def _create_task_in_db(hc_home: Path, task_id: int, status: str = "done", title:
     wouldn't guarantee in order).
     """
     import json
-    from delegate.db import get_connection
-    conn = get_connection(hc_home)
+    conn = sqlite3.connect(str(hc_home / "teams" / "eval" / "db.sqlite"))
     now = "2025-01-01T00:00:00.000000Z"
     conn.execute(
         """\
@@ -304,11 +327,13 @@ def run_dir(tmp_path):
     root = tmp_path / "run"
     standup = root
     standup.mkdir(parents=True)
-    (standup / "tasks").mkdir(parents=True, exist_ok=True)
+    # Team-scoped DB directory
+    team_db_dir = standup / "teams" / "eval"
+    team_db_dir.mkdir(parents=True, exist_ok=True)
 
     # Create DB with sample data (sessions + messages via helper)
     _create_db(
-        standup / "db.sqlite",
+        team_db_dir / "db.sqlite",
         sessions=[
             {"agent": "alice", "task_id": 1, "duration": 120.0, "tokens_in": 5000, "tokens_out": 2000, "cost": 0.05},
             {"agent": "alice", "task_id": 2, "duration": 180.0, "tokens_in": 8000, "tokens_out": 3000, "cost": 0.08},
@@ -341,7 +366,7 @@ class TestCollectDbMetrics:
 
     def test_aggregates_session_totals(self, run_dir):
         """Sums tokens, cost, and duration across all sessions."""
-        metrics = _collect_db_metrics(run_dir / "db.sqlite")
+        metrics = _collect_db_metrics(run_dir / "teams" / "eval" / "db.sqlite")
         assert metrics["total_tokens_in"] == 15000  # 5000 + 8000 + 2000
         assert metrics["total_tokens_out"] == 6000   # 2000 + 3000 + 1000
         assert metrics["total_cost_usd"] == pytest.approx(0.15)
@@ -350,7 +375,7 @@ class TestCollectDbMetrics:
 
     def test_computes_per_task_averages(self, run_dir):
         """Computes avg sessions/task and avg seconds/task."""
-        metrics = _collect_db_metrics(run_dir / "db.sqlite")
+        metrics = _collect_db_metrics(run_dir / "teams" / "eval" / "db.sqlite")
         # 3 sessions across 2 distinct task_ids -> 1.5 sessions/task
         assert metrics["avg_sessions_per_task"] == 1.5
         # 360 seconds / 2 tasks -> 180 seconds/task
@@ -358,7 +383,7 @@ class TestCollectDbMetrics:
 
     def test_counts_chat_messages_only(self, run_dir):
         """Only counts 'chat' type messages, not 'event'."""
-        metrics = _collect_db_metrics(run_dir / "db.sqlite")
+        metrics = _collect_db_metrics(run_dir / "teams" / "eval" / "db.sqlite")
         assert metrics["total_messages"] == 4  # 4 chat messages, 1 event excluded
 
     def test_empty_db(self, tmp_path):
@@ -394,7 +419,6 @@ class TestCollectTaskMetrics:
         """Returns zeros when no tasks exist."""
         hc_home = tmp_path / "empty_hc"
         hc_home.mkdir()
-        (hc_home / "tasks").mkdir()
         metrics = _collect_task_metrics(hc_home)
         assert metrics["tasks_completed"] == 0
         assert metrics["tasks_failed"] == 0
@@ -626,8 +650,9 @@ class TestCollectMetrics:
         root = tmp_path / "run"
         standup = root
         standup.mkdir(parents=True)
-        (standup / "tasks").mkdir()
-        _create_db(standup / "db.sqlite")
+        team_db_dir = standup / "teams" / "eval"
+        team_db_dir.mkdir(parents=True, exist_ok=True)
+        _create_db(team_db_dir / "db.sqlite")
 
         with patch("delegate.eval._get_changed_files", return_value=[]), \
              patch("delegate.eval._get_diff_size", return_value=0), \
@@ -884,7 +909,10 @@ class TestJudgeRun:
         root = tmp_path / "run"
         standup = root
         standup.mkdir(parents=True)
-        (standup / "tasks").mkdir(parents=True, exist_ok=True)
+        # Team-scoped DB directory
+        team_db_dir = standup / "teams" / "eval"
+        team_db_dir.mkdir(parents=True, exist_ok=True)
+        _create_db(team_db_dir / "db.sqlite")
 
         # Create tasks in SQLite
         _create_task_in_db(standup, 1, status="done", title="Implement feature A")
@@ -936,7 +964,6 @@ class TestJudgeRun:
         """Returns empty results when no tasks exist."""
         root = tmp_path / "run"
         root.mkdir(parents=True)
-        (root / "tasks").mkdir(parents=True, exist_ok=True)
 
         results = judge_run(root, reps=1)
         assert results == {"tasks": {}, "overall": {}}

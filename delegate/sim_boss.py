@@ -162,7 +162,7 @@ async def _process_inbox(
 
         # Mark the message as read
         if msg.filename:
-            mark_processed(hc_home, msg.filename)
+            mark_processed(hc_home, team, msg.filename)
 
         processed += 1
 

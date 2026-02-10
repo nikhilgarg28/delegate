@@ -1,17 +1,17 @@
 """Delegate CLI entry point using Click.
 
 Commands:
-    delegate doctor                        — verify runtime dependencies
-    delegate daemon start [--port N]       — start background daemon
-    delegate daemon stop                   — stop running daemon
-    delegate team create <name> ...        — create a new team
-    delegate team list                     — list existing teams
-    delegate agent add <team> <name>       — add an agent to a team
-    delegate config set boss <name>    — set org-wide boss name
-    delegate config set source-repo <path> — set delegate source repo path
-    delegate repo add <path_or_url> [--name N]  — register a repository
-    delegate repo list                     — list registered repos
-    delegate self-update                   — update delegate from source repo
+    delegate doctor                                  — verify runtime dependencies
+    delegate daemon start [--port N]                 — start background daemon
+    delegate daemon stop                             — stop running daemon
+    delegate team create <name> ...                  — create a new team
+    delegate team list                               — list existing teams
+    delegate agent add <team> <name>                 — add an agent to a team
+    delegate config set boss <name>                  — set org-wide boss name
+    delegate config set source-repo <path>           — set delegate source repo path
+    delegate repo add <team> <path_or_url> [--name]  — register a repository for a team
+    delegate repo list <team>                        — list repos for a team
+    delegate self-update                             — update delegate from source repo
 """
 
 import subprocess
@@ -283,19 +283,27 @@ def config_set_source_repo(ctx: click.Context, path: Path) -> None:
 @click.pass_context
 def config_show(ctx: click.Context) -> None:
     """Show the current configuration."""
-    from delegate.config import get_boss, get_source_repo, get_repos
+    from delegate.config import get_boss, get_source_repo
 
     hc_home = _get_home(ctx)
     boss = get_boss(hc_home) or "(not set)"
     source_repo = get_source_repo(hc_home) or "(not set)"
-    repos = get_repos(hc_home)
 
-    click.echo(f"Boss:    {boss}")
+    click.echo(f"Boss:        {boss}")
     click.echo(f"Source repo: {source_repo}")
-    click.echo(f"Repos:       {len(repos)} registered")
-    if repos:
-        for name, meta in repos.items():
-            click.echo(f"  - {name}: {meta.get('source', '?')}")
+
+    # List teams and their repos
+    td = _teams_dir(hc_home)
+    if td.is_dir():
+        teams = sorted(d.name for d in td.iterdir() if d.is_dir())
+        if teams:
+            from delegate.config import get_repos
+            click.echo(f"Teams:       {len(teams)}")
+            for t in teams:
+                repos = get_repos(hc_home, t)
+                click.echo(f"  {t}: {len(repos)} repo(s)")
+                for rn, meta in repos.items():
+                    click.echo(f"    - {rn}: {meta.get('source', '?')}")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -309,6 +317,7 @@ def repo() -> None:
 
 
 @repo.command("add")
+@click.argument("team_name")
 @click.argument("path_or_url")
 @click.option("--name", "repo_name", default=None, help="Name for the repo (default: derived from path/URL).")
 @click.option(
@@ -323,28 +332,33 @@ def repo() -> None:
     help="Shell command to run tests (e.g. '/path/to/.venv/bin/python -m pytest -x -q').",
 )
 @click.pass_context
-def repo_add(ctx: click.Context, path_or_url: str, repo_name: str | None, approval: str | None, test_cmd: str | None) -> None:
-    """Register a repository (local path or remote URL)."""
+def repo_add(ctx: click.Context, team_name: str, path_or_url: str, repo_name: str | None, approval: str | None, test_cmd: str | None) -> None:
+    """Register a repository for a team.
+
+    TEAM_NAME is the team this repo belongs to.
+    PATH_OR_URL is a local path or remote URL.
+    """
     from delegate.repo import register_repo
 
     hc_home = _get_home(ctx)
-    name = register_repo(hc_home, path_or_url, name=repo_name, approval=approval, test_cmd=test_cmd)
-    click.echo(f"Registered repo '{name}'")
+    name = register_repo(hc_home, team_name, path_or_url, name=repo_name, approval=approval, test_cmd=test_cmd)
+    click.echo(f"Registered repo '{name}' for team '{team_name}'")
 
 
 @repo.command("list")
+@click.argument("team_name")
 @click.pass_context
-def repo_list(ctx: click.Context) -> None:
-    """List registered repositories."""
-    from delegate.repo import list_repos
+def repo_list(ctx: click.Context, team_name: str) -> None:
+    """List registered repositories for a team."""
+    from delegate.config import get_repos
 
     hc_home = _get_home(ctx)
-    repos = list_repos(hc_home)
+    repos = get_repos(hc_home, team_name)
     if not repos:
-        click.echo("No repositories registered.")
+        click.echo(f"No repositories registered for team '{team_name}'.")
         return
 
-    click.echo("Registered repos:")
+    click.echo(f"Repos for team '{team_name}':")
     for name, meta in repos.items():
         click.echo(f"  - {name}: {meta.get('source', '?')}")
 
@@ -358,56 +372,59 @@ def repo_pipeline() -> None:
 
 
 @repo_pipeline.command("add")
+@click.argument("team_name")
 @click.argument("repo_name")
 @click.option("--name", "step_name", required=True, help="Name for the pipeline step.")
 @click.option("--run", "run_cmd", required=True, help="Shell command to run.")
 @click.pass_context
-def repo_pipeline_add(ctx: click.Context, repo_name: str, step_name: str, run_cmd: str) -> None:
+def repo_pipeline_add(ctx: click.Context, team_name: str, repo_name: str, step_name: str, run_cmd: str) -> None:
     """Add a named step to a repo's pipeline."""
     from delegate.config import add_pipeline_step
 
     hc_home = _get_home(ctx)
     try:
-        add_pipeline_step(hc_home, repo_name, step_name, run_cmd)
+        add_pipeline_step(hc_home, team_name, repo_name, step_name, run_cmd)
     except KeyError as exc:
         raise click.ClickException(str(exc))
     except ValueError as exc:
         raise click.ClickException(str(exc))
-    click.echo(f"Added pipeline step '{step_name}' to repo '{repo_name}'")
+    click.echo(f"Added pipeline step '{step_name}' to repo '{repo_name}' (team: {team_name})")
 
 
 @repo_pipeline.command("list")
+@click.argument("team_name")
 @click.argument("repo_name")
 @click.pass_context
-def repo_pipeline_list(ctx: click.Context, repo_name: str) -> None:
+def repo_pipeline_list(ctx: click.Context, team_name: str, repo_name: str) -> None:
     """List pipeline steps for a repo."""
     from delegate.config import get_repo_pipeline
 
     hc_home = _get_home(ctx)
-    pipeline = get_repo_pipeline(hc_home, repo_name)
+    pipeline = get_repo_pipeline(hc_home, team_name, repo_name)
     if not pipeline:
         click.echo(f"No pipeline configured for repo '{repo_name}'.")
         return
 
-    click.echo(f"Pipeline for '{repo_name}':")
+    click.echo(f"Pipeline for '{repo_name}' (team: {team_name}):")
     for i, step in enumerate(pipeline, 1):
         click.echo(f"  {i}. {step['name']}: {step['run']}")
 
 
 @repo_pipeline.command("remove")
+@click.argument("team_name")
 @click.argument("repo_name")
 @click.option("--name", "step_name", required=True, help="Name of the step to remove.")
 @click.pass_context
-def repo_pipeline_remove(ctx: click.Context, repo_name: str, step_name: str) -> None:
+def repo_pipeline_remove(ctx: click.Context, team_name: str, repo_name: str, step_name: str) -> None:
     """Remove a named step from a repo's pipeline."""
     from delegate.config import remove_pipeline_step
 
     hc_home = _get_home(ctx)
     try:
-        remove_pipeline_step(hc_home, repo_name, step_name)
+        remove_pipeline_step(hc_home, team_name, repo_name, step_name)
     except KeyError as exc:
         raise click.ClickException(str(exc))
-    click.echo(f"Removed pipeline step '{step_name}' from repo '{repo_name}'")
+    click.echo(f"Removed pipeline step '{step_name}' from repo '{repo_name}' (team: {team_name})")
 
 
 # ──────────────────────────────────────────────────────────────

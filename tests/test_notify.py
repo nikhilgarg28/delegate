@@ -27,18 +27,18 @@ def _make_task_at_needs_merge(hc_home):
 
     Returns the current task dict (reloaded after all transitions).
     """
-    task = create_task(hc_home, title="Build login feature")
-    assign_task(hc_home, task["id"], "alice")
-    change_status(hc_home, task["id"], "in_progress")
-    change_status(hc_home, task["id"], "review")
-    change_status(hc_home, task["id"], "needs_merge")
-    return get_task(hc_home, task["id"])
+    task = create_task(hc_home, TEAM, title="Build login feature")
+    assign_task(hc_home, TEAM, task["id"], "alice")
+    change_status(hc_home, TEAM, task["id"], "in_progress")
+    change_status(hc_home, TEAM, task["id"], "review")
+    change_status(hc_home, TEAM, task["id"], "needs_merge")
+    return get_task(hc_home, TEAM, task["id"])
 
 
 class TestNotifyRejection:
     def test_sends_message_to_manager(self, notify_team):
         task = _make_task_at_needs_merge(notify_team)
-        change_status(notify_team, task["id"], "rejected")
+        change_status(notify_team, TEAM, task["id"], "rejected")
 
         result = notify_rejection(
             notify_team, TEAM, task, reason="Code quality issues"
@@ -54,7 +54,7 @@ class TestNotifyRejection:
 
     def test_message_contains_task_details(self, notify_team):
         task = _make_task_at_needs_merge(notify_team)
-        change_status(notify_team, task["id"], "rejected")
+        change_status(notify_team, TEAM, task["id"], "rejected")
 
         notify_rejection(
             notify_team, TEAM, task, reason="Missing error handling"
@@ -71,7 +71,7 @@ class TestNotifyRejection:
 
     def test_message_contains_suggested_actions(self, notify_team):
         task = _make_task_at_needs_merge(notify_team)
-        change_status(notify_team, task["id"], "rejected")
+        change_status(notify_team, TEAM, task["id"], "rejected")
 
         notify_rejection(notify_team, TEAM, task, reason="Needs work")
 
@@ -84,7 +84,7 @@ class TestNotifyRejection:
 
     def test_no_reason_shows_placeholder(self, notify_team):
         task = _make_task_at_needs_merge(notify_team)
-        change_status(notify_team, task["id"], "rejected")
+        change_status(notify_team, TEAM, task["id"], "rejected")
 
         notify_rejection(notify_team, TEAM, task, reason="")
 
@@ -95,7 +95,7 @@ class TestNotifyRejection:
     def test_returns_id_string(self, notify_team):
         """notify_rejection returns the message id as a string."""
         task = _make_task_at_needs_merge(notify_team)
-        change_status(notify_team, task["id"], "rejected")
+        change_status(notify_team, TEAM, task["id"], "rejected")
 
         result = notify_rejection(notify_team, TEAM, task, reason="Test")
         assert result is not None
@@ -106,7 +106,7 @@ class TestNotifyConflict:
     def test_sends_message_to_manager(self, notify_team):
         task = _make_task_at_needs_merge(notify_team)
         task["branch"] = "alice/T0001"
-        change_status(notify_team, task["id"], "conflict")
+        change_status(notify_team, TEAM, task["id"], "conflict")
 
         result = notify_conflict(
             notify_team, TEAM, task, conflict_details="Conflict in auth.py"
@@ -122,7 +122,7 @@ class TestNotifyConflict:
     def test_message_contains_task_and_branch(self, notify_team):
         task = _make_task_at_needs_merge(notify_team)
         task["branch"] = "alice/T0001"
-        change_status(notify_team, task["id"], "conflict")
+        change_status(notify_team, TEAM, task["id"], "conflict")
 
         notify_conflict(
             notify_team, TEAM, task,
@@ -141,7 +141,7 @@ class TestNotifyConflict:
     def test_message_suggests_rebase(self, notify_team):
         task = _make_task_at_needs_merge(notify_team)
         task["branch"] = "alice/T0001"
-        change_status(notify_team, task["id"], "conflict")
+        change_status(notify_team, TEAM, task["id"], "conflict")
 
         notify_conflict(notify_team, TEAM, task)
 
@@ -154,7 +154,7 @@ class TestNotifyConflict:
     def test_no_details_shows_placeholder(self, notify_team):
         task = _make_task_at_needs_merge(notify_team)
         task["branch"] = "alice/T0001"
-        change_status(notify_team, task["id"], "conflict")
+        change_status(notify_team, TEAM, task["id"], "conflict")
 
         notify_conflict(notify_team, TEAM, task, conflict_details="")
 
@@ -165,7 +165,7 @@ class TestNotifyConflict:
     def test_returns_id_string(self, notify_team):
         """notify_conflict returns the message id as a string."""
         task = _make_task_at_needs_merge(notify_team)
-        change_status(notify_team, task["id"], "conflict")
+        change_status(notify_team, TEAM, task["id"], "conflict")
 
         result = notify_conflict(notify_team, TEAM, task, conflict_details="Test")
         assert result is not None

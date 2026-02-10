@@ -42,7 +42,7 @@ class TestImmediateDelivery:
     def test_send_logs_to_sqlite(self, tmp_team):
         """Every sent message is also logged in the SQLite messages table."""
         send(tmp_team, TEAM, "alice", "bob", "Logged message")
-        messages = get_messages(tmp_team, msg_type="chat")
+        messages = get_messages(tmp_team, TEAM, msg_type="chat")
         assert len(messages) == 1
         assert messages[0]["sender"] == "alice"
         assert messages[0]["recipient"] == "bob"
@@ -70,7 +70,7 @@ class TestImmediateDelivery:
         assert bob_inbox[0].sender == "alice"
 
         # Both should be in SQLite
-        all_msgs = get_messages(tmp_team, msg_type="chat")
+        all_msgs = get_messages(tmp_team, TEAM, msg_type="chat")
         assert len(all_msgs) == 2
 
 

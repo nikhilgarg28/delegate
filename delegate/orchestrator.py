@@ -135,7 +135,7 @@ def get_agents_needing_spawn(hc_home: Path, team: str, max_concurrent: int = 3) 
             continue
 
         # Check for unread messages (fast DB check — no file I/O)
-        if has_unread(hc_home, agent):
+        if has_unread(hc_home, team, agent):
             needs_spawn.append(agent)
             logger.debug("Agent needs spawn | agent=%s", agent)
 
@@ -173,7 +173,7 @@ def orchestrate_once(
     spawned = []
     for agent in to_spawn:
         logger.info("Spawning agent: %s | team=%s", agent, team)
-        log_event(hc_home, f"Paging {agent.capitalize()}")
+        log_event(hc_home, team, f"Paging {agent.capitalize()}")
 
         if spawn_fn is not None:
             try:
@@ -184,7 +184,7 @@ def orchestrate_once(
                 logger.exception(
                     "Failed to spawn agent | agent=%s | team=%s", agent, team,
                 )
-                log_event(hc_home, f"Paging {agent.capitalize()} failed")
+                log_event(hc_home, team, f"Paging {agent.capitalize()} failed")
         else:
             spawned.append(agent)
 

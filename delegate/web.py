@@ -3,16 +3,23 @@
 Provides:
     GET  /            — HTML single-page app
     GET  /teams       — list teams (JSON)
-    GET  /tasks       — list tasks (JSON, global)
-    GET  /tasks/{id}/stats — task stats (elapsed, agent time, tokens)
-    GET  /tasks/{id}/diff — task diff
-    GET  /messages    — get chat/event log (JSON, global)
-    POST /messages    — user sends a message to a team's manager
-    GET  /teams/{team}/agents       — list agents for a team
+    GET  /teams/{team}/tasks         — list tasks (JSON)
+    GET  /teams/{team}/tasks/{id}/stats — task stats
+    GET  /teams/{team}/tasks/{id}/diff  — task diff
+    POST /teams/{team}/tasks/{id}/approve — approve task for merge
+    POST /teams/{team}/tasks/{id}/reject  — reject task
+    GET  /teams/{team}/messages      — chat/event log (JSON)
+    POST /teams/{team}/messages      — user sends a message
+    GET  /teams/{team}/agents        — list agents
     GET  /teams/{team}/agents/{name}/stats  — agent stats
     GET  /teams/{team}/agents/{name}/inbox  — agent inbox messages
     GET  /teams/{team}/agents/{name}/outbox — agent outbox messages
     GET  /teams/{team}/agents/{name}/logs   — agent worklog sessions
+
+    Legacy convenience (aggregate across all teams):
+    GET  /tasks       — list tasks across all teams
+    GET  /messages    — messages across all teams
+    POST /messages    — send message (includes team in body)
 
 When started via the daemon, the daemon loop (message routing +
 agent orchestration) runs as an asyncio background task inside the
@@ -101,14 +108,14 @@ def _agent_last_active_at(agent_dir: Path) -> str | None:
     return None
 
 
-def _agent_current_task(hc_home: Path, agent_name: str, ip_tasks: list[dict] | None = None) -> dict | None:
+def _agent_current_task(hc_home: Path, team: str, agent_name: str, ip_tasks: list[dict] | None = None) -> dict | None:
     """Return {id, title} of the agent's in_progress task, or None.
 
     When *ip_tasks* is provided it is used directly (avoids re-scanning
     the tasks directory for every agent).
     """
     if ip_tasks is None:
-        ip_tasks = _list_tasks(hc_home, status="in_progress", assignee=agent_name)
+        ip_tasks = _list_tasks(hc_home, team, status="in_progress", assignee=agent_name)
     for t in ip_tasks:
         if t.get("assignee") == agent_name:
             return {"id": t["id"], "title": t["title"]}
@@ -124,7 +131,7 @@ def _list_team_agents(hc_home: Path, team: str) -> list[dict]:
 
     # Pre-load all in_progress tasks once (lightweight — avoids per-agent scans)
     try:
-        ip_tasks = _list_tasks(hc_home, status="in_progress")
+        ip_tasks = _list_tasks(hc_home, team, status="in_progress")
     except FileNotFoundError:
         ip_tasks = []
 
@@ -135,7 +142,7 @@ def _list_team_agents(hc_home: Path, team: str) -> list[dict]:
         state = yaml.safe_load(state_file.read_text()) or {}
         if state.get("role") == "boss":
             continue
-        unread = _count_unread(hc_home, d.name)
+        unread = _count_unread(hc_home, team, d.name)
         agents.append({
             "name": d.name,
             "role": state.get("role", "worker"),
@@ -143,7 +150,7 @@ def _list_team_agents(hc_home: Path, team: str) -> list[dict]:
             "unread_inbox": unread,
             "team": team,
             "last_active_at": _agent_last_active_at(d),
-            "current_task": _agent_current_task(hc_home, d.name, ip_tasks),
+            "current_task": _agent_current_task(hc_home, team, d.name, ip_tasks),
         })
     return agents
 
@@ -298,9 +305,10 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
             override=Path(os.environ["DELEGATE_HOME"]) if "DELEGATE_HOME" in os.environ else None
         )
 
-    # Apply any pending database migrations on startup.
+    # Apply any pending database migrations on startup (per team).
     from delegate.db import ensure_schema
-    ensure_schema(hc_home)
+    for team_name in _list_teams(hc_home):
+        ensure_schema(hc_home, team_name)
 
     app = FastAPI(title="Delegate UI", lifespan=_lifespan)
     app.state.hc_home = hc_home
@@ -318,19 +326,19 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     def get_teams():
         return _list_teams(hc_home)
 
-    # --- Task endpoints (global) ---
+    # --- Task endpoints (team-scoped) ---
 
-    @app.get("/tasks")
-    def get_tasks(status: str | None = None, assignee: str | None = None):
-        return _list_tasks(hc_home, status=status, assignee=assignee)
+    @app.get("/teams/{team}/tasks")
+    def get_team_tasks(team: str, status: str | None = None, assignee: str | None = None):
+        return _list_tasks(hc_home, team, status=status, assignee=assignee)
 
-    @app.get("/tasks/{task_id}/stats")
-    def get_task_stats(task_id: int):
+    @app.get("/teams/{team}/tasks/{task_id}/stats")
+    def get_team_task_stats(team: str, task_id: int):
         try:
-            task = _get_task(hc_home, task_id)
+            task = _get_task(hc_home, team, task_id)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-        stats = _get_task_stats(hc_home, task_id)
+        stats = _get_task_stats(hc_home, team, task_id)
 
         # Compute elapsed time
         created = datetime.fromisoformat(task["created_at"].replace("Z", "+00:00"))
@@ -349,13 +357,13 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
             **stats,
         }
 
-    @app.get("/tasks/{task_id}/diff")
-    def get_task_diff(task_id: int):
+    @app.get("/teams/{team}/tasks/{task_id}/diff")
+    def get_team_task_diff(team: str, task_id: int):
         try:
-            task = _get_task(hc_home, task_id)
+            task = _get_task(hc_home, team, task_id)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-        diff_text = _get_task_diff(hc_home, task_id)
+        diff_text = _get_task_diff(hc_home, team, task_id)
         return {
             "task_id": task_id,
             "branch": task.get("branch", ""),
@@ -365,18 +373,13 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
             "merge_tip": task.get("merge_tip", ""),
         }
 
-    # --- Task approval endpoints ---
+    # --- Task approval endpoints (team-scoped) ---
 
-    @app.post("/tasks/{task_id}/approve")
-    def approve_task(task_id: int):
-        """Approve a task for merge.
-
-        Sets task.approval_status to 'approved'. For manual-approval repos,
-        this signals the daemon merge worker to merge on its next cycle.
-        Only tasks in 'needs_merge' status can be approved.
-        """
+    @app.post("/teams/{team}/tasks/{task_id}/approve")
+    def approve_task(team: str, task_id: int):
+        """Approve a task for merge."""
         try:
-            task = _get_task(hc_home, task_id)
+            task = _get_task(hc_home, team, task_id)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
@@ -386,70 +389,177 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 detail=f"Cannot approve task in '{task['status']}' status. Task must be in 'needs_merge' status.",
             )
 
-        updated = _update_task(hc_home, task_id, approval_status="approved")
-        _log_event(hc_home, f"{format_task_id(task_id)} approved \u2713")
+        updated = _update_task(hc_home, team, task_id, approval_status="approved")
+        _log_event(hc_home, team, f"{format_task_id(task_id)} approved \u2713")
         return updated
 
     class RejectBody(BaseModel):
         reason: str
 
-    @app.post("/tasks/{task_id}/reject")
-    def reject_task(task_id: int, body: RejectBody):
-        """Reject a task with a reason.
-
-        Sets task status to 'rejected', stores the rejection reason,
-        and sends a notification to the manager for triage.
-        """
+    @app.post("/teams/{team}/tasks/{task_id}/reject")
+    def reject_task(team: str, task_id: int, body: RejectBody):
+        """Reject a task with a reason."""
         try:
-            task = _get_task(hc_home, task_id)
+            task = _get_task(hc_home, team, task_id)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
         try:
-            updated = _change_status(hc_home, task_id, "rejected")
+            updated = _change_status(hc_home, team, task_id, "rejected")
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        updated = _update_task(hc_home, task_id,
+        updated = _update_task(hc_home, team, task_id,
                                rejection_reason=body.reason,
                                approval_status="rejected")
 
         # Send notification to manager via the notify module
         from delegate.notify import notify_rejection
-        notify_rejection(hc_home, _first_team(hc_home), task, reason=body.reason)
+        notify_rejection(hc_home, team, task, reason=body.reason)
 
-        _log_event(hc_home, f"{format_task_id(task_id)} rejected \u2014 {body.reason}")
+        _log_event(hc_home, team, f"{format_task_id(task_id)} rejected \u2014 {body.reason}")
         return updated
 
-    # --- Message endpoints (global) ---
+    # --- Message endpoints (team-scoped) ---
 
-    @app.get("/messages")
-    def get_messages(since: str | None = None, between: str | None = None, type: str | None = None, limit: int | None = None):
+    @app.get("/teams/{team}/messages")
+    def get_team_messages(team: str, since: str | None = None, between: str | None = None, type: str | None = None, limit: int | None = None):
         between_tuple = None
         if between:
             parts = [p.strip() for p in between.split(",")]
             if len(parts) == 2:
                 between_tuple = (parts[0], parts[1])
-        return _get_messages(hc_home, since=since, between=between_tuple, msg_type=type, limit=limit)
+        return _get_messages(hc_home, team, since=since, between=between_tuple, msg_type=type, limit=limit)
 
     class SendMessage(BaseModel):
-        team: str
+        team: str | None = None
         recipient: str
         content: str
 
-    @app.post("/messages")
-    def post_message(msg: SendMessage):
+    @app.post("/teams/{team}/messages")
+    def post_team_message(team: str, msg: SendMessage):
         """Boss sends a message to any agent in the team."""
         boss_name = get_boss(hc_home) or "boss"
-        # Verify recipient is a valid agent in the team
-        team_agents = _list_team_agents(hc_home, msg.team)
+        team_agents = _list_team_agents(hc_home, team)
         agent_names = {a["name"] for a in team_agents}
         if msg.recipient not in agent_names:
             raise HTTPException(
                 status_code=403,
-                detail=f"Recipient '{msg.recipient}' is not an agent in team '{msg.team}'",
+                detail=f"Recipient '{msg.recipient}' is not an agent in team '{team}'",
             )
-        _send(hc_home, msg.team, boss_name, msg.recipient, msg.content)
+        _send(hc_home, team, boss_name, msg.recipient, msg.content)
+        return {"status": "queued"}
+
+    # --- Legacy global endpoints (aggregate across all teams) ---
+
+    @app.get("/tasks")
+    def get_tasks(status: str | None = None, assignee: str | None = None):
+        """List tasks across all teams (for backward compat)."""
+        all_tasks = []
+        for t in _list_teams(hc_home):
+            try:
+                tasks = _list_tasks(hc_home, t, status=status, assignee=assignee)
+                for task in tasks:
+                    task["team"] = t
+                all_tasks.extend(tasks)
+            except Exception:
+                pass
+        return all_tasks
+
+    @app.get("/tasks/{task_id}/stats")
+    def get_task_stats_global(task_id: int):
+        """Get task stats — scans all teams for the task (legacy compat)."""
+        for t in _list_teams(hc_home):
+            try:
+                task = _get_task(hc_home, t, task_id)
+                stats = _get_task_stats(hc_home, t, task_id)
+                created = datetime.fromisoformat(task["created_at"].replace("Z", "+00:00"))
+                completed_at = task.get("completed_at")
+                ended = datetime.fromisoformat(completed_at.replace("Z", "+00:00")) if completed_at else datetime.now(timezone.utc)
+                elapsed_seconds = (ended - created).total_seconds()
+                return {"task_id": task_id, "elapsed_seconds": elapsed_seconds, "branch": task.get("branch", ""), "commits": task.get("commits", []), **stats}
+            except (FileNotFoundError, Exception):
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.get("/tasks/{task_id}/diff")
+    def get_task_diff_global(task_id: int):
+        """Get task diff — scans all teams (legacy compat)."""
+        for t in _list_teams(hc_home):
+            try:
+                task = _get_task(hc_home, t, task_id)
+                diff_text = _get_task_diff(hc_home, t, task_id)
+                return {"task_id": task_id, "branch": task.get("branch", ""), "commits": task.get("commits", []), "diff": diff_text, "merge_base": task.get("merge_base", ""), "merge_tip": task.get("merge_tip", "")}
+            except (FileNotFoundError, Exception):
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.post("/tasks/{task_id}/approve")
+    def approve_task_global(task_id: int):
+        """Approve task — scans all teams (legacy compat)."""
+        for t in _list_teams(hc_home):
+            try:
+                task = _get_task(hc_home, t, task_id)
+                if task["status"] != "needs_merge":
+                    raise HTTPException(status_code=400, detail=f"Cannot approve task in '{task['status']}' status.")
+                updated = _update_task(hc_home, t, task_id, approval_status="approved")
+                _log_event(hc_home, t, f"{format_task_id(task_id)} approved \u2713")
+                return updated
+            except FileNotFoundError:
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.post("/tasks/{task_id}/reject")
+    def reject_task_global(task_id: int, body: RejectBody):
+        """Reject task — scans all teams (legacy compat)."""
+        for t in _list_teams(hc_home):
+            try:
+                task = _get_task(hc_home, t, task_id)
+                _change_status(hc_home, t, task_id, "rejected")
+                updated = _update_task(hc_home, t, task_id, rejection_reason=body.reason, approval_status="rejected")
+                from delegate.notify import notify_rejection
+                notify_rejection(hc_home, t, task, reason=body.reason)
+                _log_event(hc_home, t, f"{format_task_id(task_id)} rejected \u2014 {body.reason}")
+                return updated
+            except (FileNotFoundError, ValueError):
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.get("/messages")
+    def get_messages(since: str | None = None, between: str | None = None, type: str | None = None, limit: int | None = None):
+        """Messages across all teams (legacy compat)."""
+        between_tuple = None
+        if between:
+            parts = [p.strip() for p in between.split(",")]
+            if len(parts) == 2:
+                between_tuple = (parts[0], parts[1])
+        all_msgs = []
+        for t in _list_teams(hc_home):
+            try:
+                msgs = _get_messages(hc_home, t, since=since, between=between_tuple, msg_type=type, limit=limit)
+                for m in msgs:
+                    m["team"] = t
+                all_msgs.extend(msgs)
+            except Exception:
+                pass
+        all_msgs.sort(key=lambda m: m.get("id", 0))
+        if limit:
+            all_msgs = all_msgs[:limit]
+        return all_msgs
+
+    @app.post("/messages")
+    def post_message(msg: SendMessage):
+        """Boss sends a message (legacy — uses msg.team field)."""
+        team = msg.team or _first_team(hc_home)
+        boss_name = get_boss(hc_home) or "boss"
+        team_agents = _list_team_agents(hc_home, team)
+        agent_names = {a["name"] for a in team_agents}
+        if msg.recipient not in agent_names:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Recipient '{msg.recipient}' is not an agent in team '{team}'",
+            )
+        _send(hc_home, team, boss_name, msg.recipient, msg.content)
         return {"status": "queued"}
 
     # --- Agent endpoints (team-scoped) ---
@@ -470,7 +580,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     @app.get("/teams/{team}/agents/{name}/stats")
     def get_agent_stats(team: str, name: str):
         """Get aggregated stats for a specific agent."""
-        return _get_agent_stats(hc_home, name)
+        return _get_agent_stats(hc_home, team, name)
 
     @app.get("/teams/{team}/agents/{name}/inbox")
     def get_agent_inbox(team: str, name: str):

@@ -275,14 +275,14 @@ def _next_worklog_number(ad: Path) -> int:
     return max(nums, default=0) + 1
 
 
-def _get_current_task(hc_home: Path, agent: str) -> dict | None:
+def _get_current_task(hc_home: Path, team: str, agent: str) -> dict | None:
     """Get the agent's current task dict, preferring in_progress then open."""
     try:
         from delegate.task import list_tasks
-        tasks = list_tasks(hc_home, assignee=agent, status="in_progress")
+        tasks = list_tasks(hc_home, team, assignee=agent, status="in_progress")
         if len(tasks) == 1:
             return tasks[0]
-        tasks = list_tasks(hc_home, assignee=agent, status="open")
+        tasks = list_tasks(hc_home, team, assignee=agent, status="open")
         if len(tasks) == 1:
             return tasks[0]
     except Exception:
@@ -290,9 +290,9 @@ def _get_current_task(hc_home: Path, agent: str) -> dict | None:
     return None
 
 
-def _get_current_task_id(hc_home: Path, agent: str) -> int | None:
+def _get_current_task_id(hc_home: Path, team: str, agent: str) -> int | None:
     """Get the ID of the agent's current task, if exactly one."""
-    task = _get_current_task(hc_home, agent)
+    task = _get_current_task(hc_home, team, agent)
     return task["id"] if task else None
 
 
@@ -311,14 +311,13 @@ def _slugify(title: str, max_len: int = 40) -> str:
     return slug[:max_len].rstrip("-")
 
 
-def _branch_name(dri: str, task_id: int, title: str = "") -> str:
-    """Compute the branch name for a task using the DRI.
+def _branch_name(team: str, task_id: int, title: str = "") -> str:
+    """Compute the branch name for a task.
 
-    Format: ``<dri>/T<task_id>``
-    The DRI (Directly Responsible Individual) never changes, keeping the
-    branch name stable for the lifetime of the task.
+    Format: ``delegate/<team>/T<task_id>``
+    The team-scoped prefix keeps branches organized across teams.
     """
-    return f"{dri}/{format_task_id(task_id)}"
+    return f"delegate/{team}/{format_task_id(task_id)}"
 
 
 def setup_task_worktree(
@@ -340,8 +339,7 @@ def setup_task_worktree(
 
     task_id = task["id"]
     title = task.get("title", "")
-    dri = task.get("dri", "") or agent  # fallback for old tasks without dri
-    branch = _branch_name(dri, task_id, title)
+    branch = _branch_name(team, task_id, title)
 
     try:
         from delegate.repo import create_agent_worktree
@@ -357,7 +355,7 @@ def setup_task_worktree(
 
     # Record the branch on the task
     from delegate.task import set_task_branch
-    set_task_branch(hc_home, task_id, branch)
+    set_task_branch(hc_home, team, task_id, branch)
 
     logger.info(
         "Worktree ready for %s on %s: %s (branch %s)",
@@ -366,7 +364,7 @@ def setup_task_worktree(
     return wt_path
 
 
-def push_task_branch(hc_home: Path, task: dict) -> bool:
+def push_task_branch(hc_home: Path, team: str, task: dict) -> bool:
     """Push the task's branch to origin.
 
     Returns True on success, False otherwise.
@@ -378,7 +376,7 @@ def push_task_branch(hc_home: Path, task: dict) -> bool:
 
     try:
         from delegate.repo import push_branch
-        return push_branch(hc_home, repo_name, branch)
+        return push_branch(hc_home, team, repo_name, branch)
     except Exception as exc:
         logger.warning("Failed to push branch %s: %s", branch, exc)
         return False
@@ -398,7 +396,7 @@ def cleanup_task_worktree(
     task_id = task["id"]
 
     # Push first
-    push_task_branch(hc_home, task)
+    push_task_branch(hc_home, team, task)
 
     # Then remove worktree
     try:
@@ -428,10 +426,9 @@ def _ensure_task_branch_metadata(
     needs_update = False
     updates: dict = {}
 
-    # Backfill branch name (use DRI for stable naming)
+    # Backfill branch name (use team-scoped naming)
     if not task.get("branch"):
-        dri = task.get("dri", "") or agent
-        branch = _branch_name(dri, task_id, task.get("title", ""))
+        branch = _branch_name(team, task_id, task.get("title", ""))
         updates["branch"] = branch
         needs_update = True
         logger.info("Backfilling branch=%s on task %s", branch, task_id)
@@ -441,7 +438,7 @@ def _ensure_task_branch_metadata(
         try:
             from delegate.repo import get_repo_path
             repo_name = task.get("repo", "")
-            repo_dir = get_repo_path(hc_home, repo_name)
+            repo_dir = get_repo_path(hc_home, team, repo_name)
             real_repo = repo_dir.resolve()
             import subprocess
             result = subprocess.run(
@@ -461,7 +458,7 @@ def _ensure_task_branch_metadata(
 
     if needs_update:
         from delegate.task import update_task
-        update_task(hc_home, task_id, **updates)
+        update_task(hc_home, team, task_id, **updates)
 
 
 def get_task_workspace(
@@ -680,13 +677,13 @@ Examples:
 
 Other commands:
     # Task management
-    {python} -m delegate.task create {hc_home} --title "..." [--description "..."] [--priority high] [--repo <repo_name>]
-    {python} -m delegate.task list {hc_home} [--status open] [--assignee <name>]
-    {python} -m delegate.task assign {hc_home} <task_id> <assignee>
-    {python} -m delegate.task status {hc_home} <task_id> <new_status>
-    {python} -m delegate.task show {hc_home} <task_id>
-    {python} -m delegate.task attach {hc_home} <task_id> <file_path>
-    {python} -m delegate.task detach {hc_home} <task_id> <file_path>
+    {python} -m delegate.task create {hc_home} {team} --title "..." [--description "..."] [--priority high] [--repo <repo_name>]
+    {python} -m delegate.task list {hc_home} {team} [--status open] [--assignee <name>]
+    {python} -m delegate.task assign {hc_home} {team} <task_id> <assignee>
+    {python} -m delegate.task status {hc_home} {team} <task_id> <new_status>
+    {python} -m delegate.task show {hc_home} {team} <task_id>
+    {python} -m delegate.task attach {hc_home} {team} <task_id> <file_path>
+    {python} -m delegate.task detach {hc_home} {team} <task_id> <file_path>
 
     # Check your inbox
     {python} -m delegate.mailbox inbox {hc_home} {team} {agent}
@@ -734,12 +731,12 @@ def build_user_message(
 
         # Fetch recent processed messages from the primary sender
         history_same = recent_processed(
-            hc_home, agent, from_sender=primary_sender,
+            hc_home, team, agent, from_sender=primary_sender,
             limit=CONTEXT_MSGS_SAME_SENDER,
         )
         # Fetch recent processed messages from anyone else
         history_others = [
-            m for m in recent_processed(hc_home, agent, limit=CONTEXT_MSGS_OTHERS * 2)
+            m for m in recent_processed(hc_home, team, agent, limit=CONTEXT_MSGS_OTHERS * 2)
             if m.sender != primary_sender
         ][:CONTEXT_MSGS_OTHERS]
 
@@ -770,7 +767,7 @@ def build_user_message(
     # Current task assignments
     try:
         from delegate.task import list_tasks
-        tasks = list_tasks(hc_home, assignee=agent)
+        tasks = list_tasks(hc_home, team, assignee=agent)
         if tasks:
             active = [t for t in tasks if t["status"] in ("open", "in_progress")]
             if active:
@@ -827,14 +824,14 @@ async def wait_for_inbox(
 ) -> bool:
     """Poll the DB until an unread message appears or *timeout* seconds elapse."""
     # If there are already unread messages, return immediately
-    if has_unread(hc_home, agent):
+    if has_unread(hc_home, team, agent):
         return True
 
     elapsed = 0.0
     while elapsed < timeout:
         await asyncio.sleep(poll_interval)
         elapsed += poll_interval
-        if has_unread(hc_home, agent):
+        if has_unread(hc_home, team, agent):
             return True
 
     return False
@@ -996,11 +993,11 @@ def _session_setup(
         max_turns = max(1, token_budget // 4000)
 
     # Session tracking
-    current_task = _get_current_task(hc_home, agent)
+    current_task = _get_current_task(hc_home, team, agent)
     current_task_id = current_task["id"] if current_task else None
-    session_id = start_session(hc_home, agent, task_id=current_task_id)
+    session_id = start_session(hc_home, team, agent, task_id=current_task_id)
     task_label = f" on {format_task_id(current_task_id)}" if current_task_id else ""
-    log_event(hc_home, f"{agent.capitalize()} is online{task_label} [model={model}]")
+    log_event(hc_home, team, f"{agent.capitalize()} is online{task_label} [model={model}]")
 
     # Workspace
     workspace = get_task_workspace(hc_home, team, agent, current_task)
@@ -1057,7 +1054,7 @@ def _session_teardown(ctx: _SessionContext) -> str:
 
     # End session in DB
     end_session(
-        ctx.hc_home, ctx.session_id,
+        ctx.hc_home, ctx.team, ctx.session_id,
         tokens_in=ctx.total_tokens_in,
         tokens_out=ctx.total_tokens_out,
         cost_usd=ctx.total_cost_usd,
@@ -1065,7 +1062,7 @@ def _session_teardown(ctx: _SessionContext) -> str:
     total_tokens = ctx.total_tokens_in + ctx.total_tokens_out
     tokens_fmt = f"{total_tokens:,}"
     cost_str = f" \u00b7 ${ctx.total_cost_usd:.4f}" if ctx.total_cost_usd else ""
-    log_event(ctx.hc_home, f"{ctx.agent.capitalize()} went offline ({tokens_fmt} tokens{cost_str})")
+    log_event(ctx.hc_home, ctx.team, f"{ctx.agent.capitalize()} went offline ({tokens_fmt} tokens{cost_str})")
 
     # Write worklog
     worklog_content = "\n".join(ctx.worklog_lines)
@@ -1124,7 +1121,7 @@ def _finish_turn(
 
     # Persist running totals (crash-safe)
     update_session_tokens(
-        ctx.hc_home, ctx.session_id,
+        ctx.hc_home, ctx.team, ctx.session_id,
         tokens_in=ctx.total_tokens_in,
         tokens_out=ctx.total_tokens_out,
         cost_usd=ctx.total_cost_usd,
@@ -1134,15 +1131,15 @@ def _finish_turn(
     _first = read_inbox(ctx.hc_home, ctx.team, ctx.agent, unread_only=True)
     if _first and _first[0].filename:
         msg_id = _first[0].filename
-        mark_processed(ctx.hc_home, msg_id)
+        mark_processed(ctx.hc_home, ctx.team, msg_id)
         ctx.alog.mail_marked_read(msg_id)
 
     # Re-check task association (may set up worktree if task acquired a repo)
     if ctx.current_task_id is None:
-        ctx.current_task = _get_current_task(ctx.hc_home, ctx.agent)
+        ctx.current_task = _get_current_task(ctx.hc_home, ctx.team, ctx.agent)
         if ctx.current_task is not None:
             ctx.current_task_id = ctx.current_task["id"]
-            update_session_task(ctx.hc_home, ctx.session_id, ctx.current_task_id)
+            update_session_task(ctx.hc_home, ctx.team, ctx.session_id, ctx.current_task_id)
             ctx.alog.info(
                 "Task association updated | task=%s",
                 format_task_id(ctx.current_task_id),
@@ -1209,7 +1206,7 @@ async def run_agent_loop(
             messages = read_inbox(hc_home, team, agent, unread_only=True)
             seen_ids = [m.filename for m in messages if m.filename]
             if seen_ids:
-                mark_seen_batch(hc_home, seen_ids)
+                mark_seen_batch(hc_home, team, seen_ids)
             for inbox_msg in messages:
                 ctx.alog.message_received(inbox_msg.sender, len(inbox_msg.body))
 
@@ -1248,7 +1245,7 @@ async def run_agent_loop(
                 messages = read_inbox(hc_home, team, agent, unread_only=True)
                 seen_ids = [m.filename for m in messages if m.filename]
                 if seen_ids:
-                    mark_seen_batch(hc_home, seen_ids)
+                    mark_seen_batch(hc_home, team, seen_ids)
                 for inbox_msg in messages:
                     ctx.alog.message_received(inbox_msg.sender, len(inbox_msg.body))
 

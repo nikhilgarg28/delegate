@@ -1,19 +1,20 @@
-"""SQLite-backed task management — global across all teams.
+"""Per-team SQLite-backed task management.
 
-Tasks are stored in the ``tasks`` table of ``~/.delegate/db.sqlite``.
+Tasks are stored in the ``tasks`` table of each team's
+``~/.delegate/teams/<team>/db.sqlite``.  Task IDs start from 1 per team.
 
 Each task has a **DRI** (Directly Responsible Individual) set on first
 assignment — the DRI never changes and anchors the branch name
-(``<dri>/T<NNNN>``).  The **assignee** field tracks who currently owns
-the ball and is updated by the manager as the task moves through stages.
+(``delegate/<team>/T<NNNN>``).  The **assignee** field tracks who currently
+owns the ball and is updated by the manager as the task moves through stages.
 
 Usage:
-    python -m delegate.task create <home> --title "Build API" [--priority high]
-    python -m delegate.task list <home> [--status open] [--assignee alice]
-    python -m delegate.task update <home> <task_id> [--title ...] [--description ...] [--priority ...]
-    python -m delegate.task assign <home> <task_id> <assignee>
-    python -m delegate.task status <home> <task_id> <status>
-    python -m delegate.task show <home> <task_id>
+    python -m delegate.task create <home> <team> --title "Build API" [--priority high]
+    python -m delegate.task list <home> <team> [--status open] [--assignee alice]
+    python -m delegate.task update <home> <team> <task_id> [--title ...] [--description ...] [--priority ...]
+    python -m delegate.task assign <home> <team> <task_id> <assignee>
+    python -m delegate.task status <home> <team> <task_id> <status>
+    python -m delegate.task show <home> <team> <task_id>
 """
 
 import argparse
@@ -71,6 +72,7 @@ def _now() -> str:
 
 def create_task(
     hc_home: Path,
+    team: str,
     title: str,
     description: str = "",
     project: str = "",
@@ -88,7 +90,7 @@ def create_task(
         raise ValueError(f"Invalid priority '{priority}'. Must be one of: {VALID_PRIORITIES}")
 
     now = _now()
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         cursor = conn.execute(
             """\
@@ -123,18 +125,18 @@ def create_task(
         conn.close()
 
     from delegate.chat import log_event
-    log_event(hc_home, f"{format_task_id(task_id)} created \u2014 {title}")
+    log_event(hc_home, team, f"{format_task_id(task_id)} created \u2014 {title}")
 
     return task
 
 
-def get_task(hc_home: Path, task_id: int) -> dict:
+def get_task(hc_home: Path, team: str, task_id: int) -> dict:
     """Load a single task by ID.
 
     Raises ``FileNotFoundError`` if the task does not exist (preserves
     the same exception type used by the previous YAML implementation).
     """
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
     finally:
@@ -146,7 +148,7 @@ def get_task(hc_home: Path, task_id: int) -> dict:
     return task_row_to_dict(row)
 
 
-def update_task(hc_home: Path, task_id: int, **updates) -> dict:
+def update_task(hc_home: Path, team: str, task_id: int, **updates) -> dict:
     """Update fields on an existing task. Returns the updated task."""
     # Validate field names
     for key in updates:
@@ -154,7 +156,7 @@ def update_task(hc_home: Path, task_id: int, **updates) -> dict:
             raise ValueError(f"Unknown task field: '{key}'")
 
     # Verify task exists
-    get_task(hc_home, task_id)
+    get_task(hc_home, team, task_id)
 
     updates["updated_at"] = _now()
 
@@ -175,7 +177,7 @@ def update_task(hc_home: Path, task_id: int, **updates) -> dict:
             params.append(value)
     params.append(task_id)
 
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         conn.execute(
             f"UPDATE tasks SET {', '.join(set_parts)} WHERE id = ?",
@@ -190,32 +192,32 @@ def update_task(hc_home: Path, task_id: int, **updates) -> dict:
     return task
 
 
-def assign_task(hc_home: Path, task_id: int, assignee: str) -> dict:
+def assign_task(hc_home: Path, team: str, task_id: int, assignee: str) -> dict:
     """Assign a task to an agent.
 
     On the first assignment (when ``dri`` is empty), the assignee is also
     recorded as the DRI (Directly Responsible Individual). The DRI never
     changes and is used for branch naming.
     """
-    task = get_task(hc_home, task_id)
+    task = get_task(hc_home, team, task_id)
     updates: dict[str, str] = {"assignee": assignee}
     if not task.get("dri"):
         updates["dri"] = assignee
-    task = update_task(hc_home, task_id, **updates)
+    task = update_task(hc_home, team, task_id, **updates)
 
     from delegate.chat import log_event
-    log_event(hc_home, f"{format_task_id(task_id)} assigned to {assignee.capitalize()}")
+    log_event(hc_home, team, f"{format_task_id(task_id)} assigned to {assignee.capitalize()}")
 
     return task
 
 
-def _backfill_branch_metadata(hc_home: Path, task: dict, updates: dict) -> None:
+def _backfill_branch_metadata(hc_home: Path, team: str, task: dict, updates: dict) -> None:
     """Try to fill in missing branch and base_sha on a task.
 
     Called as a safety net when a task enters ``review`` or ``needs_merge``
     status.  If the task already has both fields populated, this is a no-op.
 
-    For ``branch``, derives the name from the DRI and task ID.
+    For ``branch``, derives the name from the team and task ID.
     For ``base_sha``, computes ``git merge-base main <branch>`` in the repo.
     """
     import logging
@@ -225,22 +227,20 @@ def _backfill_branch_metadata(hc_home: Path, task: dict, updates: dict) -> None:
     if not repo_name:
         return
 
-    dri = task.get("dri", "")
     task_id = task["id"]
 
     # Backfill branch name
     if not task.get("branch") and "branch" not in updates:
-        if dri:
-            branch = f"{dri}/{format_task_id(task_id)}"
-            updates["branch"] = branch
-            _log.info("Backfilling branch=%s on task %s during status change", branch, task_id)
+        branch = f"delegate/{team}/{format_task_id(task_id)}"
+        updates["branch"] = branch
+        _log.info("Backfilling branch=%s on task %s during status change", branch, task_id)
 
     # Backfill base_sha
     branch = updates.get("branch") or task.get("branch", "")
     if not task.get("base_sha") and "base_sha" not in updates and branch:
         try:
             from delegate.paths import repo_path as _repo_path
-            git_cwd = str(_repo_path(hc_home, repo_name))
+            git_cwd = str(_repo_path(hc_home, team, repo_name))
             result = subprocess.run(
                 ["git", "merge-base", "main", branch],
                 cwd=git_cwd,
@@ -258,14 +258,14 @@ def _backfill_branch_metadata(hc_home: Path, task: dict, updates: dict) -> None:
             _log.warning("Could not backfill base_sha for task %s: %s", task_id, exc)
 
 
-def change_status(hc_home: Path, task_id: int, status: str) -> dict:
+def change_status(hc_home: Path, team: str, task_id: int, status: str) -> dict:
     """Change task status. Sets completed_at when moving to 'done' or 'merged'.
 
     Validates status transitions according to VALID_TRANSITIONS.
     """
     if status not in VALID_STATUSES:
         raise ValueError(f"Invalid status '{status}'. Must be one of: {VALID_STATUSES}")
-    old_task = get_task(hc_home, task_id)
+    old_task = get_task(hc_home, team, task_id)
     current = old_task["status"]
 
     # Validate transition
@@ -289,59 +289,59 @@ def change_status(hc_home: Path, task_id: int, status: str) -> dict:
     # Safety net: backfill branch/base_sha when entering review or needs_merge
     # if they're still empty.
     if status in ("review", "needs_merge"):
-        _backfill_branch_metadata(hc_home, old_task, updates)
+        _backfill_branch_metadata(hc_home, team, old_task, updates)
 
-    task = update_task(hc_home, task_id, **updates)
+    task = update_task(hc_home, team, task_id, **updates)
 
     new_status = status.replace("_", " ").title()
     from delegate.chat import log_event
-    log_event(hc_home, f"{format_task_id(task_id)} {old_status} \u2192 {new_status}")
+    log_event(hc_home, team, f"{format_task_id(task_id)} {old_status} \u2192 {new_status}")
 
     return task
 
 
-def set_task_branch(hc_home: Path, task_id: int, branch_name: str) -> dict:
+def set_task_branch(hc_home: Path, team: str, task_id: int, branch_name: str) -> dict:
     """Set the branch name on a task."""
-    return update_task(hc_home, task_id, branch=branch_name)
+    return update_task(hc_home, team, task_id, branch=branch_name)
 
 
-def add_task_commit(hc_home: Path, task_id: int, commit_sha: str) -> dict:
+def add_task_commit(hc_home: Path, team: str, task_id: int, commit_sha: str) -> dict:
     """Append a commit SHA to the task's commits list."""
-    task = get_task(hc_home, task_id)
+    task = get_task(hc_home, team, task_id)
     commits = list(task.get("commits", []))
     if commit_sha not in commits:
         commits.append(commit_sha)
-    return update_task(hc_home, task_id, commits=commits)
+    return update_task(hc_home, team, task_id, commits=commits)
 
 
-def attach_file(hc_home: Path, task_id: int, file_path: str) -> dict:
+def attach_file(hc_home: Path, team: str, task_id: int, file_path: str) -> dict:
     """Attach a file path to the task. Idempotent — duplicates are ignored."""
-    task = get_task(hc_home, task_id)
+    task = get_task(hc_home, team, task_id)
     attachments = list(task.get("attachments", []))
     if file_path not in attachments:
         attachments.append(file_path)
-    return update_task(hc_home, task_id, attachments=attachments)
+    return update_task(hc_home, team, task_id, attachments=attachments)
 
 
-def detach_file(hc_home: Path, task_id: int, file_path: str) -> dict:
+def detach_file(hc_home: Path, team: str, task_id: int, file_path: str) -> dict:
     """Remove a file path from the task's attachments."""
-    task = get_task(hc_home, task_id)
+    task = get_task(hc_home, team, task_id)
     attachments = [a for a in task.get("attachments", []) if a != file_path]
-    return update_task(hc_home, task_id, attachments=attachments)
+    return update_task(hc_home, team, task_id, attachments=attachments)
 
 
-def get_task_diff(hc_home: Path, task_id: int) -> str:
+def get_task_diff(hc_home: Path, team: str, task_id: int) -> str:
     """Return the git diff for the task's branch.
 
     If the task has a ``repo`` field, diffs are run against the repo
-    (via symlink in ``~/.delegate/repos/<repo>/``).  Otherwise falls
-    back to ``hc_home`` as the git working directory.
+    (via symlink in ``~/.delegate/teams/<team>/repos/<repo>/``).
+    Otherwise falls back to ``hc_home`` as the git working directory.
 
     If ``base_sha`` is set on the task, uses ``base_sha...branch`` (three-dot
     merge-base diff) for a precise diff showing only the agent's changes.
     Otherwise falls back to ``main...branch``.
     """
-    task = get_task(hc_home, task_id)
+    task = get_task(hc_home, team, task_id)
     branch = task.get("branch", "")
     if not branch:
         return "(no branch set)"
@@ -350,7 +350,7 @@ def get_task_diff(hc_home: Path, task_id: int) -> str:
     repo_name = task.get("repo", "")
     if repo_name:
         from delegate.paths import repo_path as _repo_path
-        git_cwd = str(_repo_path(hc_home, repo_name))
+        git_cwd = str(_repo_path(hc_home, team, repo_name))
     else:
         git_cwd = str(hc_home)
 
@@ -393,6 +393,7 @@ def get_task_diff(hc_home: Path, task_id: int) -> str:
 
 def list_tasks(
     hc_home: Path,
+    team: str,
     status: str | None = None,
     assignee: str | None = None,
     project: str | None = None,
@@ -402,7 +403,7 @@ def list_tasks(
 
     *tag* filters to tasks whose ``tags`` JSON array contains the given value.
     """
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         query = "SELECT * FROM tasks WHERE 1=1"
         params: list = []
@@ -443,6 +444,7 @@ def main():
     # create
     p_create = sub.add_parser("create", help="Create a task")
     p_create.add_argument("home", type=Path)
+    p_create.add_argument("team")
     p_create.add_argument("--title", required=True)
     p_create.add_argument("--description", default="")
     p_create.add_argument("--project", default="")
@@ -453,6 +455,7 @@ def main():
     # list
     p_list = sub.add_parser("list", help="List tasks")
     p_list.add_argument("home", type=Path)
+    p_list.add_argument("team")
     p_list.add_argument("--status", choices=VALID_STATUSES)
     p_list.add_argument("--assignee")
     p_list.add_argument("--project")
@@ -461,6 +464,7 @@ def main():
     # update
     p_update = sub.add_parser("update", help="Update a task")
     p_update.add_argument("home", type=Path)
+    p_update.add_argument("team")
     p_update.add_argument("task_id", type=int)
     p_update.add_argument("--title")
     p_update.add_argument("--description")
@@ -469,29 +473,34 @@ def main():
     # assign
     p_assign = sub.add_parser("assign", help="Assign a task")
     p_assign.add_argument("home", type=Path)
+    p_assign.add_argument("team")
     p_assign.add_argument("task_id", type=int)
     p_assign.add_argument("assignee")
 
     # status
     p_status = sub.add_parser("status", help="Change task status")
     p_status.add_argument("home", type=Path)
+    p_status.add_argument("team")
     p_status.add_argument("task_id", type=int)
     p_status.add_argument("new_status", choices=VALID_STATUSES)
 
     # show
     p_show = sub.add_parser("show", help="Show a task")
     p_show.add_argument("home", type=Path)
+    p_show.add_argument("team")
     p_show.add_argument("task_id", type=int)
 
     # attach
     p_attach = sub.add_parser("attach", help="Attach a file to a task")
     p_attach.add_argument("home", type=Path)
+    p_attach.add_argument("team")
     p_attach.add_argument("task_id", type=int)
     p_attach.add_argument("file", help="Path to the file to attach")
 
     # detach
     p_detach = sub.add_parser("detach", help="Detach a file from a task")
     p_detach.add_argument("home", type=Path)
+    p_detach.add_argument("team")
     p_detach.add_argument("task_id", type=int)
     p_detach.add_argument("file", help="Path of the file to detach")
 
@@ -500,6 +509,7 @@ def main():
     if args.command == "create":
         task = create_task(
             args.home,
+            args.team,
             title=args.title,
             description=args.description,
             project=args.project,
@@ -512,6 +522,7 @@ def main():
     elif args.command == "list":
         tasks = list_tasks(
             args.home,
+            args.team,
             status=args.status,
             assignee=args.assignee,
             project=args.project,
@@ -531,30 +542,30 @@ def main():
             updates["description"] = args.description
         if args.priority:
             updates["priority"] = args.priority
-        task = update_task(args.home, args.task_id, **updates)
+        task = update_task(args.home, args.team, args.task_id, **updates)
         print(f"Updated {format_task_id(task['id'])}")
 
     elif args.command == "assign":
-        task = assign_task(args.home, args.task_id, args.assignee)
+        task = assign_task(args.home, args.team, args.task_id, args.assignee)
         print(f"Assigned {format_task_id(task['id'])} to {args.assignee}")
 
     elif args.command == "status":
-        task = change_status(args.home, args.task_id, args.new_status)
+        task = change_status(args.home, args.team, args.task_id, args.new_status)
         print(f"{format_task_id(task['id'])} -> {args.new_status}")
 
     elif args.command == "show":
-        task = get_task(args.home, args.task_id)
+        task = get_task(args.home, args.team, args.task_id)
         import yaml
         print(yaml.dump(task, default_flow_style=False, sort_keys=False))
 
     elif args.command == "attach":
-        task = attach_file(args.home, args.task_id, args.file)
+        task = attach_file(args.home, args.team, args.task_id, args.file)
         print(f"Attached '{args.file}' to {format_task_id(task['id'])}")
         for f in task.get("attachments", []):
             print(f"  - {f}")
 
     elif args.command == "detach":
-        task = detach_file(args.home, args.task_id, args.file)
+        task = detach_file(args.home, args.team, args.task_id, args.file)
         print(f"Detached '{args.file}' from {format_task_id(task['id'])}")
 
 

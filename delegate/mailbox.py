@@ -1,6 +1,6 @@
 """SQLite-backed mailbox system for agent communication.
 
-Each message is a row in the ``mailbox`` table with lifecycle columns:
+Each message is a row in the team's ``mailbox`` table with lifecycle columns:
     created_at   — when the sender wrote the message
     delivered_at — when it was made available to the recipient
     seen_at      — when the agent's control loop picked it up (turn start)
@@ -82,7 +82,7 @@ def _row_to_message(row) -> Message:
 # ---------------------------------------------------------------------------
 
 def send(hc_home: Path, team: str, sender: str, recipient: str, message: str) -> str:
-    """Send a message by inserting into the mailbox table.
+    """Send a message by inserting into the team's mailbox table.
 
     Messages are delivered immediately (``delivered_at`` set on insert).
     Also logs the message to the chat event stream.
@@ -91,7 +91,7 @@ def send(hc_home: Path, team: str, sender: str, recipient: str, message: str) ->
     code that expects a filename).
     """
     now = _now()
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         cursor = conn.execute(
             """\
@@ -106,7 +106,7 @@ def send(hc_home: Path, team: str, sender: str, recipient: str, message: str) ->
 
     # Log to the chat event stream
     from delegate.chat import log_message
-    log_message(hc_home, sender, recipient, message)
+    log_message(hc_home, team, sender, recipient, message)
 
     return str(msg_id)
 
@@ -119,7 +119,7 @@ def read_inbox(
     If *unread_only* is True, returns only unprocessed messages.
     Messages must be delivered (``delivered_at IS NOT NULL``) to be visible.
     """
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         if unread_only:
             rows = conn.execute(
@@ -144,7 +144,7 @@ def read_outbox(
     If *pending_only* is True, returns only undelivered messages
     (``delivered_at IS NULL``).
     """
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         if pending_only:
             rows = conn.execute(
@@ -161,13 +161,13 @@ def read_outbox(
     return [_row_to_message(r) for r in rows]
 
 
-def mark_seen(hc_home: Path, msg_identifier: str) -> None:
+def mark_seen(hc_home: Path, team: str, msg_identifier: str) -> None:
     """Mark a message as seen (agent control loop picked it up at turn start).
 
     *msg_identifier* is the message id as a string.
     """
     msg_id = int(msg_identifier)
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         conn.execute(
             "UPDATE mailbox SET seen_at = ? WHERE id = ? AND seen_at IS NULL",
@@ -178,12 +178,12 @@ def mark_seen(hc_home: Path, msg_identifier: str) -> None:
         conn.close()
 
 
-def mark_seen_batch(hc_home: Path, msg_ids: list[str]) -> None:
+def mark_seen_batch(hc_home: Path, team: str, msg_ids: list[str]) -> None:
     """Mark multiple messages as seen in a single transaction."""
     if not msg_ids:
         return
     now = _now()
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         conn.executemany(
             "UPDATE mailbox SET seen_at = ? WHERE id = ? AND seen_at IS NULL",
@@ -194,13 +194,13 @@ def mark_seen_batch(hc_home: Path, msg_ids: list[str]) -> None:
         conn.close()
 
 
-def mark_processed(hc_home: Path, msg_identifier: str) -> None:
+def mark_processed(hc_home: Path, team: str, msg_identifier: str) -> None:
     """Mark a message as processed (agent finished the turn).
 
     *msg_identifier* is the message id as a string.
     """
     msg_id = int(msg_identifier)
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         conn.execute(
             "UPDATE mailbox SET processed_at = ? WHERE id = ? AND processed_at IS NULL",
@@ -211,12 +211,12 @@ def mark_processed(hc_home: Path, msg_identifier: str) -> None:
         conn.close()
 
 
-def mark_processed_batch(hc_home: Path, msg_ids: list[str]) -> None:
+def mark_processed_batch(hc_home: Path, team: str, msg_ids: list[str]) -> None:
     """Mark multiple messages as processed in a single transaction."""
     if not msg_ids:
         return
     now = _now()
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         conn.executemany(
             "UPDATE mailbox SET processed_at = ? WHERE id = ? AND processed_at IS NULL",
@@ -236,7 +236,7 @@ def mark_outbox_routed(
     Kept for backward compatibility.
     """
     msg_id = int(msg_identifier)
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         conn.execute(
             "UPDATE mailbox SET delivered_at = ? WHERE id = ? AND delivered_at IS NULL",
@@ -256,7 +256,7 @@ def deliver(hc_home: Path, team: str, message: Message) -> str:
     Returns the message id as a string.
     """
     now = _now()
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         cursor = conn.execute(
             """\
@@ -273,6 +273,7 @@ def deliver(hc_home: Path, team: str, message: Message) -> str:
 
 def recent_processed(
     hc_home: Path,
+    team: str,
     agent: str,
     from_sender: str | None = None,
     limit: int = 10,
@@ -282,7 +283,7 @@ def recent_processed(
     If *from_sender* is specified, only return messages from that sender.
     Otherwise return messages from any sender. Results are ordered newest-first.
     """
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         if from_sender:
             rows = conn.execute(
@@ -304,12 +305,12 @@ def recent_processed(
     return [_row_to_message(r) for r in reversed(rows)]
 
 
-def has_unread(hc_home: Path, agent: str) -> bool:
+def has_unread(hc_home: Path, team: str, agent: str) -> bool:
     """Check if an agent has any unread delivered messages.
 
     Fast path for the orchestrator — avoids fetching full message content.
     """
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         row = conn.execute(
             "SELECT 1 FROM mailbox WHERE recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL LIMIT 1",
@@ -320,9 +321,9 @@ def has_unread(hc_home: Path, agent: str) -> bool:
     return row is not None
 
 
-def count_unread(hc_home: Path, agent: str) -> int:
+def count_unread(hc_home: Path, team: str, agent: str) -> int:
     """Count unread delivered messages for an agent."""
-    conn = get_connection(hc_home)
+    conn = get_connection(hc_home, team)
     try:
         row = conn.execute(
             "SELECT COUNT(*) FROM mailbox WHERE recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL",

@@ -21,7 +21,6 @@ from delegate.paths import (
     boss_person_dir,
     agent_dir,
     agents_dir,
-    tasks_dir,
     db_path,
 )
 
@@ -100,7 +99,7 @@ class TestSingleTeamMessaging:
         assert read_outbox(hc, TEAM_A, DIRECTOR, pending_only=True) == []
 
         # Logged in SQLite
-        msgs = get_messages(hc, msg_type="chat")
+        msgs = get_messages(hc, TEAM_A, msg_type="chat")
         assert len(msgs) == 1
         assert msgs[0]["sender"] == DIRECTOR
 
@@ -137,7 +136,7 @@ class TestSingleTeamMessaging:
         send(hc, TEAM_A, "edison", DIRECTOR, "T0001 is done!")
 
         # Verify the full chain in SQLite
-        all_msgs = get_messages(hc, msg_type="chat")
+        all_msgs = get_messages(hc, TEAM_A, msg_type="chat")
         assert len(all_msgs) == 5
 
         senders = [m["sender"] for m in all_msgs]
@@ -176,15 +175,18 @@ class TestCrossTeamBoss:
         assert len(maria_inbox) == 1
         assert "Beta" in maria_inbox[0].body
 
-    def test_boss_inbox_receives_from_both_teams(self, hc):
-        """Messages from managers in different teams all arrive in one boss inbox."""
+    def test_boss_inbox_receives_per_team(self, hc):
+        """Messages from managers land in the boss's per-team inbox."""
         send(hc, TEAM_A, "edison", DIRECTOR, "Alpha report")
         send(hc, TEAM_B, "maria", DIRECTOR, "Beta report")
 
-        inbox = read_inbox(hc, TEAM_A, DIRECTOR)
-        assert len(inbox) == 2
-        bodies = {m.body for m in inbox}
-        assert bodies == {"Alpha report", "Beta report"}
+        alpha_inbox = read_inbox(hc, TEAM_A, DIRECTOR)
+        assert len(alpha_inbox) == 1
+        assert alpha_inbox[0].body == "Alpha report"
+
+        beta_inbox = read_inbox(hc, TEAM_B, DIRECTOR)
+        assert len(beta_inbox) == 1
+        assert beta_inbox[0].body == "Beta report"
 
     def test_boss_queue_notifies_on_incoming(self, hc):
         """BossQueue is populated when route_once finds boss messages."""
@@ -249,7 +251,7 @@ class TestOrchestration:
         assert "alice" in spawned
 
         # Also check events were logged
-        events = get_messages(hc, msg_type="event")
+        events = get_messages(hc, TEAM_A, msg_type="event")
         assert any("Paging Alice" in e["content"] for e in events)
 
     def test_concurrency_limit_respected(self, hc):
@@ -294,14 +296,14 @@ class TestTasksAndMessaging:
 
     def test_create_assign_and_notify(self, hc):
         """Create a task, assign it, then message the assignee."""
-        # Create a global task
-        task = create_task(hc, title="Fix pagination bug", description="Off by one")
+        # Create a team-scoped task
+        task = create_task(hc, TEAM_A, title="Fix pagination bug", description="Off by one")
         task_id = task["id"]
         assert task["status"] == "open"
 
         # Assign to alice
-        assign_task(hc, task_id, "alice")
-        updated = get_task(hc, task_id)
+        assign_task(hc, TEAM_A, task_id, "alice")
+        updated = get_task(hc, TEAM_A, task_id)
         assert updated["assignee"] == "alice"
 
         # Manager notifies alice
@@ -313,8 +315,8 @@ class TestTasksAndMessaging:
         assert f"{format_task_id(task_id)}" in inbox[0].body
 
         # Alice works, updates status
-        change_status(hc, task_id, "in_progress")
-        assert get_task(hc, task_id)["status"] == "in_progress"
+        change_status(hc, TEAM_A, task_id, "in_progress")
+        assert get_task(hc, TEAM_A, task_id)["status"] == "in_progress"
 
         # Alice sends review request
         send(hc, TEAM_A, "alice", "sarah", f"REVIEW_REQUEST: {format_task_id(task_id)}")
@@ -325,12 +327,12 @@ class TestTasksAndMessaging:
         assert "REVIEW_REQUEST" in qa_inbox[0].body
 
         # QA approves: review → needs_merge → merged
-        change_status(hc, task_id, "review")
-        assert get_task(hc, task_id)["status"] == "review"
-        change_status(hc, task_id, "needs_merge")
-        assert get_task(hc, task_id)["status"] == "needs_merge"
-        change_status(hc, task_id, "merged")
-        assert get_task(hc, task_id)["status"] == "merged"
+        change_status(hc, TEAM_A, task_id, "review")
+        assert get_task(hc, TEAM_A, task_id)["status"] == "review"
+        change_status(hc, TEAM_A, task_id, "needs_merge")
+        assert get_task(hc, TEAM_A, task_id)["status"] == "needs_merge"
+        change_status(hc, TEAM_A, task_id, "merged")
+        assert get_task(hc, TEAM_A, task_id)["status"] == "merged"
 
 
 # ---------------------------------------------------------------------------

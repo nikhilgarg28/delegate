@@ -19,7 +19,7 @@ import shlex
 import subprocess
 from pathlib import Path
 
-from delegate.config import get_repo_approval, get_repo_test_cmd, get_repo_pipeline
+from delegate.config import get_repo_approval, get_repo_pipeline
 from delegate.notify import notify_conflict
 from delegate.task import get_task, change_status, update_task, list_tasks, format_task_id
 from delegate.chat import log_event
@@ -99,6 +99,7 @@ def _run_pipeline(
     repo_dir: str,
     branch: str,
     hc_home: Path | None = None,
+    team: str | None = None,
     repo_name: str | None = None,
 ) -> tuple[bool, str]:
     """Run the configured pipeline (or fall back to auto-detection).
@@ -123,8 +124,8 @@ def _run_pipeline(
     # Check for a configured pipeline first
     pipeline: list[dict] | None = None
 
-    if hc_home is not None and repo_name:
-        pipeline = get_repo_pipeline(hc_home, repo_name)
+    if hc_home is not None and team is not None and repo_name:
+        pipeline = get_repo_pipeline(hc_home, team, repo_name)
 
     if pipeline is not None:
         # Run each step in order
@@ -206,6 +207,7 @@ def _ff_merge(repo_dir: str, branch: str) -> tuple[bool, str]:
 
 def _other_unmerged_tasks_on_branch(
     hc_home: Path,
+    team: str,
     branch: str,
     exclude_task_id: int,
 ) -> bool:
@@ -214,7 +216,7 @@ def _other_unmerged_tasks_on_branch(
     Returns ``True`` when at least one other task on the same branch still
     has a non-``merged`` status, meaning the branch should be kept alive.
     """
-    all_tasks = list_tasks(hc_home)
+    all_tasks = list_tasks(hc_home, team)
     for t in all_tasks:
         if t["id"] == exclude_task_id:
             continue
@@ -246,7 +248,7 @@ def merge_task(
     Returns:
         MergeResult indicating success or failure.
     """
-    task = get_task(hc_home, task_id)
+    task = get_task(hc_home, team, task_id)
     branch = task.get("branch", "")
     repo_name = task.get("repo", "")
 
@@ -257,14 +259,14 @@ def merge_task(
         return MergeResult(task_id, False, "No repo set on task")
 
     # Resolve the repo via symlink
-    repo_dir = get_repo_path(hc_home, repo_name)
+    repo_dir = get_repo_path(hc_home, team, repo_name)
     real_repo = repo_dir.resolve()
     if not real_repo.is_dir():
         return MergeResult(task_id, False, f"Repo not found: {real_repo}")
 
     repo_str = str(real_repo)
 
-    log_event(hc_home, f"{format_task_id(task_id)} merge started ({branch})")
+    log_event(hc_home, team, f"{format_task_id(task_id)} merge started ({branch})")
 
     # Step 0: Remove agent worktree if branch is still checked out there.
     # The worktree is no longer needed once the task is in needs_merge status,
@@ -282,18 +284,18 @@ def merge_task(
     base_sha = task.get("base_sha", "")
     ok, output = _rebase_branch(repo_str, branch, base_sha=base_sha)
     if not ok:
-        change_status(hc_home, task_id, "conflict")
+        change_status(hc_home, team, task_id, "conflict")
         notify_conflict(hc_home, team, task, conflict_details=output[:500])
-        log_event(hc_home, f"{format_task_id(task_id)} merge conflict during rebase")
+        log_event(hc_home, team, f"{format_task_id(task_id)} merge conflict during rebase")
         return MergeResult(task_id, False, f"Rebase conflict: {output[:200]}")
 
     # Step 2: Run pipeline / tests (optional)
     if not skip_tests:
-        ok, output = _run_pipeline(repo_str, branch, hc_home=hc_home, repo_name=repo_name)
+        ok, output = _run_pipeline(repo_str, branch, hc_home=hc_home, team=team, repo_name=repo_name)
         if not ok:
-            change_status(hc_home, task_id, "conflict")
+            change_status(hc_home, team, task_id, "conflict")
             notify_conflict(hc_home, team, task, conflict_details=f"Pipeline failed:\n{output[:500]}")
-            log_event(hc_home, f"{format_task_id(task_id)} merge blocked \u2014 pipeline failed")
+            log_event(hc_home, team, f"{format_task_id(task_id)} merge blocked \u2014 pipeline failed")
             return MergeResult(task_id, False, f"Pipeline failed: {output[:200]}")
 
     # Step 3: Fast-forward merge
@@ -304,9 +306,9 @@ def merge_task(
 
     ok, output = _ff_merge(repo_str, branch)
     if not ok:
-        change_status(hc_home, task_id, "conflict")
+        change_status(hc_home, team, task_id, "conflict")
         notify_conflict(hc_home, team, task, conflict_details=output[:500])
-        log_event(hc_home, f"{format_task_id(task_id)} merge failed (fast-forward)")
+        log_event(hc_home, team, f"{format_task_id(task_id)} merge failed (fast-forward)")
         return MergeResult(task_id, False, f"Merge failed: {output[:200]}")
 
     # Capture HEAD of main after the merge (merge_tip)
@@ -314,13 +316,13 @@ def merge_task(
     merge_tip_sha = post_merge.stdout.strip() if post_merge.returncode == 0 else ""
 
     # Step 4: Record merge_base and merge_tip, then mark as merged
-    update_task(hc_home, task_id, merge_base=merge_base_sha, merge_tip=merge_tip_sha)
-    change_status(hc_home, task_id, "merged")
-    log_event(hc_home, f"{format_task_id(task_id)} merged to main \u2713")
+    update_task(hc_home, team, task_id, merge_base=merge_base_sha, merge_tip=merge_tip_sha)
+    change_status(hc_home, team, task_id, "merged")
+    log_event(hc_home, team, f"{format_task_id(task_id)} merged to main \u2713")
 
     # Step 5: Clean up branch (best effort).
     # Only delete the branch if no other unmerged tasks still reference it.
-    if _other_unmerged_tasks_on_branch(hc_home, branch, exclude_task_id=task_id):
+    if _other_unmerged_tasks_on_branch(hc_home, team, branch, exclude_task_id=task_id):
         logger.info(
             "Skipping branch deletion for %s — other unmerged tasks share branch %s",
             format_task_id(task_id), branch,
@@ -331,7 +333,7 @@ def merge_task(
     # Step 6: Clean up the agent's worktree (best effort, may already be removed in Step 0).
     # Same guard: skip if other unmerged tasks share the branch (they may need the worktree).
     if dri:
-        if _other_unmerged_tasks_on_branch(hc_home, branch, exclude_task_id=task_id):
+        if _other_unmerged_tasks_on_branch(hc_home, team, branch, exclude_task_id=task_id):
             logger.info(
                 "Skipping worktree removal for %s — other unmerged tasks share branch %s",
                 format_task_id(task_id), branch,
@@ -355,7 +357,7 @@ def merge_once(hc_home: Path, team: str) -> list[MergeResult]:
 
     Returns list of merge results.
     """
-    tasks = list_tasks(hc_home, status="needs_merge")
+    tasks = list_tasks(hc_home, team, status="needs_merge")
     results = []
 
     for task in tasks:
@@ -367,7 +369,7 @@ def merge_once(hc_home: Path, team: str) -> list[MergeResult]:
             continue
 
         # Check approval mode
-        approval_mode = get_repo_approval(hc_home, repo_name)
+        approval_mode = get_repo_approval(hc_home, team, repo_name)
 
         if approval_mode == "auto":
             # Auto-merge: no boss approval needed

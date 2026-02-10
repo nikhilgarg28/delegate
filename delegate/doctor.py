@@ -1,6 +1,6 @@
 """Runtime dependency verification (e.g., git, python).
 
-Used by ``boss doctor`` CLI command.
+Used by ``delegate doctor`` CLI command.
 """
 
 import shutil
@@ -66,7 +66,7 @@ def print_doctor_report(checks: list[CheckResult]) -> bool:
         if not result.passed:
             all_passed = False
     if all_passed:
-        print("\nAll essential checks passed. Boss is ready!")
+        print("\nAll essential checks passed. Delegate is ready!")
     else:
         print("\nSome checks failed. Please address the issues above.")
     return all_passed

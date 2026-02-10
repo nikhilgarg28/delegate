@@ -2,6 +2,9 @@
 
 All state lives under a single home directory (``~/.delegate`` by default).
 The ``DELEGATE_HOME`` environment variable overrides the default for testing.
+
+Per-team state (DB, repos, tasks, mailbox) lives under
+``~/.delegate/teams/<team>/``.
 """
 
 import os
@@ -29,7 +32,7 @@ def home(override: Path | None = None) -> Path:
 # --- Boss (org-wide, outside any team) ---
 
 def boss_person_dir(hc_home: Path) -> Path:
-    """Boss's global mailbox directory (outside any team)."""
+    """Boss's global directory (outside any team)."""
     return hc_home / "boss"
 
 
@@ -39,24 +42,8 @@ def config_path(hc_home: Path) -> Path:
     return hc_home / "config.yaml"
 
 
-def db_path(hc_home: Path) -> Path:
-    return hc_home / "db.sqlite"
-
-
 def daemon_pid_path(hc_home: Path) -> Path:
     return hc_home / "daemon.pid"
-
-
-def tasks_dir(hc_home: Path) -> Path:
-    return hc_home / "tasks"
-
-
-def repos_dir(hc_home: Path) -> Path:
-    return hc_home / "repos"
-
-
-def repo_path(hc_home: Path, name: str) -> Path:
-    return repos_dir(hc_home) / name
 
 
 # --- Team paths ---
@@ -67,6 +54,21 @@ def teams_dir(hc_home: Path) -> Path:
 
 def team_dir(hc_home: Path, team: str) -> Path:
     return teams_dir(hc_home) / team
+
+
+def db_path(hc_home: Path, team: str) -> Path:
+    """Per-team SQLite database."""
+    return team_dir(hc_home, team) / "db.sqlite"
+
+
+def repos_dir(hc_home: Path, team: str) -> Path:
+    """Per-team repo symlinks directory."""
+    return team_dir(hc_home, team) / "repos"
+
+
+def repo_path(hc_home: Path, team: str, name: str) -> Path:
+    """Path to a specific repo symlink within a team."""
+    return repos_dir(hc_home, team) / name
 
 
 def agents_dir(hc_home: Path, team: str) -> Path:

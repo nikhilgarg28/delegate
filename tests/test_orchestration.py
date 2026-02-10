@@ -64,7 +64,7 @@ class TestCheckAndClearStalePids:
         """Stale PID clearing is internal housekeeping — no event logged."""
         _set_pid(tmp_team, "alice", 999999)
         check_and_clear_stale_pids(tmp_team, TEAM)
-        events = get_messages(tmp_team, msg_type="event")
+        events = get_messages(tmp_team, TEAM, msg_type="event")
         assert not any("stale PID" in e["content"] for e in events)
 
 
@@ -138,7 +138,7 @@ class TestOrchestrateOnce:
     def test_logs_spawn_event(self, tmp_team):
         _deliver_msg(tmp_team, "alice")
         orchestrate_once(tmp_team, TEAM, spawn_fn=lambda h, t, a: None)
-        events = get_messages(tmp_team, msg_type="event")
+        events = get_messages(tmp_team, TEAM, msg_type="event")
         assert any("Paging Alice" in e["content"] for e in events)
 
     def test_handles_spawn_failure(self, tmp_team):
@@ -150,5 +150,5 @@ class TestOrchestrateOnce:
         result = orchestrate_once(tmp_team, TEAM, spawn_fn=failing_spawn)
         assert result == []  # not added to spawned list
 
-        events = get_messages(tmp_team, msg_type="event")
+        events = get_messages(tmp_team, TEAM, msg_type="event")
         assert any("Paging Alice failed" in e["content"] for e in events)

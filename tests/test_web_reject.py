@@ -1,4 +1,4 @@
-"""Tests for the POST /tasks/{id}/reject notification in delegate/web.py.
+"""Tests for the POST /teams/{team}/tasks/{id}/reject notification in delegate/web.py.
 
 These tests focus on the structured TASK_REJECTED notification delivered
 to the manager's inbox when a task is rejected.  The endpoint itself
@@ -25,19 +25,19 @@ def client(tmp_team):
 
 def _task_to_needs_merge(root):
     """Create a task and advance it to needs_merge status. Returns task dict."""
-    task = create_task(root, title="Feature X")
-    assign_task(root, task["id"], "alice")
-    change_status(root, task["id"], "in_progress")
-    change_status(root, task["id"], "review")
-    change_status(root, task["id"], "needs_merge")
-    return get_task(root, task["id"])
+    task = create_task(root, TEAM, title="Feature X")
+    assign_task(root, TEAM, task["id"], "alice")
+    change_status(root, TEAM, task["id"], "in_progress")
+    change_status(root, TEAM, task["id"], "review")
+    change_status(root, TEAM, task["id"], "needs_merge")
+    return get_task(root, TEAM, task["id"])
 
 
 class TestRejectNotification:
     def test_reject_delivers_notification_to_manager_inbox(self, tmp_team, client):
         task = _task_to_needs_merge(tmp_team)
         resp = client.post(
-            f"/tasks/{task['id']}/reject",
+            f"/teams/{TEAM}/tasks/{task['id']}/reject",
             json={"reason": "Code quality issues"},
         )
         assert resp.status_code == 200
@@ -52,7 +52,7 @@ class TestRejectNotification:
     def test_notification_contains_task_details(self, tmp_team, client):
         task = _task_to_needs_merge(tmp_team)
         client.post(
-            f"/tasks/{task['id']}/reject",
+            f"/teams/{TEAM}/tasks/{task['id']}/reject",
             json={"reason": "Code quality issues"},
         )
         inbox = read_inbox(tmp_team, TEAM, "manager", unread_only=True)
@@ -67,7 +67,7 @@ class TestRejectNotification:
     def test_notification_has_suggested_actions(self, tmp_team, client):
         task = _task_to_needs_merge(tmp_team)
         client.post(
-            f"/tasks/{task['id']}/reject",
+            f"/teams/{TEAM}/tasks/{task['id']}/reject",
             json={"reason": "Problems found"},
         )
         inbox = read_inbox(tmp_team, TEAM, "manager", unread_only=True)
@@ -80,7 +80,7 @@ class TestRejectNotification:
     def test_notification_sender_is_boss(self, tmp_team, client):
         task = _task_to_needs_merge(tmp_team)
         client.post(
-            f"/tasks/{task['id']}/reject",
+            f"/teams/{TEAM}/tasks/{task['id']}/reject",
             json={"reason": "Not ready"},
         )
         inbox = read_inbox(tmp_team, TEAM, "manager", unread_only=True)
@@ -91,7 +91,7 @@ class TestRejectNotification:
     def test_reject_sets_approval_status(self, tmp_team, client):
         task = _task_to_needs_merge(tmp_team)
         resp = client.post(
-            f"/tasks/{task['id']}/reject",
+            f"/teams/{TEAM}/tasks/{task['id']}/reject",
             json={"reason": "Needs work"},
         )
         data = resp.json()
@@ -102,7 +102,7 @@ class TestRejectNotification:
     def test_reject_returns_full_task_dict(self, tmp_team, client):
         task = _task_to_needs_merge(tmp_team)
         resp = client.post(
-            f"/tasks/{task['id']}/reject",
+            f"/teams/{TEAM}/tasks/{task['id']}/reject",
             json={"reason": "Issues found"},
         )
         data = resp.json()
