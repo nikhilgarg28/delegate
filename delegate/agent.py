@@ -1184,28 +1184,6 @@ async def run_agent_loop(
                 ctx.alog.waiting_for_mail(idle_timeout)
                 has_mail = await wait_for_inbox(hc_home, team, agent, timeout=idle_timeout)
                 if not has_mail:
-                    # No messages — maybe do a reflection turn before going idle
-                    if _check_reflection_due():
-                        turn = ctx.turn + 1
-                        user_msg = build_reflection_message(hc_home, team, agent)
-                        ctx.worklog_lines.append(f"\n## Turn {turn} (reflection)\n{user_msg}")
-                        ctx.alog.turn_start(turn, user_msg)
-
-                        turn_tokens_in = 0
-                        turn_tokens_out = 0
-                        turn_cost = 0.0
-                        turn_tools: list[str] = []
-
-                        await client.query(user_msg, session_id=f"turn-{turn}")
-                        async for msg in client.receive_response():
-                            turn_tokens_in, turn_tokens_out, turn_cost = _process_turn_messages(
-                                msg, ctx.alog, turn_tokens_in, turn_tokens_out, turn_cost,
-                                turn_tools, ctx.worklog_lines,
-                            )
-
-                        _finish_turn(ctx, turn, turn_tokens_in, turn_tokens_out, turn_cost, turn_tools)
-                        ctx.alog.info("Reflection turn completed")
-
                     ctx.exit_reason = "idle_timeout"
                     ctx.alog.idle_timeout(idle_timeout)
                     break
@@ -1235,6 +1213,28 @@ async def run_agent_loop(
                     )
 
                 _finish_turn(ctx, turn, turn_tokens_in, turn_tokens_out, turn_cost, turn_tools)
+
+                # After processing a real message, coin-flip for a reflection turn
+                if _check_reflection_due():
+                    turn = ctx.turn + 1
+                    user_msg = build_reflection_message(hc_home, team, agent)
+                    ctx.worklog_lines.append(f"\n## Turn {turn} (reflection)\n{user_msg}")
+                    ctx.alog.turn_start(turn, user_msg)
+
+                    turn_tokens_in = 0
+                    turn_tokens_out = 0
+                    turn_cost = 0.0
+                    turn_tools = []
+
+                    await client.query(user_msg, session_id=f"turn-{turn}")
+                    async for msg in client.receive_response():
+                        turn_tokens_in, turn_tokens_out, turn_cost = _process_turn_messages(
+                            msg, ctx.alog, turn_tokens_in, turn_tokens_out, turn_cost,
+                            turn_tools, ctx.worklog_lines,
+                        )
+
+                    _finish_turn(ctx, turn, turn_tokens_in, turn_tokens_out, turn_cost, turn_tools)
+                    ctx.alog.info("Reflection turn completed")
 
         finally:
             await client.disconnect()
