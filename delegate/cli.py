@@ -378,68 +378,42 @@ def repo_list(ctx: click.Context, team_name: str) -> None:
         click.echo(f"  - {name}: {meta.get('source', '?')}")
 
 
-# ── delegate repo pipeline add / list / remove ──
+# ── delegate repo pre-merge-script ──
 
-@repo.group("pipeline")
-def repo_pipeline() -> None:
-    """Manage a repo's CI pipeline (named steps)."""
-    pass
-
-
-@repo_pipeline.command("add")
+@repo.command("pre-merge-script")
 @click.argument("team_name")
 @click.argument("repo_name")
-@click.option("--name", "step_name", required=True, help="Name for the pipeline step.")
-@click.option("--run", "run_cmd", required=True, help="Shell command to run.")
+@click.option("--set", "script_path", default=None, help="Path to the pre-merge script (relative to repo root or absolute). Pass empty string to clear.")
 @click.pass_context
-def repo_pipeline_add(ctx: click.Context, team_name: str, repo_name: str, step_name: str, run_cmd: str) -> None:
-    """Add a named step to a repo's pipeline."""
-    from delegate.config import add_pipeline_step
+def repo_pre_merge_script(ctx: click.Context, team_name: str, repo_name: str, script_path: str | None) -> None:
+    """Show or set the pre-merge script for a repo.
+
+    Without --set, displays the current pre-merge script.
+    With --set <path>, sets the pre-merge script.
+    With --set '', clears the pre-merge script.
+    """
+    from delegate.config import get_pre_merge_script, set_pre_merge_script
 
     hc_home = _get_home(ctx)
-    try:
-        add_pipeline_step(hc_home, team_name, repo_name, step_name, run_cmd)
-    except KeyError as exc:
-        raise click.ClickException(str(exc))
-    except ValueError as exc:
-        raise click.ClickException(str(exc))
-    click.echo(f"Added pipeline step '{step_name}' to repo '{repo_name}' (team: {team_name})")
 
-
-@repo_pipeline.command("list")
-@click.argument("team_name")
-@click.argument("repo_name")
-@click.pass_context
-def repo_pipeline_list(ctx: click.Context, team_name: str, repo_name: str) -> None:
-    """List pipeline steps for a repo."""
-    from delegate.config import get_repo_pipeline
-
-    hc_home = _get_home(ctx)
-    pipeline = get_repo_pipeline(hc_home, team_name, repo_name)
-    if not pipeline:
-        click.echo(f"No pipeline configured for repo '{repo_name}'.")
+    if script_path is None:
+        # Show current script
+        script = get_pre_merge_script(hc_home, team_name, repo_name)
+        if script:
+            click.echo(f"Pre-merge script for '{repo_name}' (team: {team_name}): {script}")
+        else:
+            click.echo(f"No pre-merge script configured for repo '{repo_name}'.")
         return
 
-    click.echo(f"Pipeline for '{repo_name}' (team: {team_name}):")
-    for i, step in enumerate(pipeline, 1):
-        click.echo(f"  {i}. {step['name']}: {step['run']}")
-
-
-@repo_pipeline.command("remove")
-@click.argument("team_name")
-@click.argument("repo_name")
-@click.option("--name", "step_name", required=True, help="Name of the step to remove.")
-@click.pass_context
-def repo_pipeline_remove(ctx: click.Context, team_name: str, repo_name: str, step_name: str) -> None:
-    """Remove a named step from a repo's pipeline."""
-    from delegate.config import remove_pipeline_step
-
-    hc_home = _get_home(ctx)
     try:
-        remove_pipeline_step(hc_home, team_name, repo_name, step_name)
+        set_pre_merge_script(hc_home, team_name, repo_name, script_path)
     except KeyError as exc:
         raise click.ClickException(str(exc))
-    click.echo(f"Removed pipeline step '{step_name}' from repo '{repo_name}' (team: {team_name})")
+
+    if script_path:
+        click.echo(f"Set pre-merge script for '{repo_name}' (team: {team_name}): {script_path}")
+    else:
+        click.echo(f"Cleared pre-merge script for '{repo_name}' (team: {team_name})")
 
 
 # ──────────────────────────────────────────────────────────────

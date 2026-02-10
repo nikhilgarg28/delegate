@@ -224,7 +224,7 @@ class TestRunTests:
 
 
 class TestHandleReviewRequest:
-    def test_full_pipeline_approved(self, qa_team):
+    def test_full_review_approved(self, qa_team):
         hc_home, repo_path = qa_team
         req = ReviewRequest(repo=repo_path, branch="feature-xyz", requester="alice")
         result = handle_review_request(hc_home, TEAM, req, test_command=f"{sys.executable} -m pytest -v")
@@ -238,7 +238,7 @@ class TestHandleReviewRequest:
         events = get_messages(hc_home, TEAM, msg_type="event")
         assert any("QA" in e["content"] for e in events)
 
-    def test_full_pipeline_changes_requested(self, qa_team):
+    def test_full_review_changes_requested(self, qa_team):
         hc_home, repo_path = qa_team
         # Create a failing branch
         subprocess.run(["git", "checkout", "-b", "broken"], cwd=repo_path, capture_output=True, check=True)

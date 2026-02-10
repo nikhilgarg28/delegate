@@ -152,96 +152,49 @@ def update_repo_test_cmd(hc_home: Path, team: str, name: str, test_cmd: str) -> 
     _write_repos(hc_home, team, data)
 
 
-# --- Repo pipeline ---
+# --- Pre-merge script ---
 
-def get_repo_pipeline(hc_home: Path, team: str, repo_name: str) -> list[dict] | None:
-    """Return the configured pipeline for a repo, or None if not set.
+def get_pre_merge_script(hc_home: Path, team: str, repo_name: str) -> str | None:
+    """Return the configured pre-merge script path for a repo, or None.
 
-    If the repo has a ``pipeline`` field, returns it directly.
-    If no ``pipeline`` is set but a legacy ``test_cmd`` exists,
-    returns a single-step pipeline wrapping it for backward compatibility.
-
-    Returns None when neither pipeline nor test_cmd is configured.
+    Also checks for legacy ``pipeline`` and ``test_cmd`` fields for
+    backward compatibility — returns the first step's command if found.
     """
     repos = get_repos(hc_home, team)
     meta = repos.get(repo_name, {})
 
-    pipeline = meta.get("pipeline")
-    if pipeline is not None:
-        return pipeline
+    script = meta.get("pre_merge_script")
+    if script:
+        return script
 
-    # Backward compat: wrap legacy test_cmd as a single-step pipeline
+    # Backward compat: legacy pipeline → use first step
+    pipeline = meta.get("pipeline")
+    if pipeline and len(pipeline) > 0:
+        return pipeline[0].get("run")
+
+    # Backward compat: legacy test_cmd
     test_cmd = meta.get("test_cmd")
     if test_cmd:
-        return [{"name": "test", "run": test_cmd}]
+        return test_cmd
 
     return None
 
 
-def set_repo_pipeline(hc_home: Path, team: str, name: str, pipeline: list[dict]) -> None:
-    """Set the full pipeline for an existing repo."""
-    data = _read_repos(hc_home, team)
-    if name not in data:
-        raise KeyError(f"Repo '{name}' not found in team '{team}' config")
-    data[name]["pipeline"] = pipeline
-    _write_repos(hc_home, team, data)
+def set_pre_merge_script(hc_home: Path, team: str, repo_name: str, script_path: str) -> None:
+    """Set the pre-merge script for an existing repo.
 
-
-def add_pipeline_step(hc_home: Path, team: str, repo_name: str, step_name: str, run: str) -> None:
-    """Append a named step to a repo's pipeline.
-
-    If the repo doesn't have a pipeline yet, creates one.  If it has a
-    legacy ``test_cmd`` but no pipeline, migrates the test_cmd into the
-    pipeline first.
-
-    Raises:
-        KeyError: If the repo doesn't exist.
-        ValueError: If a step with the same name already exists.
+    The *script_path* should be relative to the repo root or an absolute path.
+    Pass an empty string to clear the pre-merge script.
     """
     data = _read_repos(hc_home, team)
     if repo_name not in data:
         raise KeyError(f"Repo '{repo_name}' not found in team '{team}' config")
 
-    meta = data[repo_name]
-    pipeline = meta.get("pipeline")
-
-    if pipeline is None:
-        # Migrate legacy test_cmd if present
-        test_cmd = meta.get("test_cmd")
-        if test_cmd:
-            pipeline = [{"name": "test", "run": test_cmd}]
-        else:
-            pipeline = []
-
-    # Check for duplicate step name
-    for step in pipeline:
-        if step["name"] == step_name:
-            raise ValueError(f"Step '{step_name}' already exists in pipeline")
-
-    pipeline.append({"name": step_name, "run": run})
-    meta["pipeline"] = pipeline
-    _write_repos(hc_home, team, data)
-
-
-def remove_pipeline_step(hc_home: Path, team: str, repo_name: str, step_name: str) -> None:
-    """Remove a named step from a repo's pipeline.
-
-    Raises:
-        KeyError: If the repo doesn't exist or the step is not found.
-    """
-    data = _read_repos(hc_home, team)
-    if repo_name not in data:
-        raise KeyError(f"Repo '{repo_name}' not found in team '{team}' config")
-
-    meta = data[repo_name]
-    pipeline = meta.get("pipeline")
-
-    if pipeline is None:
-        raise KeyError(f"No pipeline configured for repo '{repo_name}'")
-
-    new_pipeline = [s for s in pipeline if s["name"] != step_name]
-    if len(new_pipeline) == len(pipeline):
-        raise KeyError(f"Step '{step_name}' not found in pipeline")
-
-    meta["pipeline"] = new_pipeline
+    if script_path:
+        data[repo_name]["pre_merge_script"] = script_path
+    else:
+        data[repo_name].pop("pre_merge_script", None)
+    # Clean up legacy fields
+    data[repo_name].pop("pipeline", None)
+    data[repo_name].pop("test_cmd", None)
     _write_repos(hc_home, team, data)

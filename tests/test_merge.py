@@ -22,9 +22,9 @@ from delegate.task import (
 )
 from delegate.config import (
     add_repo, get_repo_approval, get_repo_test_cmd, update_repo_test_cmd, set_boss,
-    get_repo_pipeline, set_repo_pipeline, add_pipeline_step, remove_pipeline_step,
+    get_pre_merge_script, set_pre_merge_script,
 )
-from delegate.merge import merge_task, merge_once, _run_pipeline, _other_unmerged_tasks_on_branch, MergeResult
+from delegate.merge import merge_task, merge_once, _run_pre_merge, _other_unmerged_tasks_on_branch, MergeResult
 from delegate.bootstrap import bootstrap
 
 
@@ -550,150 +550,79 @@ class TestRepoTestCmd:
 
 
 # ---------------------------------------------------------------------------
-# Pipeline config CRUD tests
+# Pre-merge script config tests
 # ---------------------------------------------------------------------------
 
-class TestPipelineConfig:
-    def test_get_pipeline_returns_none_by_default(self, hc_home):
-        """Repo without pipeline or test_cmd returns None."""
+class TestPreMergeScriptConfig:
+    def test_returns_none_by_default(self, hc_home):
+        """Repo without pre-merge script or test_cmd returns None."""
         add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo")
-        assert get_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo") is None
+        assert get_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo") is None
 
-    def test_get_pipeline_returns_none_for_missing_repo(self, hc_home):
-        assert get_repo_pipeline(hc_home, SAMPLE_TEAM, "nonexistent") is None
+    def test_returns_none_for_missing_repo(self, hc_home):
+        assert get_pre_merge_script(hc_home, SAMPLE_TEAM, "nonexistent") is None
 
-    def test_backward_compat_test_cmd_as_pipeline(self, hc_home):
-        """Legacy test_cmd should be returned as single-step pipeline."""
+    def test_backward_compat_test_cmd(self, hc_home):
+        """Legacy test_cmd should be returned as pre-merge script."""
         add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo", test_cmd="pytest -x")
-        pipeline = get_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo")
-        assert pipeline is not None
-        assert len(pipeline) == 1
-        assert pipeline[0]["name"] == "test"
-        assert pipeline[0]["run"] == "pytest -x"
+        script = get_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo")
+        assert script == "pytest -x"
 
-    def test_explicit_pipeline_overrides_test_cmd(self, hc_home):
-        """When both pipeline and test_cmd exist, pipeline wins."""
+    def test_set_pre_merge_script(self, hc_home):
+        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo")
+        set_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo", "./scripts/pre-merge.sh")
+        assert get_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo") == "./scripts/pre-merge.sh"
+
+    def test_set_pre_merge_script_missing_repo(self, hc_home):
+        with pytest.raises(KeyError, match="not found"):
+            set_pre_merge_script(hc_home, SAMPLE_TEAM, "no_such_repo", "echo test")
+
+    def test_clear_pre_merge_script(self, hc_home):
+        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo")
+        set_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo", "./test.sh")
+        assert get_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo") == "./test.sh"
+        set_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo", "")
+        assert get_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo") is None
+
+    def test_set_cleans_up_legacy_fields(self, hc_home):
+        """Setting pre-merge script should remove legacy pipeline and test_cmd."""
         add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo", test_cmd="pytest -x")
-        set_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo", [
-            {"name": "lint", "run": "flake8"},
-            {"name": "test", "run": "pytest -v"},
-        ])
-        pipeline = get_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo")
-        assert len(pipeline) == 2
-        assert pipeline[0]["name"] == "lint"
-        assert pipeline[1]["name"] == "test"
-
-    def test_set_repo_pipeline(self, hc_home):
-        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo")
-        steps = [
-            {"name": "install", "run": "npm install"},
-            {"name": "build", "run": "npm run build"},
-            {"name": "test", "run": "npm test"},
-        ]
-        set_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo", steps)
-        assert get_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo") == steps
-
-    def test_set_repo_pipeline_missing_repo(self, hc_home):
-        with pytest.raises(KeyError, match="not found"):
-            set_repo_pipeline(hc_home, SAMPLE_TEAM, "no_such_repo", [])
-
-    def test_add_pipeline_step(self, hc_home):
-        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo")
-        add_pipeline_step(hc_home, SAMPLE_TEAM, "myrepo", "lint", "flake8 .")
-        add_pipeline_step(hc_home, SAMPLE_TEAM, "myrepo", "test", "pytest -x")
-        pipeline = get_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo")
-        assert len(pipeline) == 2
-        assert pipeline[0] == {"name": "lint", "run": "flake8 ."}
-        assert pipeline[1] == {"name": "test", "run": "pytest -x"}
-
-    def test_add_pipeline_step_migrates_test_cmd(self, hc_home):
-        """Adding a step to a repo with legacy test_cmd migrates it first."""
-        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo", test_cmd="pytest -x")
-        add_pipeline_step(hc_home, SAMPLE_TEAM, "myrepo", "lint", "flake8 .")
-        pipeline = get_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo")
-        assert len(pipeline) == 2
-        assert pipeline[0] == {"name": "test", "run": "pytest -x"}  # migrated
-        assert pipeline[1] == {"name": "lint", "run": "flake8 ."}
-
-    def test_add_pipeline_step_duplicate_name(self, hc_home):
-        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo")
-        add_pipeline_step(hc_home, SAMPLE_TEAM, "myrepo", "test", "pytest")
-        with pytest.raises(ValueError, match="already exists"):
-            add_pipeline_step(hc_home, SAMPLE_TEAM, "myrepo", "test", "pytest -v")
-
-    def test_add_pipeline_step_missing_repo(self, hc_home):
-        with pytest.raises(KeyError, match="not found"):
-            add_pipeline_step(hc_home, SAMPLE_TEAM, "no_such_repo", "test", "pytest")
-
-    def test_remove_pipeline_step(self, hc_home):
-        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo")
-        set_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo", [
-            {"name": "lint", "run": "flake8"},
-            {"name": "test", "run": "pytest"},
-        ])
-        remove_pipeline_step(hc_home, SAMPLE_TEAM, "myrepo", "lint")
-        pipeline = get_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo")
-        assert len(pipeline) == 1
-        assert pipeline[0]["name"] == "test"
-
-    def test_remove_pipeline_step_not_found(self, hc_home):
-        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo")
-        set_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo", [{"name": "test", "run": "pytest"}])
-        with pytest.raises(KeyError, match="not found"):
-            remove_pipeline_step(hc_home, SAMPLE_TEAM, "myrepo", "nonexistent")
-
-    def test_remove_pipeline_step_no_pipeline(self, hc_home):
-        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo")
-        with pytest.raises(KeyError, match="No pipeline"):
-            remove_pipeline_step(hc_home, SAMPLE_TEAM, "myrepo", "test")
-
-    def test_remove_pipeline_step_missing_repo(self, hc_home):
-        with pytest.raises(KeyError, match="not found"):
-            remove_pipeline_step(hc_home, SAMPLE_TEAM, "no_such_repo", "test")
+        set_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo", "./ci.sh")
+        assert get_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo") == "./ci.sh"
 
 
 # ---------------------------------------------------------------------------
-# _run_pipeline tests
+# _run_pre_merge tests
 # ---------------------------------------------------------------------------
 
-class TestRunPipeline:
-    def test_pipeline_all_steps_pass(self, hc_home, tmp_path):
-        """Pipeline with all passing steps should succeed."""
+class TestRunPreMerge:
+    def test_script_passes(self, hc_home, tmp_path):
+        """Pre-merge script that succeeds should return ok."""
         repo = _setup_git_repo(tmp_path)
         branch = "alice/T0001"
         _make_feature_branch(repo, branch)
         _register_repo_with_symlink(hc_home, "myrepo", repo)
 
-        set_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo", [
-            {"name": "step1", "run": "echo step-one-ok"},
-            {"name": "step2", "run": "echo step-two-ok"},
-        ])
+        set_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo", "echo all-checks-pass")
 
-        ok, output = _run_pipeline(str(repo), branch, hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
+        ok, output = _run_pre_merge(str(repo), branch, hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
         assert ok is True
-        assert "step-one-ok" in output
-        assert "step-two-ok" in output
+        assert "all-checks-pass" in output
 
-    def test_pipeline_stops_on_first_failure(self, hc_home, tmp_path):
-        """Pipeline should stop on first failing step and report step name."""
+    def test_script_fails(self, hc_home, tmp_path):
+        """Pre-merge script that fails should return not ok."""
         repo = _setup_git_repo(tmp_path)
         branch = "alice/T0001"
         _make_feature_branch(repo, branch)
         _register_repo_with_symlink(hc_home, "myrepo", repo)
 
-        set_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo", [
-            {"name": "install", "run": "echo installing"},
-            {"name": "build", "run": "false"},
-            {"name": "test", "run": "echo should-not-run"},
-        ])
+        set_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo", "false")
 
-        ok, output = _run_pipeline(str(repo), branch, hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
+        ok, output = _run_pre_merge(str(repo), branch, hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
         assert ok is False
-        assert "build" in output.lower()
-        assert "should-not-run" not in output
 
-    def test_pipeline_backward_compat_test_cmd(self, hc_home, tmp_path):
-        """Legacy test_cmd should work as a single-step pipeline."""
+    def test_backward_compat_test_cmd(self, hc_home, tmp_path):
+        """Legacy test_cmd should work as pre-merge script."""
         repo = _setup_git_repo(tmp_path)
         branch = "alice/T0001"
         _make_feature_branch(repo, branch)
@@ -701,33 +630,30 @@ class TestRunPipeline:
 
         update_repo_test_cmd(hc_home, SAMPLE_TEAM, "myrepo", "echo legacy-test-passed")
 
-        ok, output = _run_pipeline(str(repo), branch, hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
+        ok, output = _run_pre_merge(str(repo), branch, hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
         assert ok is True
         assert "legacy-test-passed" in output
 
-    def test_pipeline_falls_back_to_autodetect(self, hc_home, tmp_path):
-        """When no pipeline and no test_cmd, falls back to auto-detection."""
+    def test_falls_back_to_autodetect(self, hc_home, tmp_path):
+        """When no script and no test_cmd, falls back to auto-detection."""
         repo = _setup_git_repo(tmp_path)
         branch = "alice/T0001"
         _make_feature_branch(repo, branch)
         _register_repo_with_symlink(hc_home, "myrepo", repo)
 
-        # No pipeline, no test_cmd, no pyproject.toml → skip tests
-        ok, output = _run_pipeline(str(repo), branch, hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
+        # No script, no test_cmd, no pyproject.toml → skip tests
+        ok, output = _run_pre_merge(str(repo), branch, hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
         assert ok is True
         assert "no test runner" in output.lower()
 
-    def test_merge_with_pipeline_failure(self, hc_home, tmp_path):
-        """merge_task should fail when pipeline step fails."""
+    def test_merge_with_script_failure(self, hc_home, tmp_path):
+        """merge_task should fail when pre-merge script fails."""
         repo = _setup_git_repo(tmp_path)
         branch = "alice/T0001"
         _make_feature_branch(repo, branch)
         _register_repo_with_symlink(hc_home, "myrepo", repo)
 
-        set_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo", [
-            {"name": "lint", "run": "echo lint-ok"},
-            {"name": "test", "run": "false"},
-        ])
+        set_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo", "false")
 
         task = _make_in_approval_task(hc_home, repo="myrepo", branch=branch)
         update_task(hc_home, SAMPLE_TEAM, task["id"], approval_status="approved")
@@ -736,22 +662,19 @@ class TestRunPipeline:
             result = merge_task(hc_home, SAMPLE_TEAM, task["id"])
 
         assert result.success is False
-        assert "pipeline failed" in result.message.lower() or "test" in result.message.lower()
+        assert "pre-merge" in result.message.lower() or "failed" in result.message.lower()
 
         updated = get_task(hc_home, SAMPLE_TEAM, task["id"])
         assert updated["status"] == "conflict"
 
-    def test_merge_with_pipeline_success(self, hc_home, tmp_path):
-        """merge_task should succeed when all pipeline steps pass."""
+    def test_merge_with_script_success(self, hc_home, tmp_path):
+        """merge_task should succeed when pre-merge script passes."""
         repo = _setup_git_repo(tmp_path)
         branch = "alice/T0001"
         _make_feature_branch(repo, branch)
         _register_repo_with_symlink(hc_home, "myrepo", repo)
 
-        set_repo_pipeline(hc_home, SAMPLE_TEAM, "myrepo", [
-            {"name": "install", "run": "echo installing"},
-            {"name": "test", "run": "echo all-tests-pass"},
-        ])
+        set_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo", "echo all-checks-pass")
 
         task = _make_in_approval_task(hc_home, repo="myrepo", branch=branch)
         update_task(hc_home, SAMPLE_TEAM, task["id"], approval_status="approved")

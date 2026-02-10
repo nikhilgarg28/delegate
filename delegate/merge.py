@@ -19,7 +19,7 @@ import shlex
 import subprocess
 from pathlib import Path
 
-from delegate.config import get_repo_approval, get_repo_pipeline
+from delegate.config import get_repo_approval, get_pre_merge_script
 from delegate.notify import notify_conflict
 from delegate.task import get_task, change_status, update_task, list_tasks, format_task_id
 from delegate.chat import log_event
@@ -95,24 +95,20 @@ def _rebase_branch(repo_dir: str, branch: str, base_sha: str | None = None) -> t
     return True, result.stdout
 
 
-def _run_pipeline(
+def _run_pre_merge(
     repo_dir: str,
     branch: str,
     hc_home: Path | None = None,
     team: str | None = None,
     repo_name: str | None = None,
 ) -> tuple[bool, str]:
-    """Run the configured pipeline (or fall back to auto-detection).
+    """Run the pre-merge script (or fall back to auto-detection).
 
-    If a ``pipeline`` is configured for the repo, each step is executed in
-    order.  Execution stops on the first failure, reporting which step failed.
+    If a ``pre_merge_script`` is configured for the repo, it is executed as
+    a single shell command.
 
-    If no pipeline is configured but a legacy ``test_cmd`` exists, it is
-    treated as a single-step pipeline (handled by :func:`get_repo_pipeline`).
-
-    When neither pipeline nor test_cmd is configured, falls back to
-    auto-detection based on project files (pyproject.toml, package.json,
-    Makefile).
+    When no script is configured, falls back to auto-detection based on
+    project files (pyproject.toml, package.json, Makefile).
 
     Returns (success, output).
     """
@@ -121,39 +117,30 @@ def _run_pipeline(
     if result.returncode != 0:
         return False, f"Could not checkout {branch}: {result.stderr}"
 
-    # Check for a configured pipeline first
-    pipeline: list[dict] | None = None
-
+    # Check for a configured pre-merge script
+    script: str | None = None
     if hc_home is not None and team is not None and repo_name:
-        pipeline = get_repo_pipeline(hc_home, team, repo_name)
+        script = get_pre_merge_script(hc_home, team, repo_name)
 
-    if pipeline is not None:
-        # Run each step in order
-        all_output: list[str] = []
+    if script is not None:
+        cmd = shlex.split(script)
         try:
-            for step in pipeline:
-                step_name = step["name"]
-                step_cmd = shlex.split(step["run"])
-                try:
-                    step_result = subprocess.run(
-                        step_cmd,
-                        cwd=repo_dir,
-                        capture_output=True,
-                        text=True,
-                        timeout=300,
-                    )
-                    step_output = step_result.stdout + step_result.stderr
-                    all_output.append(f"[{step_name}] {step_output}")
-                    if step_result.returncode != 0:
-                        return False, f"Step '{step_name}' failed:\n" + "\n".join(all_output)
-                except subprocess.TimeoutExpired:
-                    all_output.append(f"[{step_name}] Timed out after 300 seconds.")
-                    return False, f"Step '{step_name}' failed:\n" + "\n".join(all_output)
-            return True, "\n".join(all_output)
+            script_result = subprocess.run(
+                cmd,
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+                timeout=600,
+            )
+            output = script_result.stdout + script_result.stderr
+            ok = script_result.returncode == 0
+            return ok, output if not ok else f"Pre-merge script passed:\n{output}"
+        except subprocess.TimeoutExpired:
+            return False, "Pre-merge script timed out after 600 seconds."
         finally:
             _run_git(["checkout", "main"], cwd=repo_dir)
 
-    # Fall back to auto-detection (no pipeline or test_cmd configured)
+    # Fall back to auto-detection (no script configured)
     test_cmd: list[str] | None = None
     repo_path = Path(repo_dir)
     if (repo_path / "pyproject.toml").exists() or (repo_path / "tests").is_dir():
@@ -183,8 +170,9 @@ def _run_pipeline(
         _run_git(["checkout", "main"], cwd=repo_dir)
 
 
-# Keep old name as alias for backward compatibility
-_run_tests = _run_pipeline
+# Keep old names as aliases for backward compatibility
+_run_tests = _run_pre_merge
+_run_pipeline = _run_pre_merge
 
 
 def _ff_merge(repo_dir: str, branch: str) -> tuple[bool, str]:
@@ -289,14 +277,14 @@ def merge_task(
         log_event(hc_home, team, f"{format_task_id(task_id)} merge conflict during rebase")
         return MergeResult(task_id, False, f"Rebase conflict: {output[:200]}")
 
-    # Step 2: Run pipeline / tests (optional)
+    # Step 2: Run pre-merge script / tests (optional)
     if not skip_tests:
-        ok, output = _run_pipeline(repo_str, branch, hc_home=hc_home, team=team, repo_name=repo_name)
+        ok, output = _run_pre_merge(repo_str, branch, hc_home=hc_home, team=team, repo_name=repo_name)
         if not ok:
             change_status(hc_home, team, task_id, "conflict")
-            notify_conflict(hc_home, team, task, conflict_details=f"Pipeline failed:\n{output[:500]}")
-            log_event(hc_home, team, f"{format_task_id(task_id)} merge blocked \u2014 pipeline failed")
-            return MergeResult(task_id, False, f"Pipeline failed: {output[:200]}")
+            notify_conflict(hc_home, team, task, conflict_details=f"Pre-merge checks failed:\n{output[:500]}")
+            log_event(hc_home, team, f"{format_task_id(task_id)} merge blocked \u2014 pre-merge checks failed")
+            return MergeResult(task_id, False, f"Pre-merge checks failed: {output[:200]}")
 
     # Step 3: Fast-forward merge
     # Capture HEAD of main before the merge (merge_base).
