@@ -8,6 +8,7 @@ Usage:
 """
 
 import argparse
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -23,6 +24,28 @@ from delegate.paths import (
     base_charter_dir,
 )
 from delegate.config import get_boss
+
+
+def _detect_boss_name() -> str:
+    """Auto-detect boss name from ``git config user.name``.
+
+    Returns the first name lowercased (e.g. "Nikhil Gupta" → "nikhil").
+    Falls back to ``"boss"`` if git config is not set or fails.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "config", "user.name"],
+            capture_output=True, text=True, timeout=5,
+        )
+        full_name = result.stdout.strip()
+        if full_name:
+            first = full_name.split()[0].lower()
+            # Sanitize: only keep alphanumeric chars
+            first = "".join(c for c in first if c.isalnum())
+            return first if first else "boss"
+    except Exception:
+        pass
+    return "boss"
 
 
 AGENT_SUBDIRS = [
@@ -232,11 +255,12 @@ def bootstrap(
     ensure_schema(hc_home, team_name)
 
     # --- Boss mailbox (org-wide, outside any team) ---
-    # Ensure a boss name is configured (default to "boss" if not set).
+    # Ensure a boss name is configured.
+    # Auto-detect from git config user.name (first name, lowercased), fall back to "boss".
     from delegate.config import set_boss
     boss_name = get_boss(hc_home)
     if not boss_name:
-        boss_name = "boss"
+        boss_name = _detect_boss_name()
         set_boss(hc_home, boss_name)
 
     dd = _boss_person_dir(hc_home)
