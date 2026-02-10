@@ -1,19 +1,12 @@
-"""QA agent — handles review requests, runs tests, checks coverage, and gates the merge queue.
+"""QA utilities — test running, coverage checking, and branch checkout helpers.
 
-When an agent finishes work on a branch, it sends a review request to the QA agent.
-QA creates a worktree from the repo (via symlink), runs tests on the branch,
-verifies test coverage, and reports results.  QA reviews only the diff between
-base_sha and the branch tip.  On approval, QA sets the task status to 'in_approval'
-so the daemon merge worker can pick it up.
+By default, peer reviewers handle both code review and QA duties (running
+tests, checking coverage, verifying behavior).  A dedicated QA agent role
+is optional — teams that want one can assign agents the ``qa`` role and use
+``roles/qa.md`` from the charter.
 
-Message format (from agent to QA):
-    REVIEW_REQUEST: repo=<repo_name> branch=<branch_name>
-
-Response format (from QA):
-    REVIEW_RESULT: APPROVED repo=... branch=...
-        Meaning: quality and coverage verified, ready for merge queue.
-    REVIEW_RESULT: CHANGES_REQUESTED repo=... branch=...
-        Meaning: tests failed or coverage insufficient, task returned to author.
+The utility functions here (``run_tests``, ``checkout_branch``,
+``check_test_coverage``, ``run_pipeline``) can be used by any reviewer.
 
 Usage:
     python -m delegate.qa review <home> <team> --repo <repo_name> --branch <branch_name>
