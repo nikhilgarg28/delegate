@@ -675,31 +675,13 @@ Team data:      {hc_home}/teams/{team}/
 {worktree_block}"""
 
 
-REFLECTION_TASK_INTERVAL = 5  # trigger reflection every N completed tasks
+REFLECTION_PROBABILITY = 0.2  # ~1 in 5 turns trigger a reflection prompt
 
 
-def _check_reflection_due(ad: Path) -> bool:
-    """Return True if the agent is due for a reflection update.
-
-    Reads ``tasks_since_reflection`` from state.yaml and compares
-    against REFLECTION_TASK_INTERVAL.
-    """
-    state = _read_state(ad)
-    return state.get("tasks_since_reflection", 0) >= REFLECTION_TASK_INTERVAL
-
-
-def _increment_tasks_since_reflection(ad: Path) -> None:
-    """Bump the counter after a task status changes to a terminal state."""
-    state = _read_state(ad)
-    state["tasks_since_reflection"] = state.get("tasks_since_reflection", 0) + 1
-    _write_state(ad, state)
-
-
-def _reset_tasks_since_reflection(ad: Path) -> None:
-    """Reset the counter after the agent completes a reflection."""
-    state = _read_state(ad)
-    state["tasks_since_reflection"] = 0
-    _write_state(ad, state)
+def _check_reflection_due() -> bool:
+    """Return True with ~20% probability (random coin flip)."""
+    import random
+    return random.random() < REFLECTION_PROBABILITY
 
 
 def build_user_message(
@@ -757,15 +739,14 @@ def build_user_message(
     except Exception:
         pass
 
-    # System-triggered reflection prompt
+    # System-triggered reflection prompt (~20% chance per turn)
     ad = _resolve_agent_dir(hc_home, team, agent)
-    if _check_reflection_due(ad):
+    if _check_reflection_due():
         journals_dir = ad / "journals"
         reflections_path = ad / "notes" / "reflections.md"
         parts.append(
             f"\n=== REFLECTION DUE ===\n"
-            f"You have completed {REFLECTION_TASK_INTERVAL}+ tasks since your "
-            f"last reflection. After handling the message above, please:\n"
+            f"After handling the message above, please:\n"
             f"1. Review your recent task journals in {journals_dir}/\n"
             f"2. Update {reflections_path} with patterns, lessons, and goals.\n"
             f"   Keep it concise — bullet points, not essays.\n"
@@ -927,7 +908,6 @@ class _SessionContext:
     total_cost_usd: float = 0.0
     turn: int = 0
     exit_reason: str = "normal"
-    _reflections_mtime: float = 0.0  # tracks reflections.md changes
 
 
 def _session_setup(
@@ -985,12 +965,6 @@ def _session_setup(
         max_turns=max_turns,
     )
 
-    # Snapshot reflections.md mtime for change detection
-    reflections_path = ad / "notes" / "reflections.md"
-    reflections_mtime = (
-        reflections_path.stat().st_mtime if reflections_path.is_file() else 0.0
-    )
-
     return _SessionContext(
         hc_home=hc_home,
         team=team,
@@ -1004,7 +978,6 @@ def _session_setup(
         max_turns=max_turns,
         workspace=workspace,
         worklog_lines=worklog_lines,
-        _reflections_mtime=reflections_mtime,
     )
 
 
@@ -1116,44 +1089,6 @@ def _finish_turn(
                 format_task_id(ctx.current_task_id),
             )
 
-    # Check if the agent updated reflections.md during this turn
-    # (means they fulfilled the reflection prompt → reset counter).
-    ad = _agent_dir(ctx.hc_home, ctx.team, ctx.agent)
-    reflections_path = ad / "notes" / "reflections.md"
-    if reflections_path.is_file():
-        mtime = reflections_path.stat().st_mtime
-        last_known = getattr(ctx, "_reflections_mtime", None)
-        if last_known is not None and mtime > last_known:
-            _reset_tasks_since_reflection(ad)
-            ctx.alog.info("Reflection updated — reset task counter")
-        ctx._reflections_mtime = mtime  # type: ignore[attr-defined]
-    elif not hasattr(ctx, "_reflections_mtime"):
-        ctx._reflections_mtime = 0.0  # type: ignore[attr-defined]
-
-    # Track task completions for reflection trigger.
-    # If the agent's current task just moved to review/needs_merge/merged/done,
-    # that counts as a completed task for reflection purposes.
-    if ctx.current_task_id is not None:
-        try:
-            from delegate.task import get_task
-            t = get_task(ctx.hc_home, ctx.current_task_id)
-            if t and t.get("status") in ("review", "needs_merge", "merged", "done"):
-                ad = _agent_dir(ctx.hc_home, ctx.team, ctx.agent)
-                state = _read_state(ad)
-                last_completed = state.get("_last_completed_task")
-                if last_completed != ctx.current_task_id:
-                    # First time seeing this task complete — increment counter
-                    _increment_tasks_since_reflection(ad)
-                    state = _read_state(ad)
-                    state["_last_completed_task"] = ctx.current_task_id
-                    _write_state(ad, state)
-                    ctx.alog.info(
-                        "Task completion tracked for reflection | task=%s count=%d",
-                        format_task_id(ctx.current_task_id),
-                        state.get("tasks_since_reflection", 0),
-                    )
-        except Exception:
-            pass  # Don't let reflection tracking break the turn
 
 
 # ---------------------------------------------------------------------------

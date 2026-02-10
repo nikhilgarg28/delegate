@@ -14,7 +14,7 @@ After completing each task, write a brief journal in `agents/<your-name>/journal
 
 ### Periodic Reflection
 
-The system will prompt you to reflect after every ~5 completed tasks. When you see the `=== REFLECTION DUE ===` section in your messages, review your recent journals and update `agents/<your-name>/notes/reflections.md`. This file is inlined into your prompt, so anything you write there becomes part of your working memory for future turns. Focus on: recurring patterns, lessons learned, improvement goals, and efficiency blockers. Keep it concise — bullet points, not essays.
+The system will occasionally prompt you to reflect (you'll see a `=== REFLECTION DUE ===` section in your messages). When it does, review your recent journals and update `agents/<your-name>/notes/reflections.md`. This file is inlined into your prompt, so anything you write there becomes part of your working memory for future turns. Focus on: recurring patterns, lessons learned, improvement goals, and efficiency blockers. Keep it concise — bullet points, not essays.
 
 ### Automation
 
