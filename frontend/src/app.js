@@ -527,65 +527,81 @@ function _taskRowHtml(t) {
   </div>`;
 }
 
-function renderTaskApproval(task) {
+/**
+ * Render a status badge for the Details tab (read-only indicator).
+ */
+function renderTaskApprovalBadge(task) {
   const status = task.status || "";
   const approvalStatus = task.approval_status || "";
   if (status === "done" || approvalStatus === "approved") {
-    return '<div class="task-inspector-approval"><div class="approval-badge approval-badge-approved">\u2714 Approved</div></div>';
+    return '<div class="task-approval-status"><div class="approval-badge approval-badge-approved">\u2714 Approved & Merged</div></div>';
   }
   if (status === "rejected" || approvalStatus === "rejected") {
     const reason = task.rejection_reason || "";
     return (
-      '<div class="task-inspector-approval"><div class="approval-badge approval-badge-rejected">\u2716 Rejected</div>' +
-      (reason
-        ? '<div class="approval-rejection-reason">' + esc(reason) + "</div>"
-        : "") +
+      '<div class="task-approval-status"><div class="approval-badge approval-badge-rejected">\u2716 Rejected</div>' +
+      (reason ? '<div class="approval-rejection-reason">' + esc(reason) + "</div>" : "") +
       "</div>"
     );
   }
   if (status === "in_approval") {
-    let html = '<div class="task-inspector-approval">';
-    html += '<div class="task-inspector-approval-actions">';
-    html +=
-      '<button class="btn-approve" onclick="event.stopPropagation();approveTask(' +
-      task.id +
-      ')">Approve Merge</button>';
-    html +=
-      '<button class="btn-reject" onclick="event.stopPropagation();toggleRejectReason(' +
-      task.id +
-      ')">Reject</button>';
-    html += "</div>";
-    if (_rejectReasonVisible) {
-      html +=
-        '<div class="reject-reason-row">' +
-        '<input type="text" class="reject-reason-input" id="rejectReasonInput" placeholder="Reason for rejection..." onclick="event.stopPropagation()" onkeydown="event.stopPropagation();if(event.key===\'Enter\')rejectTask(' +
-        task.id +
-        ')">' +
-        '<button class="btn-reject" onclick="event.stopPropagation();rejectTask(' +
-        task.id +
-        ')" style="flex-shrink:0">Confirm</button></div>';
-    }
-    html += "</div>";
-    return html;
+    return '<div class="task-approval-status"><div class="approval-badge approval-badge-pending">\u23F3 Awaiting Approval</div>' +
+      '<span style="font-size:12px;color:var(--text-muted);margin-top:4px">Review changes in the <a href="#" onclick="event.preventDefault();switchTaskTab(\'changes\')" style="color:var(--accent-blue)">Changes</a> tab</span></div>';
   }
   if (status === "conflict") {
-    return '<div class="task-inspector-approval"><div class="approval-badge" style="background:rgba(251,146,60,0.12);color:#fb923c">\u26A0 Conflict</div></div>';
+    return '<div class="task-approval-status"><div class="approval-badge" style="background:rgba(251,146,60,0.12);color:#fb923c">\u26A0 Merge Conflict</div></div>';
   }
   return "";
 }
 
+/**
+ * Render approve/reject action buttons for the Changes tab (below diff).
+ */
+function renderTaskApprovalActions(task) {
+  const status = task.status || "";
+  const approvalStatus = task.approval_status || "";
+  if (status === "done" || approvalStatus === "approved") {
+    return '<div class="task-review-box task-review-box-approved"><div class="approval-badge approval-badge-approved">\u2714 Approved & Merged</div></div>';
+  }
+  if (status === "rejected" || approvalStatus === "rejected") {
+    const reason = task.rejection_reason || "";
+    return '<div class="task-review-box task-review-box-rejected"><div class="approval-badge approval-badge-rejected">\u2716 Changes Rejected</div>' +
+      (reason ? '<div class="approval-rejection-reason">' + esc(reason) + "</div>" : "") + "</div>";
+  }
+  if (status !== "in_approval") return "";
+  let html = '<div class="task-review-box">';
+  html += '<div class="task-review-box-header">Review changes</div>';
+  html += '<div class="task-review-box-actions" id="approvalActionsRow">';
+  html += '<button class="btn-approve" id="btnApprove" onclick="event.stopPropagation();approveTask(' + task.id + ')">\u2714 Approve & Merge</button>';
+  html += '<button class="btn-reject-outline" id="btnReject" onclick="event.stopPropagation();toggleRejectReason(' + task.id + ')">\u2716 Request Changes</button>';
+  html += "</div>";
+  html += '<div class="reject-reason-row" id="rejectReasonRow" style="display:none">';
+  html += '<input type="text" class="reject-reason-input" id="rejectReasonInput" placeholder="Describe what needs to change..." onclick="event.stopPropagation()" onkeydown="event.stopPropagation();if(event.keyCode===13)rejectTask(' + task.id + ')">';
+  html += '<button class="btn-reject" onclick="event.stopPropagation();rejectTask(' + task.id + ')" style="flex-shrink:0">Submit</button>';
+  html += '</div>';
+  html += "</div>";
+  return html;
+}
+
 function toggleRejectReason(taskId) {
   _rejectReasonVisible = !_rejectReasonVisible;
-  loadTasks();
-  if (_rejectReasonVisible) {
-    setTimeout(() => {
-      const el = document.getElementById("rejectReasonInput");
-      if (el) el.focus();
-    }, 50);
+  var row = document.getElementById("rejectReasonRow");
+  if (row) {
+    row.style.display = _rejectReasonVisible ? "flex" : "none";
+    if (_rejectReasonVisible) {
+      setTimeout(function () {
+        var el = document.getElementById("rejectReasonInput");
+        if (el) el.focus();
+      }, 50);
+    }
   }
 }
 
 async function approveTask(taskId) {
+  var btn = document.getElementById("btnApprove");
+  var rejectBtn = document.getElementById("btnReject");
+  if (btn) { btn.disabled = true; btn.textContent = "Merging..."; }
+  if (rejectBtn) rejectBtn.disabled = true;
   try {
     const res = await fetch("/teams/" + _currentTeam + "/tasks/" + taskId + "/approve", {
       method: "POST",
@@ -593,13 +609,29 @@ async function approveTask(taskId) {
     });
     if (res.ok) {
       _rejectReasonVisible = false;
+      // Update the review box in-place
+      var reviewBox = btn ? btn.closest(".task-review-box") : null;
+      if (reviewBox) {
+        reviewBox.className = "task-review-box task-review-box-approved";
+        reviewBox.innerHTML = '<div class="approval-badge approval-badge-approved">\u2714 Approved & Merged</div>';
+      }
+      // Also update the Details tab badge
+      var statusBadge = document.getElementById("taskPanelStatus");
+      if (statusBadge) statusBadge.innerHTML = '<span class="badge badge-done">Done</span>';
+      var approvalDiv = document.querySelector(".task-approval-status");
+      if (approvalDiv) approvalDiv.innerHTML = '<div class="approval-badge approval-badge-approved">\u2714 Approved & Merged</div>';
+      // Refresh sidebar & task list in background
       loadTasks();
       loadSidebar();
     } else {
-      const err = await res.json().catch(() => ({}));
+      const err = await res.json().catch(function () { return {}; });
+      if (btn) { btn.disabled = false; btn.textContent = "\u2714 Approve & Merge"; }
+      if (rejectBtn) rejectBtn.disabled = false;
       alert("Failed to approve: " + (err.detail || res.statusText));
     }
   } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = "\u2714 Approve & Merge"; }
+    if (rejectBtn) rejectBtn.disabled = false;
     alert("Failed to approve task: " + e.message);
   }
 }
@@ -607,6 +639,8 @@ async function approveTask(taskId) {
 async function rejectTask(taskId) {
   const reasonEl = document.getElementById("rejectReasonInput");
   const reason = reasonEl ? reasonEl.value.trim() : "";
+  var confirmBtn = reasonEl ? reasonEl.parentElement.querySelector(".btn-reject") : null;
+  if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = "Rejecting..."; }
   try {
     const res = await fetch("/teams/" + _currentTeam + "/tasks/" + taskId + "/reject", {
       method: "POST",
@@ -615,13 +649,27 @@ async function rejectTask(taskId) {
     });
     if (res.ok) {
       _rejectReasonVisible = false;
+      // Update the review box in-place
+      var reviewBox = confirmBtn ? confirmBtn.closest(".task-review-box") : null;
+      if (reviewBox) {
+        reviewBox.className = "task-review-box task-review-box-rejected";
+        reviewBox.innerHTML = '<div class="approval-badge approval-badge-rejected">\u2716 Changes Rejected</div>' +
+          (reason ? '<div class="approval-rejection-reason">' + esc(reason) + '</div>' : '');
+      }
+      // Also update the Details tab badge
+      var statusBadge = document.getElementById("taskPanelStatus");
+      if (statusBadge) statusBadge.innerHTML = '<span class="badge badge-rejected">Rejected</span>';
+      var approvalDiv = document.querySelector(".task-approval-status");
+      if (approvalDiv) approvalDiv.innerHTML = '<div class="approval-badge approval-badge-rejected">\u2716 Rejected</div>';
       loadTasks();
       loadSidebar();
     } else {
-      const err = await res.json().catch(() => ({}));
+      const err = await res.json().catch(function () { return {}; });
+      if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = "Submit"; }
       alert("Failed to reject: " + (err.detail || res.statusText));
     }
   } catch (e) {
+    if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = "Submit"; }
     alert("Failed to reject task: " + e.message);
   }
 }
@@ -1012,8 +1060,8 @@ async function openTaskPanel(taskId) {
     details += '<div class="diff-empty">Loading activity...</div>';
     details += '</div>';
     details += '</div>';
-    // Approval actions (shown in Details so boss can act without switching tabs)
-    details += renderTaskApproval(task);
+    // Approval status badge (read-only in Details; action buttons are in Changes tab)
+    details += renderTaskApprovalBadge(task);
 
     // ---- Build Changes tab content ----
     let changes = "";
@@ -1056,6 +1104,8 @@ async function openTaskPanel(taskId) {
     changes += '<div class="task-panel-diff-tabs"><button class="diff-tab active" data-dtab="files" onclick="switchTaskPanelDiffTab(\'files\')">Files Changed</button><button class="diff-tab" data-dtab="diff" onclick="switchTaskPanelDiffTab(\'diff\')">Full Diff</button></div>';
     changes += '<div id="taskPanelDiffContent"><div class="diff-empty">Click this tab to load diff</div></div>';
     changes += '</div>';
+    // Approve/Reject actions below the diff (GitHub-style review box)
+    changes += renderTaskApprovalActions(task);
 
     // ---- Assemble body with both tab panes ----
     let body = '<div id="taskPanelDetails">' + details + '</div>';
