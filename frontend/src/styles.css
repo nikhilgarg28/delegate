@@ -813,6 +813,16 @@ body {
 .diff-file-add { color: #34d399; }
 .diff-file-del { color: #f87171; }
 .diff-empty { color: var(--text-muted); font-size: 13px; padding: 24px; text-align: center; }
+/* Per-commit view */
+.commit-list { display: flex; flex-direction: column; gap: 4px; }
+.commit-item { border: 1px solid var(--border-subtle); border-radius: 6px; overflow: hidden; }
+.commit-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; transition: background 0.15s; }
+.commit-header:hover { background: var(--border-subtle); }
+.commit-expand-icon { font-size: 10px; color: var(--text-muted); width: 12px; flex-shrink: 0; }
+.commit-sha { font-size: 12px; font-family: 'SF Mono', 'Fira Code', monospace; color: var(--accent-blue); background: rgba(59,130,246,0.08); padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
+.commit-message { font-size: 13px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.commit-repo-label { font-size: 11px; color: var(--text-muted); background: var(--bg-active); padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
+.commit-diff { border-top: 1px solid var(--border-subtle); max-height: 500px; overflow-y: auto; }
 @media (max-width: 900px) { .diff-panel { width: 100vw; } }
 
 /* ---- Agent panel content ---- */

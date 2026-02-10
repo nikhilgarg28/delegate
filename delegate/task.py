@@ -432,6 +432,62 @@ def _diff_for_one_repo(git_cwd: str, branch: str, task: dict, repo_key: str) -> 
     return "(no diff available)"
 
 
+def get_task_commit_diffs(
+    hc_home: Path, team: str, task_id: int,
+) -> list[dict]:
+    """Return per-commit diffs for a task.
+
+    Returns a list of ``{"sha": str, "repo": str, "message": str, "diff": str}``
+    entries, one per commit, ordered chronologically.
+    """
+    task = get_task(hc_home, team, task_id)
+    commits_dict: dict = task.get("commits", {})
+    repos: list[str] = task.get("repo", [])
+
+    from delegate.paths import repo_path as _repo_path
+
+    results: list[dict] = []
+    for repo_name, shas in commits_dict.items():
+        if not shas:
+            continue
+        try:
+            git_cwd = str(_repo_path(hc_home, team, repo_name))
+        except FileNotFoundError:
+            for sha in shas:
+                results.append({"sha": sha, "repo": repo_name, "message": "", "diff": f"(repo '{repo_name}' not found)"})
+            continue
+        for sha in shas:
+            msg = ""
+            diff = ""
+            try:
+                # Get commit message
+                msg_result = subprocess.run(
+                    ["git", "log", "-1", "--format=%s", sha],
+                    capture_output=True, text=True, timeout=10, cwd=git_cwd,
+                )
+                if msg_result.returncode == 0:
+                    msg = msg_result.stdout.strip()
+                # Get commit diff
+                diff_result = subprocess.run(
+                    ["git", "diff", f"{sha}~1..{sha}"],
+                    capture_output=True, text=True, timeout=30, cwd=git_cwd,
+                )
+                if diff_result.returncode == 0:
+                    diff = diff_result.stdout
+                else:
+                    # Might be the first commit on the branch; try show
+                    show_result = subprocess.run(
+                        ["git", "show", sha, "--format=", "--diff-merges=first-parent"],
+                        capture_output=True, text=True, timeout=30, cwd=git_cwd,
+                    )
+                    if show_result.returncode == 0:
+                        diff = show_result.stdout
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                diff = "(failed to compute diff)"
+            results.append({"sha": sha, "repo": repo_name, "message": msg, "diff": diff or "(empty diff)"})
+    return results
+
+
 def list_tasks(
     hc_home: Path,
     team: str,

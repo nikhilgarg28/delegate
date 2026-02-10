@@ -43,6 +43,7 @@ let _taskPanelDiffTab = "files";
 let _taskPanelDiffRaw = "";
 let _taskPanelActiveTab = "details";
 let _taskPanelDiffLoaded = false;
+let _taskPanelCommitsData = null;  // cached per-commit diffs
 
 // Voice-to-text state
 let _recognition = null;
@@ -827,7 +828,7 @@ function switchTaskPanelDiffTab(tab) {
   const container = document.getElementById("taskPanelBody");
   if (!container) return;
   container.querySelectorAll(".task-panel-diff-tabs .diff-tab").forEach(
-    (t) => t.classList.toggle("active", t.dataset.dtab === tab)
+    function (t) { t.classList.toggle("active", t.dataset.dtab === tab); }
   );
   const diffContent = document.getElementById("taskPanelDiffContent");
   if (!diffContent) return;
@@ -852,6 +853,8 @@ function switchTaskPanelDiffTab(tab) {
         f.deletedLines + '</span></span></div>';
     }
     diffContent.innerHTML = h + '</div>';
+  } else if (tab === "commits") {
+    _renderCommitsTab(diffContent);
   } else {
     if (!_taskPanelDiffRaw) {
       diffContent.innerHTML = '<div class="diff-empty">No changes</div>';
@@ -863,6 +866,67 @@ function switchTaskPanelDiffTab(tab) {
       matching: "lines",
     });
   }
+}
+
+/**
+ * Load and render per-commit diffs in the Commits sub-tab.
+ * Fetches from /teams/{team}/tasks/{id}/commits on first access, then caches.
+ */
+function _renderCommitsTab(diffContent) {
+  if (_taskPanelCommitsData !== null) {
+    _renderCommitsHtml(diffContent, _taskPanelCommitsData);
+    return;
+  }
+  diffContent.innerHTML = '<div class="diff-empty">Loading commits...</div>';
+  fetch("/teams/" + _currentTeam + "/tasks/" + _panelTask + "/commits")
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      _taskPanelCommitsData = data;
+      _renderCommitsHtml(diffContent, data);
+    })
+    .catch(function () {
+      diffContent.innerHTML = '<div class="diff-empty">Failed to load commits</div>';
+    });
+}
+
+function _renderCommitsHtml(container, commits) {
+  if (!commits || !commits.length) {
+    container.innerHTML = '<div class="diff-empty">No commits recorded</div>';
+    return;
+  }
+  var html = '<div class="commit-list">';
+  for (var i = 0; i < commits.length; i++) {
+    var c = commits[i];
+    var shortSha = String(c.sha || "").substring(0, 7);
+    var msg = esc(c.message || "(no message)");
+    var repoLabel = commits.length > 1 && c.repo ? '<span class="commit-repo-label">' + esc(c.repo) + '</span>' : '';
+    html += '<div class="commit-item">';
+    html += '<div class="commit-header" onclick="toggleCommitDiff(' + i + ')">';
+    html += '<span class="commit-expand-icon" id="commitArrow' + i + '">\u25B6</span>';
+    html += '<span class="commit-sha">' + shortSha + '</span>';
+    html += '<span class="commit-message">' + msg + '</span>';
+    html += repoLabel;
+    html += '</div>';
+    html += '<div class="commit-diff" id="commitDiff' + i + '" style="display:none">';
+    if (c.diff && c.diff !== "(empty diff)") {
+      html += diff2HtmlRender(c.diff, { outputFormat: "line-by-line", drawFileList: false, matching: "lines" });
+    } else {
+      html += '<div class="diff-empty">Empty diff</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function toggleCommitDiff(idx) {
+  var diffDiv = document.getElementById("commitDiff" + idx);
+  var arrow = document.getElementById("commitArrow" + idx);
+  if (!diffDiv) return;
+  var isOpen = diffDiv.style.display !== "none";
+  diffDiv.style.display = isOpen ? "none" : "";
+  if (arrow) arrow.textContent = isOpen ? "\u25B6" : "\u25BC";
 }
 
 // =====================================================================
@@ -1101,7 +1165,7 @@ async function openTaskPanel(taskId) {
     }
     // Diff section (loaded lazily when this tab is first activated)
     changes += '<div class="task-panel-diff-section" id="taskPanelDiffSection">';
-    changes += '<div class="task-panel-diff-tabs"><button class="diff-tab active" data-dtab="files" onclick="switchTaskPanelDiffTab(\'files\')">Files Changed</button><button class="diff-tab" data-dtab="diff" onclick="switchTaskPanelDiffTab(\'diff\')">Full Diff</button></div>';
+    changes += '<div class="task-panel-diff-tabs"><button class="diff-tab active" data-dtab="files" onclick="switchTaskPanelDiffTab(\'files\')">Files Changed</button><button class="diff-tab" data-dtab="diff" onclick="switchTaskPanelDiffTab(\'diff\')">Full Diff</button><button class="diff-tab" data-dtab="commits" onclick="switchTaskPanelDiffTab(\'commits\')">Commits</button></div>';
     changes += '<div id="taskPanelDiffContent"><div class="diff-empty">Click this tab to load diff</div></div>';
     changes += '</div>';
     // Approve/Reject actions below the diff (GitHub-style review box)
@@ -1117,6 +1181,7 @@ async function openTaskPanel(taskId) {
     _taskPanelDiffLoaded = false;
     _taskPanelDiffRaw = "";
     _taskPanelDiffTab = "files";
+    _taskPanelCommitsData = null;
 
     // Ensure tab buttons reflect initial state
     document.querySelectorAll("#taskPanelTabs .task-panel-tab").forEach(function (btn) {
@@ -1144,6 +1209,7 @@ function closeTaskPanel() {
   _taskPanelDiffRaw = "";
   _taskPanelDiffLoaded = false;
   _taskPanelActiveTab = "details";
+  _taskPanelCommitsData = null;
 }
 
 // =====================================================================
