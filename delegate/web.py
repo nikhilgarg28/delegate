@@ -299,6 +299,10 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
             override=Path(os.environ["DELEGATE_HOME"]) if "DELEGATE_HOME" in os.environ else None
         )
 
+    # Apply any pending database migrations on startup.
+    from delegate.db import ensure_schema
+    ensure_schema(hc_home)
+
     app = FastAPI(title="Delegate UI", lifespan=_lifespan)
     app.state.hc_home = hc_home
 

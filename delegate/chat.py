@@ -2,52 +2,19 @@
 
 Central log of all routed messages, system events, and agent sessions.
 The database lives at ``~/.delegate/db.sqlite`` (global across all teams).
+
+Schema is managed by ``delegate.db`` — this module only reads/writes data.
 """
 
 import argparse
-import sqlite3
 from pathlib import Path
 
-from delegate.paths import db_path, home as default_home
-
-
-DB_SCHEMA = """
-CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    sender TEXT NOT NULL,
-    recipient TEXT NOT NULL,
-    content TEXT NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('chat', 'event'))
-);
-
-CREATE TABLE IF NOT EXISTS sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    agent TEXT NOT NULL,
-    task_id INTEGER,
-    started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    ended_at TEXT,
-    duration_seconds REAL DEFAULT 0.0,
-    tokens_in INTEGER DEFAULT 0,
-    tokens_out INTEGER DEFAULT 0,
-    cost_usd REAL DEFAULT 0.0
-);
-"""
-
-
-def _connect(hc_home: Path) -> sqlite3.Connection:
-    """Open a connection and ensure schema exists."""
-    path = db_path(hc_home)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
-    conn.row_factory = sqlite3.Row
-    conn.executescript(DB_SCHEMA)
-    return conn
+from delegate.db import get_connection
 
 
 def log_message(hc_home: Path, sender: str, recipient: str, content: str) -> int:
     """Log a chat message. Returns the message ID."""
-    conn = _connect(hc_home)
+    conn = get_connection(hc_home)
     cursor = conn.execute(
         "INSERT INTO messages (sender, recipient, content, type) VALUES (?, ?, ?, 'chat')",
         (sender, recipient, content),
@@ -60,7 +27,7 @@ def log_message(hc_home: Path, sender: str, recipient: str, content: str) -> int
 
 def log_event(hc_home: Path, description: str) -> int:
     """Log a system event. Returns the event ID."""
-    conn = _connect(hc_home)
+    conn = get_connection(hc_home)
     cursor = conn.execute(
         "INSERT INTO messages (sender, recipient, content, type) VALUES ('system', 'system', ?, 'event')",
         (description,),
@@ -79,7 +46,7 @@ def get_messages(
     limit: int | None = None,
 ) -> list[dict]:
     """Query messages with optional filters."""
-    conn = _connect(hc_home)
+    conn = get_connection(hc_home)
     query = "SELECT id, timestamp, sender, recipient, content, type FROM messages WHERE 1=1"
     params: list = []
 
@@ -112,7 +79,7 @@ def get_messages(
 
 def start_session(hc_home: Path, agent: str, task_id: int | None = None) -> int:
     """Start a new agent session. Returns session ID."""
-    conn = _connect(hc_home)
+    conn = get_connection(hc_home)
     cursor = conn.execute(
         "INSERT INTO sessions (agent, task_id) VALUES (?, ?)",
         (agent, task_id),
@@ -131,7 +98,7 @@ def end_session(
     cost_usd: float = 0.0,
 ) -> None:
     """End an agent session, recording duration and token usage."""
-    conn = _connect(hc_home)
+    conn = get_connection(hc_home)
     conn.execute(
         """UPDATE sessions SET
             ended_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
@@ -148,7 +115,7 @@ def end_session(
 
 def update_session_task(hc_home: Path, session_id: int, task_id: int) -> None:
     """Update the task_id on a running session."""
-    conn = _connect(hc_home)
+    conn = get_connection(hc_home)
     conn.execute(
         "UPDATE sessions SET task_id = ? WHERE id = ? AND task_id IS NULL",
         (task_id, session_id),
@@ -169,7 +136,7 @@ def update_session_tokens(
     Called after each agent turn so the dashboard reflects live usage
     even if the agent crashes before end_session().
     """
-    conn = _connect(hc_home)
+    conn = get_connection(hc_home)
     conn.execute(
         """UPDATE sessions SET
             tokens_in = ?,
@@ -184,7 +151,7 @@ def update_session_tokens(
 
 def get_task_stats(hc_home: Path, task_id: int) -> dict:
     """Get aggregated stats for a task from the sessions table."""
-    conn = _connect(hc_home)
+    conn = get_connection(hc_home)
     row = conn.execute(
         """SELECT
             COUNT(*) as session_count,
@@ -203,7 +170,7 @@ def get_agent_stats(hc_home: Path, agent: str) -> dict:
     """Get aggregated stats for an agent from sessions and tasks."""
     from delegate.task import list_tasks
 
-    conn = _connect(hc_home)
+    conn = get_connection(hc_home)
     row = conn.execute(
         """SELECT
             COUNT(*) as session_count,
@@ -253,7 +220,7 @@ def get_project_stats(hc_home: Path, project: str) -> dict:
             "total_cost_usd": 0.0,
         }
 
-    conn = _connect(hc_home)
+    conn = get_connection(hc_home)
     placeholders = ",".join("?" * len(task_ids))
     row = conn.execute(
         f"""SELECT

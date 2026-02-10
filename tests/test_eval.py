@@ -272,17 +272,31 @@ def _create_db(db_path: Path, sessions=None, messages=None):
     conn.close()
 
 
-def _create_task_file(tasks_dir: Path, task_id: int, status: str = "done", title: str = "Test task"):
-    """Create a task YAML file."""
-    tasks_dir.mkdir(parents=True, exist_ok=True)
-    task = {
-        "id": task_id,
-        "title": title,
-        "status": status,
-        "assignee": "alice",
-    }
-    path = tasks_dir / f"{format_task_id(task_id)}.yaml"
-    path.write_text(yaml.dump(task, default_flow_style=False))
+def _create_task_in_db(hc_home: Path, task_id: int, status: str = "done", title: str = "Test task"):
+    """Insert a task directly into the SQLite tasks table.
+
+    Uses raw SQL so we can set the exact task_id (which AUTOINCREMENT
+    wouldn't guarantee in order).
+    """
+    import json
+    from delegate.db import get_connection
+    conn = get_connection(hc_home)
+    now = "2025-01-01T00:00:00.000000Z"
+    conn.execute(
+        """\
+        INSERT INTO tasks (id, title, description, status, dri, assignee,
+            project, priority, repo, tags, created_at, updated_at,
+            completed_at, depends_on, branch, base_sha, commits,
+            rejection_reason, approval_status, merge_base, merge_tip
+        ) VALUES (?, ?, '', ?, '', 'alice',
+            '', 'medium', '', '[]', ?, ?,
+            '', '[]', '', '', '[]',
+            '', '', '', ''
+        )""",
+        (task_id, title, status, now, now),
+    )
+    conn.commit()
+    conn.close()
 
 
 @pytest.fixture
@@ -291,8 +305,9 @@ def run_dir(tmp_path):
     root = tmp_path / "run"
     standup = root
     standup.mkdir(parents=True)
+    (standup / "tasks").mkdir(parents=True, exist_ok=True)
 
-    # Create DB with sample data
+    # Create DB with sample data (sessions + messages via helper)
     _create_db(
         standup / "db.sqlite",
         sessions=[
@@ -309,11 +324,10 @@ def run_dir(tmp_path):
         ],
     )
 
-    # Create task files
-    tasks_dir = standup / "tasks"
-    _create_task_file(tasks_dir, 1, status="done")
-    _create_task_file(tasks_dir, 2, status="done")
-    _create_task_file(tasks_dir, 3, status="in_progress")
+    # Create tasks in SQLite (uses the same db.sqlite created above)
+    _create_task_in_db(standup, 1, status="done")
+    _create_task_in_db(standup, 2, status="done")
+    _create_task_in_db(standup, 3, status="in_progress")
 
     return root
 
@@ -373,20 +387,21 @@ class TestCollectTaskMetrics:
 
     def test_counts_completed_and_failed(self, run_dir):
         """Counts done tasks as completed, others as failed."""
-        metrics = _collect_task_metrics(run_dir / "tasks")
+        metrics = _collect_task_metrics(run_dir)
         assert metrics["tasks_completed"] == 2
         assert metrics["tasks_failed"] == 1  # the in_progress one
 
-    def test_empty_tasks_dir(self, tmp_path):
-        """Returns zeros when tasks dir is empty."""
-        tasks_dir = tmp_path / "tasks"
-        tasks_dir.mkdir()
-        metrics = _collect_task_metrics(tasks_dir)
+    def test_empty_tasks(self, tmp_path):
+        """Returns zeros when no tasks exist."""
+        hc_home = tmp_path / "empty_hc"
+        hc_home.mkdir()
+        (hc_home / "tasks").mkdir()
+        metrics = _collect_task_metrics(hc_home)
         assert metrics["tasks_completed"] == 0
         assert metrics["tasks_failed"] == 0
 
-    def test_missing_tasks_dir(self, tmp_path):
-        """Returns zeros when tasks dir doesn't exist."""
+    def test_missing_hc_home(self, tmp_path):
+        """Returns zeros when hc_home doesn't exist."""
         metrics = _collect_task_metrics(tmp_path / "nonexistent")
         assert metrics["tasks_completed"] == 0
         assert metrics["tasks_failed"] == 0
@@ -869,12 +884,12 @@ class TestJudgeRun:
         """Create a minimal run directory for judge tests."""
         root = tmp_path / "run"
         standup = root
-        tasks_dir = standup / "tasks"
-        tasks_dir.mkdir(parents=True)
+        standup.mkdir(parents=True)
+        (standup / "tasks").mkdir(parents=True, exist_ok=True)
 
-        # Create two task files
-        _create_task_file(tasks_dir, 1, status="done", title="Implement feature A")
-        _create_task_file(tasks_dir, 2, status="done", title="Implement feature B")
+        # Create tasks in SQLite
+        _create_task_in_db(standup, 1, status="done", title="Implement feature A")
+        _create_task_in_db(standup, 2, status="done", title="Implement feature B")
 
         return root
 
@@ -918,18 +933,19 @@ class TestJudgeRun:
         assert overall["correctness"] == 4.0
         assert overall["avg"] == pytest.approx(4.2)
 
-    def test_handles_empty_tasks_dir(self, tmp_path):
+    def test_handles_empty_tasks(self, tmp_path):
         """Returns empty results when no tasks exist."""
         root = tmp_path / "run"
-        (root / "tasks").mkdir(parents=True)
+        root.mkdir(parents=True)
+        (root / "tasks").mkdir(parents=True, exist_ok=True)
 
         results = judge_run(root, reps=1)
         assert results == {"tasks": {}, "overall": {}}
 
-    def test_handles_missing_tasks_dir(self, tmp_path):
-        """Returns empty results when tasks dir doesn't exist."""
+    def test_handles_missing_hc_home(self, tmp_path):
+        """Returns empty results when hc_home doesn't exist."""
         root = tmp_path / "run"
-        (root).mkdir(parents=True)
+        root.mkdir(parents=True)
 
         results = judge_run(root, reps=1)
         assert results == {"tasks": {}, "overall": {}}

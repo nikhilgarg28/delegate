@@ -1,6 +1,6 @@
-"""File-based task management — global across all teams.
+"""SQLite-backed task management — global across all teams.
 
-Tasks are stored as individual YAML files under ``~/.delegate/tasks/``.
+Tasks are stored in the ``tasks`` table of ``~/.delegate/db.sqlite``.
 
 Each task has a **DRI** (Directly Responsible Individual) set on first
 assignment — the DRI never changes and anchors the branch name
@@ -17,13 +17,12 @@ Usage:
 """
 
 import argparse
+import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-import yaml
-
-from delegate.paths import tasks_dir as _resolve_tasks_dir
+from delegate.db import get_connection, task_row_to_dict, _JSON_COLUMNS
 
 
 VALID_STATUSES = ("open", "in_progress", "review", "done", "needs_merge", "merged", "rejected", "conflict")
@@ -43,42 +42,31 @@ VALID_TRANSITIONS = {
     "merged": set(),
 }
 
-
-def _tasks_dir(hc_home: Path) -> Path:
-    d = _resolve_tasks_dir(hc_home)
-    if not d.is_dir():
-        raise FileNotFoundError(f"Tasks directory not found: {d}")
-    return d
-
-
-def _next_id(td: Path) -> int:
-    """Determine the next task ID by scanning existing files."""
-    max_id = 0
-    for f in td.glob("T*.yaml"):
-        try:
-            num = int(f.stem[1:])
-            max_id = max(max_id, num)
-        except (IndexError, ValueError):
-            continue
-    return max_id + 1
+# All columns in the tasks table (used for field validation on update).
+_TASK_FIELDS = frozenset({
+    "id", "title", "description", "status", "dri", "assignee",
+    "project", "priority", "repo", "tags", "created_at", "updated_at",
+    "completed_at", "depends_on", "branch", "base_sha", "commits",
+    "rejection_reason", "approval_status", "merge_base", "merge_tip",
+})
 
 
 def format_task_id(task_id: int) -> str:
     """Format a task ID as ``T`` followed by zero-padded digits.
 
     Always uses at least 4 digits, but automatically widens
-    for IDs ≥ 10000 (e.g. ``T10000``).
+    for IDs >= 10000 (e.g. ``T10000``).
     """
     return f"T{task_id:04d}"
-
-
-def _task_path(td: Path, task_id: int) -> Path:
-    return td / f"{format_task_id(task_id)}.yaml"
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
+
+# ---------------------------------------------------------------------------
+# CRUD
+# ---------------------------------------------------------------------------
 
 def create_task(
     hc_home: Path,
@@ -98,36 +86,40 @@ def create_task(
     if priority not in VALID_PRIORITIES:
         raise ValueError(f"Invalid priority '{priority}'. Must be one of: {VALID_PRIORITIES}")
 
-    td = _tasks_dir(hc_home)
-    task_id = _next_id(td)
     now = _now()
+    conn = get_connection(hc_home)
+    try:
+        cursor = conn.execute(
+            """\
+            INSERT INTO tasks (
+                title, description, status, dri, assignee,
+                project, priority, repo, tags,
+                created_at, updated_at, completed_at,
+                depends_on, branch, base_sha, commits,
+                rejection_reason, approval_status, merge_base, merge_tip
+            ) VALUES (
+                ?, ?, 'open', '', '',
+                ?, ?, ?, ?,
+                ?, ?, '',
+                ?, '', '', '[]',
+                '', '', '', ''
+            )""",
+            (
+                title, description,
+                project, priority, repo,
+                json.dumps(list(tags) if tags else []),
+                now, now,
+                json.dumps(depends_on or []),
+            ),
+        )
+        conn.commit()
+        task_id = cursor.lastrowid
 
-    task = {
-        "id": task_id,
-        "title": title,
-        "description": description,
-        "status": "open",
-        "dri": "",
-        "assignee": "",
-        "project": project,
-        "priority": priority,
-        "repo": repo,
-        "tags": list(tags) if tags else [],
-        "created_at": now,
-        "updated_at": now,
-        "completed_at": "",
-        "depends_on": depends_on or [],
-        "branch": "",
-        "base_sha": "",
-        "commits": [],
-        "rejection_reason": "",
-        "approval_status": "",
-        "merge_base": "",
-        "merge_tip": "",
-    }
-
-    path = _task_path(td, task_id)
-    path.write_text(yaml.dump(task, default_flow_style=False, sort_keys=False))
+        # Read back the full row to return
+        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        task = task_row_to_dict(row)
+    finally:
+        conn.close()
 
     from delegate.chat import log_event
     log_event(hc_home, f"{format_task_id(task_id)} created \u2014 {title}")
@@ -136,38 +128,58 @@ def create_task(
 
 
 def get_task(hc_home: Path, task_id: int) -> dict:
-    """Load a single task by ID."""
-    td = _tasks_dir(hc_home)
-    path = _task_path(td, task_id)
-    if not path.exists():
-        raise FileNotFoundError(f"Task {task_id} not found at {path}")
-    task = yaml.safe_load(path.read_text())
-    task.setdefault("dri", task.get("assignee", ""))  # backfill: old tasks without dri
-    task.setdefault("repo", "")
-    task.setdefault("branch", "")
-    task.setdefault("commits", [])
-    task.setdefault("base_sha", "")
-    task.setdefault("rejection_reason", "")
-    task.setdefault("approval_status", "")
-    task.setdefault("tags", [])
-    task.setdefault("merge_base", "")
-    task.setdefault("merge_tip", "")
-    return task
+    """Load a single task by ID.
+
+    Raises ``FileNotFoundError`` if the task does not exist (preserves
+    the same exception type used by the previous YAML implementation).
+    """
+    conn = get_connection(hc_home)
+    try:
+        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    finally:
+        conn.close()
+
+    if row is None:
+        raise FileNotFoundError(f"Task {task_id} not found")
+
+    return task_row_to_dict(row)
 
 
 def update_task(hc_home: Path, task_id: int, **updates) -> dict:
     """Update fields on an existing task. Returns the updated task."""
-    task = get_task(hc_home, task_id)
-
-    for key, value in updates.items():
-        if key not in task:
+    # Validate field names
+    for key in updates:
+        if key not in _TASK_FIELDS:
             raise ValueError(f"Unknown task field: '{key}'")
-        task[key] = value
 
-    task["updated_at"] = _now()
-    td = _tasks_dir(hc_home)
-    path = _task_path(td, task_id)
-    path.write_text(yaml.dump(task, default_flow_style=False, sort_keys=False))
+    # Verify task exists
+    get_task(hc_home, task_id)
+
+    updates["updated_at"] = _now()
+
+    # Serialize JSON columns
+    set_parts = []
+    params: list = []
+    for key, value in updates.items():
+        set_parts.append(f"{key} = ?")
+        if key in _JSON_COLUMNS:
+            params.append(json.dumps(value))
+        else:
+            params.append(value)
+    params.append(task_id)
+
+    conn = get_connection(hc_home)
+    try:
+        conn.execute(
+            f"UPDATE tasks SET {', '.join(set_parts)} WHERE id = ?",
+            params,
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        task = task_row_to_dict(row)
+    finally:
+        conn.close()
+
     return task
 
 
@@ -268,8 +280,7 @@ def change_status(hc_home: Path, task_id: int, status: str) -> dict:
         updates["completed_at"] = _now()
 
     # Safety net: backfill branch/base_sha when entering review or needs_merge
-    # if they're still empty.  This catches cases where the worktree was
-    # created before the metadata-saving logic ran (e.g. agent restart).
+    # if they're still empty.
     if status in ("review", "needs_merge"):
         _backfill_branch_metadata(hc_home, old_task, updates)
 
@@ -284,25 +295,16 @@ def change_status(hc_home: Path, task_id: int, status: str) -> dict:
 
 def set_task_branch(hc_home: Path, task_id: int, branch_name: str) -> dict:
     """Set the branch name on a task."""
-    task = get_task(hc_home, task_id)
-    task["branch"] = branch_name
-    task["updated_at"] = _now()
-    td = _tasks_dir(hc_home)
-    path = _task_path(td, task_id)
-    path.write_text(yaml.dump(task, default_flow_style=False, sort_keys=False))
-    return task
+    return update_task(hc_home, task_id, branch=branch_name)
 
 
 def add_task_commit(hc_home: Path, task_id: int, commit_sha: str) -> dict:
     """Append a commit SHA to the task's commits list."""
     task = get_task(hc_home, task_id)
-    if commit_sha not in task["commits"]:
-        task["commits"].append(commit_sha)
-    task["updated_at"] = _now()
-    td = _tasks_dir(hc_home)
-    path = _task_path(td, task_id)
-    path.write_text(yaml.dump(task, default_flow_style=False, sort_keys=False))
-    return task
+    commits = list(task.get("commits", []))
+    if commit_sha not in commits:
+        commits.append(commit_sha)
+    return update_task(hc_home, task_id, commits=commits)
 
 
 def get_task_diff(hc_home: Path, task_id: int) -> str:
@@ -375,25 +377,41 @@ def list_tasks(
 ) -> list[dict]:
     """List tasks with optional filters.
 
-    *tag* filters to tasks whose ``tags`` list contains the given value.
+    *tag* filters to tasks whose ``tags`` JSON array contains the given value.
     """
-    td = _tasks_dir(hc_home)
-    tasks = []
+    conn = get_connection(hc_home)
+    try:
+        query = "SELECT * FROM tasks WHERE 1=1"
+        params: list = []
 
-    for f in sorted(td.glob("T*.yaml")):
-        task = yaml.safe_load(f.read_text())
-        if status and task.get("status") != status:
-            continue
-        if assignee and task.get("assignee") != assignee:
-            continue
-        if project and task.get("project") != project:
-            continue
-        if tag and tag not in task.get("tags", []):
-            continue
-        tasks.append(task)
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        if assignee:
+            query += " AND assignee = ?"
+            params.append(assignee)
+        if project:
+            query += " AND project = ?"
+            params.append(project)
+
+        query += " ORDER BY id ASC"
+
+        rows = conn.execute(query, params).fetchall()
+    finally:
+        conn.close()
+
+    tasks = [task_row_to_dict(row) for row in rows]
+
+    # Tag filtering (done in Python since tags are stored as JSON)
+    if tag:
+        tasks = [t for t in tasks if tag in t.get("tags", [])]
 
     return tasks
 
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description="Task management")
@@ -491,6 +509,7 @@ def main():
 
     elif args.command == "show":
         task = get_task(args.home, args.task_id)
+        import yaml
         print(yaml.dump(task, default_flow_style=False, sort_keys=False))
 
 

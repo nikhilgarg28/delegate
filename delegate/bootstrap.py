@@ -8,17 +8,16 @@ Usage:
 """
 
 import argparse
-import sqlite3
 from pathlib import Path
 
 import yaml
 
+from delegate.db import ensure_schema
 from delegate.paths import (
     team_dir as _team_dir,
     teams_dir as _teams_dir,
     agents_dir as _agents_dir,
     tasks_dir as _tasks_dir,
-    db_path as _db_path,
     roster_path as _roster_path,
     boss_person_dir as _boss_person_dir,
     base_charter_dir,
@@ -43,29 +42,6 @@ AGENT_SUBDIRS = MAILDIR_SUBDIRS + [
     "workspace",
     "worktrees",
 ]
-
-DB_SCHEMA = """
-CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    sender TEXT NOT NULL,
-    recipient TEXT NOT NULL,
-    content TEXT NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('chat', 'event'))
-);
-
-CREATE TABLE IF NOT EXISTS sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    agent TEXT NOT NULL,
-    task_id INTEGER,
-    started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    ended_at TEXT,
-    duration_seconds REAL DEFAULT 0.0,
-    tokens_in INTEGER DEFAULT 0,
-    tokens_out INTEGER DEFAULT 0,
-    cost_usd REAL DEFAULT 0.0
-);
-"""
 
 
 def _default_state(role: str) -> dict:
@@ -260,10 +236,7 @@ def bootstrap(
             state_file.write_text(yaml.dump(_default_state(role), default_flow_style=False))
 
     # --- Global SQLite DB (shared across all teams) ---
-    dbp = _db_path(hc_home)
-    conn = sqlite3.connect(str(dbp))
-    conn.executescript(DB_SCHEMA)
-    conn.close()
+    ensure_schema(hc_home)
 
     # --- Boss mailbox (org-wide, outside any team) ---
     # Ensure a boss name is configured (default to "boss" if not set).

@@ -31,7 +31,6 @@ import yaml
 
 from delegate.bootstrap import bootstrap
 from delegate.paths import (
-    tasks_dir as _tasks_dir,
     db_path as _db_path,
     agents_dir as _agents_dir,
     team_dir as _team_dir,
@@ -225,30 +224,34 @@ def _collect_db_metrics(db_file: Path) -> dict:
     return metrics
 
 
-def _collect_task_metrics(td: Path) -> dict:
-    """Collect task completion metrics from YAML task files."""
+def _collect_task_metrics(hc_home_or_td: Path) -> dict:
+    """Collect task completion metrics.
+
+    Accepts either an ``hc_home`` directory (reads from SQLite) or a
+    legacy ``tasks/`` directory (reads YAML files as fallback).
+    """
+    from delegate.task import list_tasks
+
     metrics: dict = {}
     completed = 0
     failed = 0
-    total_tasks = 0
 
-    if not td.is_dir():
-        logger.warning("Tasks directory not found at %s", td)
-        metrics["tasks_completed"] = 0
-        metrics["tasks_failed"] = 0
-        metrics["messages_per_task"] = 0.0
-        return metrics
+    try:
+        all_tasks = list_tasks(hc_home_or_td)
+    except Exception:
+        # Fallback: maybe it's a raw tasks/ directory path (legacy tests)
+        all_tasks = []
+        if hc_home_or_td.is_dir():
+            for f in sorted(hc_home_or_td.glob("T*.yaml")):
+                task = yaml.safe_load(f.read_text())
+                if task:
+                    all_tasks.append(task)
 
-    for f in sorted(td.glob("T*.yaml")):
-        task = yaml.safe_load(f.read_text())
-        if task is None:
-            continue
-        total_tasks += 1
+    for task in all_tasks:
         status = task.get("status", "")
         if status == "done":
             completed += 1
         elif status in ("open", "in_progress", "review"):
-            # Tasks not completed by end of run count as failed
             failed += 1
 
     metrics["tasks_completed"] = completed
@@ -431,7 +434,7 @@ def collect_metrics(hc_home: Path, run_dir: Path | None = None) -> dict:
     metrics = _collect_db_metrics(_db_path(hc_home))
 
     # Task metrics
-    task_metrics = _collect_task_metrics(_tasks_dir(hc_home))
+    task_metrics = _collect_task_metrics(hc_home)
     metrics.update(task_metrics)
 
     # Compute messages_per_task
@@ -641,23 +644,20 @@ def judge_run(hc_home: Path, reps: int = 3, run_dir: Path | None = None) -> dict
         - tasks: {task_id: {dim: avg_score, ..., avg: float, reasoning: [str, ...]}}
         - overall: {dim: avg_score, ..., avg: float}
     """
-    td = _tasks_dir(hc_home)
+    from delegate.task import list_tasks as _lt, format_task_id as _fmt
 
-    if not td.is_dir():
-        logger.warning("No tasks directory at %s", td)
-        return {"tasks": {}, "overall": {}}
+    all_tasks = _lt(hc_home)
 
     # Collect task specs
     tasks_data = {}
-    for f in sorted(td.glob("T*.yaml")):
-        task = yaml.safe_load(f.read_text())
+    for task in all_tasks:
         if task is None:
             continue
-        task_id = f.stem  # e.g. "T0001"
+        task_id = _fmt(task["id"])  # e.g. "T0001"
         tasks_data[task_id] = task
 
     if not tasks_data:
-        logger.warning("No tasks found in %s", td)
+        logger.warning("No tasks found in %s", hc_home)
         return {"tasks": {}, "overall": {}}
 
     # Get the full diff for the run

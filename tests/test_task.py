@@ -32,10 +32,10 @@ class TestCreateTask:
         t2 = create_task(tmp_team, title="Second")
         assert t2["id"] == t1["id"] + 1
 
-    def test_file_created(self, tmp_team):
+    def test_persisted_in_db(self, tmp_team):
         task = create_task(tmp_team, title="Build API")
-        path = tmp_team / "tasks" / f"{format_task_id(task['id'])}.yaml"
-        assert path.is_file()
+        loaded = get_task(tmp_team, task["id"])
+        assert loaded["title"] == "Build API"
 
     def test_fields_persisted(self, tmp_team):
         task = create_task(
@@ -443,19 +443,9 @@ class TestMergeQueueFields:
         assert updated["rejection_reason"] == "Needs fixes"
         assert updated["approval_status"] == "rejected"
 
-    def test_old_tasks_get_defaults(self, tmp_team):
-        """Tasks created before merge queue fields should get defaults via setdefault."""
-        import yaml
-        task = create_task(tmp_team, title="Old Task")
-        # Simulate an old task file without the new fields
-        tasks_dir = tmp_team / "tasks"
-        path = tasks_dir / f"{format_task_id(task['id'])}.yaml"
-        data = yaml.safe_load(path.read_text())
-        del data["rejection_reason"]
-        del data["approval_status"]
-        path.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
-
-        # get_task should fill in defaults
+    def test_defaults_on_fresh_task(self, tmp_team):
+        """Tasks created fresh should have empty defaults for merge queue fields."""
+        task = create_task(tmp_team, title="Fresh Task")
         loaded = get_task(tmp_team, task["id"])
         assert loaded["rejection_reason"] == ""
         assert loaded["approval_status"] == ""

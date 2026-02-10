@@ -68,7 +68,7 @@ function _saveChatFilters() {
       showEvents: document.getElementById("chatShowEvents").checked,
       direction: _chatFilterDirection,
     }));
-  } catch (e) {}
+  } catch (e) { }
 }
 function _restoreChatFilters() {
   try {
@@ -84,7 +84,7 @@ function _restoreChatFilters() {
       const el = document.getElementById("chatFilterArrow");
       if (el) { el.innerHTML = "↔"; el.classList.add("bidi"); }
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 function _saveTaskFilters() {
   try {
@@ -95,7 +95,7 @@ function _saveTaskFilters() {
       priority: document.getElementById("taskFilterPriority").value,
       repo: document.getElementById("taskFilterRepo").value,
     }));
-  } catch (e) {}
+  } catch (e) { }
 }
 function _restoreTaskFilters() {
   try {
@@ -107,7 +107,7 @@ function _restoreTaskFilters() {
     if (f.assignee) document.getElementById("taskFilterAssignee").value = f.assignee;
     if (f.priority) document.getElementById("taskFilterPriority").value = f.priority;
     if (f.repo) document.getElementById("taskFilterRepo").value = f.repo;
-  } catch (e) {}
+  } catch (e) { }
 }
 
 // Debounced search input handlers
@@ -803,7 +803,7 @@ async function loadTaskActivity(taskId, task) {
         });
       }
     }
-  } catch (e) {}
+  } catch (e) { }
   // Sort chronologically (oldest first)
   events.sort(function (a, b) { return (a.time || "").localeCompare(b.time || ""); });
   return events;
@@ -860,7 +860,7 @@ async function openTaskPanel(taskId) {
     try {
       const sRes = await fetch("/tasks/" + taskId + "/stats");
       if (sRes.ok) stats = await sRes.json();
-    } catch (e) {}
+    } catch (e) { }
     // Populate header
     document.getElementById("taskPanelTitle").textContent = task.title;
     document.getElementById("taskPanelStatus").innerHTML =
@@ -1233,7 +1233,7 @@ async function loadAgents() {
       try {
         const r = await fetch("/teams/" + _currentTeam + "/agents/" + a.name + "/stats");
         if (r.ok) statsMap[a.name] = await r.json();
-      } catch (e) {}
+      } catch (e) { }
     })
   );
 
@@ -1294,22 +1294,22 @@ async function loadAgents() {
 
       return '<div class="agent-card-rich" onclick="openAgentPanel(\'' + a.name + '\')">' +
         '<div class="agent-card-row1">' +
-          '<span class="agent-card-dot ' + dotClass + '" title="' + esc(dotTooltip) + '"></span>' +
-          '<span class="agent-card-name">' + cap(a.name) + '</span>' +
-          '<span class="agent-card-role badge-role-' + (a.role || "worker") + '">' + roleBadge + '</span>' +
-          '<span class="agent-card-task-col">' + taskLink + '</span>' +
+        '<span class="agent-card-dot ' + dotClass + '" title="' + esc(dotTooltip) + '"></span>' +
+        '<span class="agent-card-name">' + cap(a.name) + '</span>' +
+        '<span class="agent-card-role badge-role-' + (a.role || "worker") + '">' + roleBadge + '</span>' +
+        '<span class="agent-card-task-col">' + taskLink + '</span>' +
         '</div>' +
         '<div class="agent-card-row2">' +
-          '<span class="agent-card-activity">' + esc(activityText) + '</span>' +
-          (lastActivity ? '<span class="agent-card-last-active">' + esc(lastActivity) + '</span>' : '') +
+        '<span class="agent-card-activity">' + esc(activityText) + '</span>' +
+        (lastActivity ? '<span class="agent-card-last-active">' + esc(lastActivity) + '</span>' : '') +
         '</div>' +
         '<div class="agent-card-row3">' +
-          '<span class="agent-card-stat"><span class="agent-card-stat-value">' + doneToday + '</span><span class="agent-card-stat-label">done today</span></span>' +
-          '<span class="agent-card-stat"><span class="agent-card-stat-value">' + _fmtTokensShort(totalTokens) + '</span><span class="agent-card-stat-label">tokens</span></span>' +
-          '<span class="agent-card-stat"><span class="agent-card-stat-value">' + cost + '</span><span class="agent-card-stat-label">cost</span></span>' +
-          '<span class="agent-card-stat"><span class="agent-card-stat-value">' + agentTime + '</span><span class="agent-card-stat-label">uptime</span></span>' +
+        '<span class="agent-card-stat"><span class="agent-card-stat-value">' + doneToday + '</span><span class="agent-card-stat-label">done today</span></span>' +
+        '<span class="agent-card-stat"><span class="agent-card-stat-value">' + _fmtTokensShort(totalTokens) + '</span><span class="agent-card-stat-label">tokens</span></span>' +
+        '<span class="agent-card-stat"><span class="agent-card-stat-value">' + cost + '</span><span class="agent-card-stat-label">cost</span></span>' +
+        '<span class="agent-card-stat"><span class="agent-card-stat-value">' + agentTime + '</span><span class="agent-card-stat-label">uptime</span></span>' +
         '</div>' +
-      '</div>';
+        '</div>';
     })
     .join("");
 }
@@ -1339,7 +1339,7 @@ async function loadSidebar() {
             "/teams/" + _currentTeam + "/agents/" + a.name + "/stats"
           );
           if (r.ok) statsMap[a.name] = await r.json();
-        } catch (e) {}
+        } catch (e) { }
       })
     );
     const now = new Date();
@@ -1374,7 +1374,7 @@ async function loadSidebar() {
     // Tasks where the boss is the current assignee (i.e. waiting on human action)
     const actionItems = tasks.filter(function (t) {
       return t.assignee && t.assignee.toLowerCase() === _bossName.toLowerCase() &&
-             t.status !== "merged" && t.status !== "done";
+        t.status !== "merged" && t.status !== "done";
     }).sort(function (a, b) {
       return (a.updated_at || "").localeCompare(b.updated_at || "");
     });
@@ -1751,7 +1751,7 @@ async function openAgentPanel(agentName) {
       document.getElementById("diffPanelBranch").textContent = cap(
         agent.role
       );
-  } catch (e) {}
+  } catch (e) { }
   const tabsEl = panel.querySelector(".diff-panel-tabs");
   tabsEl.innerHTML =
     '<button class="diff-tab active" data-dtab="inbox" onclick="switchAgentTab(\'inbox\')">Inbox</button><button class="diff-tab" data-dtab="outbox" onclick="switchAgentTab(\'outbox\')">Outbox</button><button class="diff-tab" data-dtab="logs" onclick="switchAgentTab(\'logs\')">Logs</button><button class="diff-tab" data-dtab="stats" onclick="switchAgentTab(\'stats\')">Stats</button>';
@@ -2012,7 +2012,7 @@ _restoreTaskFilters();
 // Fetch app config (boss name) then bootstrap
 fetch("/config").then(r => r.ok ? r.json() : {}).then(cfg => {
   if (cfg.boss_name) _bossName = cfg.boss_name;
-}).catch(() => {}).finally(() => {
+}).catch(() => { }).finally(() => {
   loadTeams().then(() => {
     initFromHash();
     loadSidebar();
