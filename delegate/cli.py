@@ -2,8 +2,9 @@
 
 Commands:
     delegate doctor                                  — verify runtime dependencies
-    delegate daemon start [--port N]                 — start background daemon
-    delegate daemon stop                             — stop running daemon
+    delegate start [--port N]                        — start daemon (web UI + agents)
+    delegate stop                                    — stop running daemon
+    delegate status                                  — check if daemon is running
     delegate team create <name> ...                  — create a new team
     delegate team list                               — list existing teams
     delegate agent add <team> <name>                 — add an agent to a team
@@ -57,23 +58,17 @@ def doctor() -> None:
 
 
 # ──────────────────────────────────────────────────────────────
-# delegate daemon start / stop
+# delegate start / stop / status
 # ──────────────────────────────────────────────────────────────
 
-@main.group()
-def daemon() -> None:
-    """Manage the delegate daemon (web UI + agent orchestration)."""
-    pass
-
-
-@daemon.command("start")
+@main.command()
 @click.option("--port", type=int, default=8000, help="Port for the web UI (default: 8000).")
 @click.option("--interval", type=float, default=1.0, help="Poll interval in seconds.")
 @click.option("--max-concurrent", type=int, default=32, help="Max concurrent agents.")
 @click.option("--token-budget", type=int, default=None, help="Default token budget per agent session.")
 @click.option("--foreground", is_flag=True, help="Run in foreground instead of background.")
 @click.pass_context
-def daemon_start(
+def start(
     ctx: click.Context,
     port: int,
     interval: float,
@@ -81,10 +76,21 @@ def daemon_start(
     token_budget: int | None,
     foreground: bool,
 ) -> None:
-    """Start the delegate daemon."""
+    """Start the delegate daemon (web UI + agent orchestration)."""
+    import webbrowser
+    import time
     from delegate.daemon import start_daemon, is_running
+    from delegate.doctor import run_doctor, print_doctor_report
 
     hc_home = _get_home(ctx)
+
+    # Run doctor check first — suppress output if all checks pass
+    checks = run_doctor()
+    all_ok = all(c.passed for c in checks)
+    if not all_ok:
+        print_doctor_report(checks)
+        raise SystemExit(1)
+
     alive, pid = is_running(hc_home)
     if alive:
         click.echo(f"Daemon already running (PID {pid})")
@@ -104,10 +110,19 @@ def daemon_start(
     elif not foreground:
         click.echo("Daemon started")
 
+    # Open browser — give background daemon a moment to bind the port
+    if not foreground:
+        time.sleep(1.5)
+    url = f"http://localhost:{port}"
+    try:
+        webbrowser.open(url)
+    except Exception:
+        click.echo(f"Open {url} in your browser")
 
-@daemon.command("stop")
+
+@main.command()
 @click.pass_context
-def daemon_stop(ctx: click.Context) -> None:
+def stop(ctx: click.Context) -> None:
     """Stop the running delegate daemon."""
     from delegate.daemon import stop_daemon
 
@@ -119,9 +134,9 @@ def daemon_stop(ctx: click.Context) -> None:
         click.echo("No running daemon found")
 
 
-@daemon.command("status")
+@main.command()
 @click.pass_context
-def daemon_status(ctx: click.Context) -> None:
+def status(ctx: click.Context) -> None:
     """Check if the daemon is running."""
     from delegate.daemon import is_running
 

@@ -58,7 +58,7 @@ def print_doctor_report(checks: list[CheckResult]) -> bool:
 
     Returns True if all checks passed.
     """
-    print("Running Boss doctor checks...")
+    print("Running Delegate doctor checks...")
     all_passed = True
     for result in checks:
         status = "PASSED" if result.passed else "FAILED"
