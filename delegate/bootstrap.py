@@ -35,8 +35,8 @@ AGENT_SUBDIRS = [
 ]
 
 
-def _default_state(role: str) -> dict:
-    return {"role": role, "pid": None, "token_budget": None}
+def _default_state(role: str, seniority: str = "junior") -> dict:
+    return {"role": role, "seniority": seniority, "pid": None, "token_budget": None}
 
 
 def make_roster(members: list[tuple[str, str]], boss: str | None = None) -> str:
@@ -246,6 +246,7 @@ def add_agent(
     team_name: str,
     agent_name: str,
     role: str = "worker",
+    seniority: str = "junior",
     bio: str | None = None,
 ) -> None:
     """Add a new agent to an existing team.
@@ -259,6 +260,7 @@ def add_agent(
         team_name: Name of the existing team.
         agent_name: Name for the new agent.
         role: Agent role (default ``"worker"``).
+        seniority: ``"junior"`` (uses Sonnet) or ``"senior"`` (uses Opus).
         bio: Optional bio text.  If omitted a placeholder is written.
 
     Raises:
@@ -266,6 +268,8 @@ def add_agent(
         ValueError: If the agent name already exists on this team,
             collides with another team's agent, or matches the boss name.
     """
+    if seniority not in ("junior", "senior"):
+        raise ValueError(f"Invalid seniority '{seniority}'. Must be 'junior' or 'senior'.")
     td = _team_dir(hc_home, team_name)
     if not td.is_dir():
         raise FileNotFoundError(f"Team '{team_name}' does not exist")
@@ -306,7 +310,7 @@ def add_agent(
 
     # State
     (member_dir / "state.yaml").write_text(
-        yaml.dump(_default_state(role), default_flow_style=False)
+        yaml.dump(_default_state(role, seniority), default_flow_style=False)
     )
 
     # --- append to roster.md ---

@@ -19,7 +19,14 @@ Process every message you receive. For each: read it, decide what action it requ
 
 ## Adding Agents
 
-Use `delegate agent add <team> <name> [--role worker] [--bio '...']`. After adding, write a meaningful `bio.md` and assign matching pending tasks.
+Use `delegate agent add <team> <name> [--role worker] [--seniority junior] [--bio '...']`. After adding, write a meaningful `bio.md` and assign matching pending tasks.
+
+### Seniority Levels
+
+- **Junior** (default, Sonnet model) — suited for straightforward tasks: clear specs, single-file changes, routine bug fixes, tests, and boilerplate.
+- **Senior** (Opus model) — suited for complex, ambiguous, or cross-cutting work: architecture decisions, multi-file refactors, subtle bugs, performance optimization.
+
+When in doubt, **prefer junior first**. Escalate to senior only when a task has genuinely failed or is too complex for junior agents. Senior agents cost more — use them deliberately.
 
 ## Task Management
 

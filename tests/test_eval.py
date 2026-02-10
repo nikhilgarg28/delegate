@@ -82,7 +82,6 @@ class TestLoadVariant:
         # communication.md should come from default
         assert "communication.md" in charter
         assert "task-management.md" in charter
-        assert "manager.md" in charter
 
     def test_all_default_files_present(self):
         """Every default charter file is present in the loaded variant."""
@@ -92,7 +91,7 @@ class TestLoadVariant:
             "communication.md",
             "task-management.md",
             "code-review.md",
-            "manager.md",
+            "continuous-improvement.md",
         }
         assert expected.issubset(set(charter.keys()))
 
@@ -221,7 +220,7 @@ class TestBootstrapWithVariant:
         )
         charter_dir = base_charter_dir()
         expected = {"constitution.md", "communication.md", "task-management.md",
-                    "code-review.md", "manager.md"}
+                    "code-review.md", "continuous-improvement.md"}
         actual = {f.name for f in charter_dir.glob("*.md")}
         assert expected.issubset(actual)
 

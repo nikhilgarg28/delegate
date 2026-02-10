@@ -49,8 +49,15 @@ DEFAULT_CHARTER_FILES = [
     "communication.md",
     "task-management.md",
     "code-review.md",
-    "manager.md",
     "continuous-improvement.md",
+]
+
+# Role-specific charter files (in charter/roles/)
+DEFAULT_ROLE_FILES = [
+    "manager.md",
+    "engineer.md",
+    "designer.md",
+    "qa.md",
 ]
 
 # Default team name for eval runs

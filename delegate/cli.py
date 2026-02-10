@@ -215,11 +215,15 @@ def agent() -> None:
     help="Role for the new agent (default: worker).",
 )
 @click.option(
+    "--seniority", default="junior", type=click.Choice(["junior", "senior"]),
+    help="Seniority level: junior (Sonnet) or senior (Opus). Default: junior.",
+)
+@click.option(
     "--bio", default=None,
     help="Short bio/description of the agent's strengths and focus.",
 )
 @click.pass_context
-def agent_add(ctx: click.Context, team: str, name: str, role: str, bio: str | None) -> None:
+def agent_add(ctx: click.Context, team: str, name: str, role: str, seniority: str, bio: str | None) -> None:
     """Add a new agent to an existing team.
 
     TEAM is the team name.  NAME is the new agent's name.
@@ -228,11 +232,11 @@ def agent_add(ctx: click.Context, team: str, name: str, role: str, bio: str | No
 
     hc_home = _get_home(ctx)
     try:
-        add_agent(hc_home, team_name=team, agent_name=name, role=role, bio=bio)
+        add_agent(hc_home, team_name=team, agent_name=name, role=role, seniority=seniority, bio=bio)
     except (FileNotFoundError, ValueError) as exc:
         raise click.ClickException(str(exc))
 
-    click.echo(f"Added agent '{name}' to team '{team}' (role: {role})")
+    click.echo(f"Added agent '{name}' to team '{team}' (role: {role}, seniority: {seniority})")
 
 
 # ──────────────────────────────────────────────────────────────

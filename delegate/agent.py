@@ -32,13 +32,24 @@ from typing import Any
 import yaml
 
 from delegate.paths import agent_dir as _resolve_agent_dir, agents_dir, base_charter_dir
-from delegate.mailbox import read_inbox, mark_seen_batch, mark_processed, has_unread
+from delegate.mailbox import read_inbox, mark_seen_batch, mark_processed, has_unread, recent_processed
 from delegate.task import format_task_id
 
 logger = logging.getLogger(__name__)
 
 # Default idle timeout in seconds (10 minutes)
 DEFAULT_IDLE_TIMEOUT = 600
+
+# Context window: how many recent processed messages to include per turn
+CONTEXT_MSGS_SAME_SENDER = 5   # from the primary sender of the new message
+CONTEXT_MSGS_OTHERS = 3         # most recent from anyone else
+
+# Model mapping by seniority
+SENIORITY_MODELS = {
+    "senior": "opus",
+    "junior": "sonnet",
+}
+DEFAULT_SENIORITY = "junior"
 
 
 # ---------------------------------------------------------------------------
@@ -507,9 +518,9 @@ def build_system_prompt(
     Layout (top = most shared / stable, bottom = most specific / volatile):
 
     1. TEAM CHARTER — identical for all agents on the team (cache prefix)
-    2. MANAGER CHARTER — only for managers (extends the shared prefix)
+    2. ROLE CHARTER — from charter/roles/<role>.md (shared per role)
     3. TEAM OVERRIDES — per-team customizations
-    4. AGENT IDENTITY — name, role, boss name
+    4. AGENT IDENTITY — name, role, seniority, boss name
     5. COMMANDS — mailbox, task CLI (includes agent-specific paths)
     6. REFLECTIONS — inlined from notes/reflections.md (agent-specific)
     7. REFERENCE FILES — file pointers (journals, notes, shared, roster, bios)
@@ -524,6 +535,7 @@ def build_system_prompt(
 
     state = yaml.safe_load((ad / "state.yaml").read_text()) or {}
     role = state.get("role", "worker")
+    seniority = state.get("seniority", DEFAULT_SENIORITY)
     boss_name = get_boss(hc_home) or "boss"
     manager_name = get_member_by_role(hc_home, team, "manager") or "manager"
 
@@ -544,12 +556,18 @@ def build_system_prompt(
 
     charter_block = "\n\n---\n\n".join(charter_sections)
 
-    # --- 2. Manager-specific charter (only for managers) ---
-    manager_block = ""
-    if role == "manager":
-        mgr_path = charter_dir / "manager.md"
-        if mgr_path.is_file():
-            manager_block = f"\n\n---\n\n{mgr_path.read_text().strip()}"
+    # --- 2. Role-specific charter (e.g. roles/manager.md, roles/engineer.md) ---
+    # Map generic roles to their charter filename
+    _role_file_map = {
+        "worker": "engineer.md",   # workers default to engineer role charter
+    }
+    role_charter_name = _role_file_map.get(role, f"{role}.md")
+    role_block = ""
+    role_path = charter_dir / "roles" / role_charter_name
+    if role_path.is_file():
+        content = role_path.read_text().strip()
+        if content:
+            role_block = f"\n\n---\n\n{content}"
 
     # --- 3. Team override charter ---
     override_block = ""
@@ -643,11 +661,11 @@ GIT WORKTREE:
     return f"""\
 === TEAM CHARTER ===
 
-{charter_block}{manager_block}{override_block}
+{charter_block}{role_block}{override_block}
 
 === AGENT IDENTITY ===
 
-You are {agent} (role: {role}), a team member in the Delegate system.
+You are {agent} (role: {role}, seniority: {seniority}), a team member in the Delegate system.
 {boss_name} is the human boss. You report to {manager_name} (manager).
 
 CRITICAL: You communicate ONLY by running shell commands. Your conversational
@@ -707,10 +725,29 @@ def build_user_message(
                 f"=== PREVIOUS SESSION CONTEXT ===\n{context.read_text().strip()}"
             )
 
-    # Unread messages — show ALL for context, but ask the agent to act on
-    # only the first one.  After the turn, only that first message is marked
-    # read; subsequent turns handle the rest one-by-one.
+    # --- Recent conversation history (processed messages for context) ---
     messages = read_inbox(hc_home, team, agent, unread_only=True)
+    if messages:
+        primary_sender = messages[0].sender
+
+        # Fetch recent processed messages from the primary sender
+        history_same = recent_processed(
+            hc_home, agent, from_sender=primary_sender,
+            limit=CONTEXT_MSGS_SAME_SENDER,
+        )
+        # Fetch recent processed messages from anyone else
+        history_others = [
+            m for m in recent_processed(hc_home, agent, limit=CONTEXT_MSGS_OTHERS * 2)
+            if m.sender != primary_sender
+        ][:CONTEXT_MSGS_OTHERS]
+
+        if history_same or history_others:
+            parts.append("=== RECENT CONVERSATION HISTORY ===")
+            parts.append("(Previously processed messages — for context only.)\n")
+            for msg in sorted(history_same + history_others, key=lambda m: m.id or 0):
+                parts.append(f"[{msg.time}] From {msg.sender}:\n{msg.body}\n")
+
+    # --- New messages — act on the first, read the rest for context ---
     if messages:
         parts.append(f"=== NEW MESSAGES ({len(messages)}) ===")
         for i, msg in enumerate(messages, 1):
@@ -912,6 +949,8 @@ class _SessionContext:
     token_budget: int | None
     max_turns: int | None
     workspace: Path
+    seniority: str = DEFAULT_SENIORITY
+    model: str | None = None
     worklog_lines: list[str] = field(default_factory=list)
     total_tokens_in: int = 0
     total_tokens_out: int = 0
@@ -944,6 +983,10 @@ def _session_setup(
     state["pid"] = os.getpid()
     _write_state(ad, state)
 
+    # Read seniority and resolve model
+    seniority = state.get("seniority", DEFAULT_SENIORITY)
+    model = SENIORITY_MODELS.get(seniority, SENIORITY_MODELS[DEFAULT_SENIORITY])
+
     # Read token budget and compute max turns
     token_budget = state.get("token_budget")
     max_turns = None
@@ -955,7 +998,7 @@ def _session_setup(
     current_task_id = current_task["id"] if current_task else None
     session_id = start_session(hc_home, agent, task_id=current_task_id)
     task_label = f" on {format_task_id(current_task_id)}" if current_task_id else ""
-    log_event(hc_home, f"{agent.capitalize()} is online{task_label}")
+    log_event(hc_home, f"{agent.capitalize()} is online{task_label} [model={model}]")
 
     # Workspace
     workspace = get_task_workspace(hc_home, team, agent, current_task)
@@ -969,6 +1012,7 @@ def _session_setup(
     # Log session start
     alog.session_start_log(
         task_id=current_task_id,
+        model=model,
         token_budget=token_budget,
         workspace=workspace,
         session_id=session_id,
@@ -987,6 +1031,8 @@ def _session_setup(
         token_budget=token_budget,
         max_turns=max_turns,
         workspace=workspace,
+        seniority=seniority,
+        model=model,
         worklog_lines=worklog_lines,
     )
 
@@ -1138,6 +1184,8 @@ async def run_agent_loop(
         permission_mode="bypassPermissions",
         add_dirs=[str(hc_home)],
     )
+    if ctx.model:
+        options_kwargs["model"] = ctx.model
     if ctx.token_budget:
         options_kwargs["max_turns"] = ctx.max_turns
 

@@ -88,11 +88,18 @@ def test_charter_shipped_with_package():
     """Base charter files are shipped with the package."""
     cd = base_charter_dir()
     assert cd.is_dir()
-    expected = {"constitution.md", "communication.md", "task-management.md", "code-review.md", "manager.md", "continuous-improvement.md"}
+    expected_top = {"constitution.md", "communication.md", "task-management.md", "code-review.md", "continuous-improvement.md"}
     actual = {f.name for f in cd.glob("*.md")}
-    assert actual == expected
+    assert actual == expected_top
     for f in cd.glob("*.md"):
         assert len(f.read_text()) > 0
+
+    # Role-specific charter files live in roles/
+    roles_dir = cd / "roles"
+    assert roles_dir.is_dir()
+    expected_roles = {"manager.md", "engineer.md", "designer.md", "qa.md"}
+    actual_roles = {f.name for f in roles_dir.glob("*.md")}
+    assert actual_roles == expected_roles
 
 
 def test_agent_subdirs_exist(tmp_team):

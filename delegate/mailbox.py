@@ -271,6 +271,39 @@ def deliver(hc_home: Path, team: str, message: Message) -> str:
     return str(msg_id)
 
 
+def recent_processed(
+    hc_home: Path,
+    agent: str,
+    from_sender: str | None = None,
+    limit: int = 10,
+) -> list[Message]:
+    """Return recently processed messages for context building.
+
+    If *from_sender* is specified, only return messages from that sender.
+    Otherwise return messages from any sender. Results are ordered newest-first.
+    """
+    conn = get_connection(hc_home)
+    try:
+        if from_sender:
+            rows = conn.execute(
+                "SELECT * FROM mailbox WHERE recipient = ? AND sender = ? "
+                "AND processed_at IS NOT NULL "
+                "ORDER BY id DESC LIMIT ?",
+                (agent, from_sender, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM mailbox WHERE recipient = ? "
+                "AND processed_at IS NOT NULL "
+                "ORDER BY id DESC LIMIT ?",
+                (agent, limit),
+            ).fetchall()
+    finally:
+        conn.close()
+    # Return in chronological order (oldest first)
+    return [_row_to_message(r) for r in reversed(rows)]
+
+
 def has_unread(hc_home: Path, agent: str) -> bool:
     """Check if an agent has any unread delivered messages.
 
