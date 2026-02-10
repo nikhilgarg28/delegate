@@ -739,20 +739,33 @@ def build_user_message(
     except Exception:
         pass
 
-    # System-triggered reflection prompt (~20% chance per turn)
+    return "\n".join(parts)
+
+
+def build_reflection_message(hc_home: Path, team: str, agent: str) -> str:
+    """Build a dedicated reflection-only user message (no inbox content)."""
     ad = _resolve_agent_dir(hc_home, team, agent)
-    if _check_reflection_due():
-        journals_dir = ad / "journals"
-        reflections_path = ad / "notes" / "reflections.md"
-        parts.append(
-            f"\n=== REFLECTION DUE ===\n"
-            f"After handling the message above, please:\n"
-            f"1. Review your recent task journals in {journals_dir}/\n"
-            f"2. Update {reflections_path} with patterns, lessons, and goals.\n"
-            f"   Keep it concise — bullet points, not essays.\n"
-            f"3. This file is inlined in your prompt, so future turns benefit "
-            f"from what you write here."
-        )
+    journals_dir = ad / "journals"
+    reflections_path = ad / "notes" / "reflections.md"
+    feedback_path = ad / "notes" / "feedback.md"
+
+    parts = [
+        "=== REFLECTION TURN ===",
+        "",
+        "This is a dedicated reflection turn — no inbox messages to process.",
+        "Please do the following:",
+        f"1. Review your recent task journals in {journals_dir}/",
+        f"2. Update {reflections_path} with patterns, lessons, and goals.",
+        "   Keep it concise — bullet points, not essays.",
+        f"3. Optionally review {feedback_path} and incorporate learnings.",
+        "4. This file is inlined in your prompt, so future turns benefit "
+        "from what you write here.",
+    ]
+
+    # Include context.md so the agent has session memory
+    context = ad / "context.md"
+    if context.exists() and context.read_text().strip():
+        parts.insert(0, f"=== PREVIOUS SESSION CONTEXT ===\n{context.read_text().strip()}\n")
 
     return "\n".join(parts)
 
@@ -1171,6 +1184,28 @@ async def run_agent_loop(
                 ctx.alog.waiting_for_mail(idle_timeout)
                 has_mail = await wait_for_inbox(hc_home, team, agent, timeout=idle_timeout)
                 if not has_mail:
+                    # No messages — maybe do a reflection turn before going idle
+                    if _check_reflection_due():
+                        turn = ctx.turn + 1
+                        user_msg = build_reflection_message(hc_home, team, agent)
+                        ctx.worklog_lines.append(f"\n## Turn {turn} (reflection)\n{user_msg}")
+                        ctx.alog.turn_start(turn, user_msg)
+
+                        turn_tokens_in = 0
+                        turn_tokens_out = 0
+                        turn_cost = 0.0
+                        turn_tools: list[str] = []
+
+                        await client.query(user_msg, session_id=f"turn-{turn}")
+                        async for msg in client.receive_response():
+                            turn_tokens_in, turn_tokens_out, turn_cost = _process_turn_messages(
+                                msg, ctx.alog, turn_tokens_in, turn_tokens_out, turn_cost,
+                                turn_tools, ctx.worklog_lines,
+                            )
+
+                        _finish_turn(ctx, turn, turn_tokens_in, turn_tokens_out, turn_cost, turn_tools)
+                        ctx.alog.info("Reflection turn completed")
+
                     ctx.exit_reason = "idle_timeout"
                     ctx.alog.idle_timeout(idle_timeout)
                     break
