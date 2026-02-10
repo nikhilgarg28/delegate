@@ -35,7 +35,7 @@ AGENT_SUBDIRS = [
 ]
 
 
-def _default_state(role: str, seniority: str = "junior") -> dict:
+def _default_state(role: str, seniority: str = "senior") -> dict:
     return {"role": role, "seniority": seniority, "pid": None, "token_budget": None}
 
 
@@ -246,7 +246,7 @@ def add_agent(
     team_name: str,
     agent_name: str,
     role: str = "worker",
-    seniority: str = "junior",
+    seniority: str = "senior",
     bio: str | None = None,
 ) -> None:
     """Add a new agent to an existing team.

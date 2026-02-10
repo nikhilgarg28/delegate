@@ -49,7 +49,7 @@ SENIORITY_MODELS = {
     "senior": "opus",
     "junior": "sonnet",
 }
-DEFAULT_SENIORITY = "junior"
+DEFAULT_SENIORITY = "senior"
 
 
 # ---------------------------------------------------------------------------

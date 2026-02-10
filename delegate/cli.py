@@ -215,8 +215,8 @@ def agent() -> None:
     help="Role for the new agent (default: worker).",
 )
 @click.option(
-    "--seniority", default="junior", type=click.Choice(["junior", "senior"]),
-    help="Seniority level: junior (Sonnet) or senior (Opus). Default: junior.",
+    "--seniority", default="senior", type=click.Choice(["junior", "senior"]),
+    help="Seniority level: junior (Sonnet) or senior (Opus). Default: senior.",
 )
 @click.option(
     "--bio", default=None,
