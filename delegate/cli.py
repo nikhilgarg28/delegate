@@ -5,7 +5,7 @@ Commands:
     delegate start [--port N]                        — start daemon (web UI + agents)
     delegate stop                                    — stop running daemon
     delegate status                                  — check if daemon is running
-    delegate team create <name> ...                  — create a new team
+    delegate team create <name> --manager M --agents a:role,b  — create a new team
     delegate team list                               — list existing teams
     delegate agent add <team> <name>                 — add an agent to a team
     delegate config set boss <name>                  — set org-wide boss name
@@ -161,8 +161,12 @@ def team() -> None:
 @team.command("create")
 @click.argument("name")
 @click.option("--manager", required=True, help="Name of the manager agent.")
-@click.option("--agents", default="", help="Comma-separated list of worker agent names.")
-@click.option("--qa", default=None, help="Name of the QA agent.")
+@click.option(
+    "--agents", required=True,
+    help="Comma-separated list of agents as name[:role].  "
+         "Examples: 'alex:devops,nikhil:designer,john,mark:backend'.  "
+         "Agents without a role default to 'worker'.",
+)
 @click.option("--interactive", is_flag=True, help="Prompt for bios and charter overrides.")
 @click.pass_context
 def team_create(
@@ -170,26 +174,37 @@ def team_create(
     name: str,
     manager: str,
     agents: str,
-    qa: str | None,
     interactive: bool,
 ) -> None:
     """Create a new team."""
     from delegate.bootstrap import bootstrap
 
     hc_home = _get_home(ctx)
-    worker_agents = [a.strip() for a in agents.split(",") if a.strip()]
+
+    # Parse "name:role" pairs — role defaults to "worker"
+    parsed_agents: list[tuple[str, str]] = []
+    for token in agents.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if ":" in token:
+            agent_name, role = token.split(":", 1)
+            parsed_agents.append((agent_name.strip(), role.strip()))
+        else:
+            parsed_agents.append((token, "worker"))
 
     bootstrap(
         hc_home,
         team_name=name,
         manager=manager,
-        agents=worker_agents,
-        qa=qa,
+        agents=parsed_agents,
         interactive=interactive,
     )
 
-    all_names = [manager] + ([f"(qa) {qa}"] if qa else []) + worker_agents
-    click.echo(f"Created team '{name}' with members: {', '.join(all_names)}")
+    labels = [manager + " (manager)"]
+    for aname, arole in parsed_agents:
+        labels.append(f"{aname} ({arole})" if arole != "worker" else aname)
+    click.echo(f"Created team '{name}' with members: {', '.join(labels)}")
 
 
 @team.command("list")

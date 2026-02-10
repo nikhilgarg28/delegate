@@ -41,7 +41,7 @@ def hc(tmp_path):
     set_boss(home, DIRECTOR)
 
     # Team alpha: manager + 2 workers + QA
-    bootstrap(home, team_name=TEAM_A, manager="edison", agents=["alice", "bob"], qa="sarah")
+    bootstrap(home, team_name=TEAM_A, manager="edison", agents=["alice", "bob", ("sarah", "qa")])
 
     # Team beta: manager + 1 worker (unique names enforced)
     bootstrap(home, team_name=TEAM_B, manager="maria", agents=["charlie"])

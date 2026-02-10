@@ -37,7 +37,7 @@ def hc_home(tmp_path):
     hc = tmp_path / "hc_home"
     hc.mkdir()
     set_boss(hc, "nikhil")
-    bootstrap(hc, SAMPLE_TEAM, manager="edison", agents=["alice", "bob"], qa="sarah")
+    bootstrap(hc, SAMPLE_TEAM, manager="edison", agents=["alice", "bob", ("sarah", "qa")])
     return hc
 
 

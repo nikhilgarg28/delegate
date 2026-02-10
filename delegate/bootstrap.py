@@ -68,10 +68,7 @@ def make_roster(members: list[tuple[str, str]], boss: str | None = None) -> str:
     if boss:
         lines.append(f"- **{boss}** (boss)")
     for name, role in members:
-        if role in ("manager", "qa"):
-            lines.append(f"- **{name}** ({role})")
-        else:
-            lines.append(f"- **{name}**")
+        lines.append(f"- **{name}** ({role})")
     lines.append("")
     return "\n".join(lines)
 
@@ -141,8 +138,7 @@ def bootstrap(
     hc_home: Path,
     team_name: str,
     manager: str = "manager",
-    agents: list[str] | None = None,
-    qa: str | None = None,
+    agents: list[tuple[str, str]] | list[str] | None = None,
     interactive: bool = False,
 ) -> None:
     """Create the team directory structure under ``hc_home/teams/<team_name>/``.
@@ -157,22 +153,23 @@ def bootstrap(
         hc_home: Delegate home directory (~/.delegate).
         team_name: Name for the new team.
         manager: Name of the manager agent.
-        agents: Additional worker agent names.
-        qa: Name of the QA agent (optional).
+        agents: List of ``(name, role)`` tuples **or** plain name strings
+            (which default to role ``"worker"``).
         interactive: If True, prompt for bios and charter overrides.
 
     Safe to call multiple times — does not overwrite existing files.
     """
-    agents = agents or []
+    raw_agents = agents or []
 
     # Build the complete member list as (name, role) pairs
     members: list[tuple[str, str]] = [
         (manager, "manager"),
     ]
-    if qa:
-        members.append((qa, "qa"))
-    for a in agents:
-        members.append((a, "worker"))
+    for a in raw_agents:
+        if isinstance(a, str):
+            members.append((a, "worker"))
+        else:
+            members.append((a[0], a[1]))
 
     # Check for duplicate names within this team
     names = [n for n, _ in members]
@@ -346,11 +343,8 @@ def add_agent(
     else:
         roster_text = "# Team Roster\n"
 
-    # Build the roster line
-    if role in ("manager", "qa", "designer"):
-        roster_line = f"- **{agent_name}** ({role})"
-    else:
-        roster_line = f"- **{agent_name}**"
+    # Build the roster line — always show the role
+    roster_line = f"- **{agent_name}** ({role})"
 
     # Ensure trailing newline before appending
     if not roster_text.endswith("\n"):

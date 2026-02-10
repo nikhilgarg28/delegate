@@ -77,10 +77,11 @@ def test_roster_contains_all_members(tmp_team):
 
 
 def test_roster_shows_roles(tmp_team):
-    """Roster shows role annotations for manager and boss."""
+    """Roster shows role annotations for all members."""
     content = roster_path(tmp_team, TEAM).read_text()
     assert "(manager)" in content
     assert "(boss)" in content
+    assert "(worker)" in content
 
 
 def test_charter_shipped_with_package():

@@ -32,7 +32,7 @@ def qa_team(tmp_path):
     """Bootstrap a team that includes a QA agent and create a test repo."""
     hc_home = tmp_path / "hc_home"
     set_boss(hc_home, "boss")
-    bootstrap(hc_home, team_name=TEAM, manager="manager", agents=["alice"], qa="qa")
+    bootstrap(hc_home, team_name=TEAM, manager="manager", agents=["alice", ("qa", "qa")])
 
     # Create a simple test repo outside the boss directory
     repo_dir = tmp_path / "repos" / "myapp"
