@@ -3,7 +3,7 @@ import { useEffect, useCallback } from "preact/hooks";
 import { batch } from "@preact/signals";
 import {
   currentTeam, teams, bossName, tasks, agents, agentStatsMap, messages,
-  activeTab, knownAgentNames, themePref,
+  activeTab, knownAgentNames,
   taskPanelId, diffPanelMode, diffPanelTarget,
 } from "./state.js";
 import * as api from "./api.js";
@@ -14,14 +14,6 @@ import { TasksPanel } from "./components/TasksPanel.jsx";
 import { AgentsPanel } from "./components/AgentsPanel.jsx";
 import { TaskSidePanel } from "./components/TaskSidePanel.jsx";
 import { DiffPanel } from "./components/DiffPanel.jsx";
-
-// ── Apply initial theme ──
-function applyTheme(pref) {
-  const root = document.documentElement;
-  root.classList.remove("light", "dark");
-  if (pref === "light") root.classList.add("light");
-  else if (pref === "dark") root.classList.add("dark");
-}
 
 // ── Main App ──
 function App() {
@@ -166,5 +158,4 @@ function App() {
 }
 
 // ── Mount ──
-applyTheme(themePref.value);
 render(<App />, document.getElementById("app"));

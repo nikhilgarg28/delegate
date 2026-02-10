@@ -113,8 +113,8 @@ export function esc(s) {
 
 // ── Avatars ──
 const _avatarColors = [
-  "#e11d48", "#7c3aed", "#2563eb", "#0891b2",
-  "#059669", "#d97706", "#dc2626", "#4f46e5",
+  "#7DD3FC", "#C4B5FD", "#FCA5A5", "#6EE7B7",
+  "#FDE68A", "#F9A8D4", "#E8E9ED",
 ];
 export function avatarColor(name) {
   let h = 0;
