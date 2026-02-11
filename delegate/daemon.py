@@ -1,7 +1,7 @@
 """Daemon management — start/stop the background web UI + routing loop.
 
 The daemon runs uvicorn serving the FastAPI app (delegate.web) with
-the message router and agent orchestrator running as background tasks.
+the message router and agent runtime running as background tasks.
 
 The daemon PID is written to ``~/.delegate/daemon.pid``.
 

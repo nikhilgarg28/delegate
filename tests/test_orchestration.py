@@ -1,37 +1,12 @@
-"""Tests for delegate/orchestrator.py — multi-agent spawn/manage logic."""
-
-import os
+"""Tests for delegate/runtime.py — single-turn agent dispatch logic."""
 
 import pytest
-import yaml
 
 from delegate.mailbox import deliver, Message
 from delegate.chat import get_messages
-from delegate.orchestrator import (
-    check_and_clear_stale_pids,
-    get_agents_needing_spawn,
-    orchestrate_once,
-)
+from delegate.runtime import list_ai_agents, agents_with_unread
 
 TEAM = "testteam"
-
-
-def _agent_dir(tmp_team, agent):
-    return tmp_team / "teams" / TEAM / "agents" / agent
-
-
-def _set_pid(tmp_team, agent, pid):
-    """Helper to set an agent's PID in state.yaml."""
-    state_file = _agent_dir(tmp_team, agent) / "state.yaml"
-    state = yaml.safe_load(state_file.read_text()) or {}
-    state["pid"] = pid
-    state_file.write_text(yaml.dump(state, default_flow_style=False))
-
-
-def _get_pid(tmp_team, agent):
-    state_file = _agent_dir(tmp_team, agent) / "state.yaml"
-    state = yaml.safe_load(state_file.read_text()) or {}
-    return state.get("pid")
 
 
 def _deliver_msg(tmp_team, to_agent, body="Hello"):
@@ -43,112 +18,32 @@ def _deliver_msg(tmp_team, to_agent, body="Hello"):
     ))
 
 
-class TestCheckAndClearStalePids:
-    def test_clears_stale_pid(self, tmp_team):
-        _set_pid(tmp_team, "alice", 999999)  # PID that almost certainly doesn't exist
-        cleared = check_and_clear_stale_pids(tmp_team, TEAM)
-        assert "alice" in cleared
-        assert _get_pid(tmp_team, "alice") is None
+class TestListAiAgents:
+    def test_lists_non_boss_agents(self, tmp_team):
+        agents = list_ai_agents(tmp_team, TEAM)
+        # tmp_team fixture creates manager, alice, bob, sarah — all non-boss
+        assert "alice" in agents
+        assert "bob" in agents
 
-    def test_keeps_live_pid(self, tmp_team):
-        _set_pid(tmp_team, "alice", os.getpid())  # our own PID, definitely alive
-        cleared = check_and_clear_stale_pids(tmp_team, TEAM)
-        assert "alice" not in cleared
-        assert _get_pid(tmp_team, "alice") == os.getpid()
-
-    def test_no_op_when_no_pids(self, tmp_team):
-        cleared = check_and_clear_stale_pids(tmp_team, TEAM)
-        assert cleared == []
-
-    def test_no_event_on_clear(self, tmp_team):
-        """Stale PID clearing is internal housekeeping — no event logged."""
-        _set_pid(tmp_team, "alice", 999999)
-        check_and_clear_stale_pids(tmp_team, TEAM)
-        events = get_messages(tmp_team, TEAM, msg_type="event")
-        assert not any("stale PID" in e["content"] for e in events)
+    def test_excludes_boss(self, tmp_team):
+        agents = list_ai_agents(tmp_team, TEAM)
+        # The boss (edison in some fixtures) should not appear
+        for a in agents:
+            assert a != "boss"
 
 
-class TestGetAgentsNeedingSpawn:
-    def test_no_unread_no_spawn(self, tmp_team):
-        assert get_agents_needing_spawn(tmp_team, TEAM) == []
+class TestAgentsWithUnread:
+    def test_no_unread_returns_empty(self, tmp_team):
+        assert agents_with_unread(tmp_team, TEAM) == []
 
-    def test_unread_triggers_spawn(self, tmp_team):
+    def test_unread_returns_agent(self, tmp_team):
         _deliver_msg(tmp_team, "alice")
-        result = get_agents_needing_spawn(tmp_team, TEAM)
+        result = agents_with_unread(tmp_team, TEAM)
         assert "alice" in result
 
-    def test_already_running_skipped(self, tmp_team):
-        _deliver_msg(tmp_team, "alice")
-        _set_pid(tmp_team, "alice", os.getpid())
-        result = get_agents_needing_spawn(tmp_team, TEAM)
-        assert "alice" not in result
-
-    def test_concurrency_limit(self, tmp_team):
+    def test_multiple_agents_with_unread(self, tmp_team):
         _deliver_msg(tmp_team, "alice")
         _deliver_msg(tmp_team, "bob")
-        _deliver_msg(tmp_team, "manager")
-
-        result = get_agents_needing_spawn(tmp_team, TEAM, max_concurrent=2)
-        assert len(result) <= 2
-
-    def test_concurrency_accounts_for_running(self, tmp_team):
-        _deliver_msg(tmp_team, "alice")
-        _deliver_msg(tmp_team, "bob")
-        _set_pid(tmp_team, "manager", os.getpid())  # manager already running
-
-        # max_concurrent=2, 1 already running, so only 1 slot
-        result = get_agents_needing_spawn(tmp_team, TEAM, max_concurrent=2)
-        assert len(result) <= 1
-
-
-class TestOrchestrateOnce:
-    def test_spawns_agent(self, tmp_team):
-        _deliver_msg(tmp_team, "alice")
-        spawned_agents = []
-
-        def mock_spawn(hc_home, team, agent):
-            spawned_agents.append(agent)
-
-        result = orchestrate_once(tmp_team, TEAM, spawn_fn=mock_spawn)
+        result = agents_with_unread(tmp_team, TEAM)
         assert "alice" in result
-        assert "alice" in spawned_agents
-
-    def test_no_spawn_if_no_unread(self, tmp_team):
-        result = orchestrate_once(tmp_team, TEAM, spawn_fn=lambda h, t, a: None)
-        assert result == []
-
-    def test_no_spawn_if_already_running(self, tmp_team):
-        _deliver_msg(tmp_team, "alice")
-        _set_pid(tmp_team, "alice", os.getpid())
-        result = orchestrate_once(tmp_team, TEAM, spawn_fn=lambda h, t, a: None)
-        assert "alice" not in result
-
-    def test_clears_stale_before_spawning(self, tmp_team):
-        _set_pid(tmp_team, "alice", 999999)
-        _deliver_msg(tmp_team, "alice")
-
-        spawned_agents = []
-        def mock_spawn(hc_home, team, agent):
-            spawned_agents.append(agent)
-
-        result = orchestrate_once(tmp_team, TEAM, spawn_fn=mock_spawn)
-        # Stale PID cleared, so alice should be spawnable
-        assert "alice" in result
-
-    def test_logs_spawn_event(self, tmp_team):
-        _deliver_msg(tmp_team, "alice")
-        orchestrate_once(tmp_team, TEAM, spawn_fn=lambda h, t, a: None)
-        events = get_messages(tmp_team, TEAM, msg_type="event")
-        assert any("Paging Alice" in e["content"] for e in events)
-
-    def test_handles_spawn_failure(self, tmp_team):
-        _deliver_msg(tmp_team, "alice")
-
-        def failing_spawn(hc_home, team, agent):
-            raise RuntimeError("spawn failed")
-
-        result = orchestrate_once(tmp_team, TEAM, spawn_fn=failing_spawn)
-        assert result == []  # not added to spawned list
-
-        events = get_messages(tmp_team, TEAM, msg_type="event")
-        assert any("Paging Alice failed" in e["content"] for e in events)
+        assert "bob" in result

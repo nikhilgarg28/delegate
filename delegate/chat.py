@@ -126,8 +126,8 @@ def end_session(
 def close_orphaned_sessions(hc_home: Path, team: str, agent: str) -> int:
     """Close any sessions for *agent* that have ended_at IS NULL.
 
-    Called by the orchestrator when a stale PID is detected — the agent
-    process died without running ``_session_teardown``, leaving the DB
+    Called by the daemon when a stale session is detected — the agent
+    turn errored without closing the session, leaving the DB
     session open.  We stamp ``ended_at`` so it doesn't look "active" forever.
 
     Returns the number of sessions closed.

@@ -146,7 +146,7 @@ def _list_team_agents(hc_home: Path, team: str) -> list[dict]:
         agents.append({
             "name": d.name,
             "role": state.get("role", "engineer"),
-            "pid": state.get("pid"),
+            "status": "online",  # all agents are always online in the runtime model
             "unread_inbox": unread,
             "team": team,
             "last_active_at": _agent_last_active_at(d),
@@ -165,33 +165,105 @@ async def _daemon_loop(
     max_concurrent: int,
     default_token_budget: int | None,
 ) -> None:
-    """Route messages, spawn agents, and process merges on a fixed interval (all teams)."""
+    """Route messages, dispatch agent turns, and process merges.
+
+    Architecture:
+    - All agents are "always online" — there is no PID tracking or subprocess
+      management.
+    - Each agent turn is dispatched as an ``asyncio.create_task()`` call to
+      ``runtime.run_turn()``, which spawns a short-lived ``claude`` subprocess.
+    - A semaphore limits the number of concurrent turns across all agents.
+    - The daemon loop polls for unread messages and dispatches turns as needed.
+    """
     from delegate.router import route_once
-    from delegate.orchestrator import orchestrate_once, spawn_agent_subprocess
+    from delegate.runtime import run_turn, agents_with_unread
     from delegate.merge import merge_once
+    from delegate.bootstrap import get_member_by_role
+    from delegate.mailbox import send as send_message
+    from delegate.chat import log_event, close_orphaned_sessions
 
-    logger.info("Daemon loop started — polling every %.1fs", interval)
+    logger.info("Daemon loop started — polling every %.1fs | max_concurrent=%d", interval, max_concurrent)
 
+    # Semaphore limits concurrent agent turns
+    turn_semaphore = asyncio.Semaphore(max_concurrent)
+
+    # Track in-flight turns so we don't dispatch duplicates
+    in_flight: set[str] = set()  # "team/agent" keys
+
+    async def _dispatch_turn(team: str, agent: str) -> None:
+        """Run a single agent turn, guarded by the semaphore."""
+        key = f"{team}/{agent}"
+        async with turn_semaphore:
+            try:
+                result = await run_turn(hc_home, team, agent)
+                if result.error:
+                    logger.warning(
+                        "Turn error | agent=%s | team=%s | error=%s",
+                        agent, team, result.error,
+                    )
+                else:
+                    logger.info(
+                        "Turn complete | agent=%s | team=%s | turns=%d | cost=$%.4f",
+                        agent, team, result.turns, result.cost_usd,
+                    )
+            except Exception:
+                logger.exception("Unhandled error in turn | agent=%s | team=%s", agent, team)
+            finally:
+                in_flight.discard(key)
+
+    # --- One-time startup: clean stale sessions + send manager greeting ---
+    try:
+        teams = _list_teams(hc_home)
+        boss_name = get_boss(hc_home) or "boss"
+
+        for team in teams:
+            # Close any orphaned sessions from previous crashes
+            from delegate.runtime import list_ai_agents
+            for agent in list_ai_agents(hc_home, team):
+                closed = close_orphaned_sessions(hc_home, team, agent)
+                if closed:
+                    logger.info("Closed %d orphaned session(s) | agent=%s | team=%s", closed, agent, team)
+
+            # Send startup greeting from manager
+            manager_name = get_member_by_role(hc_home, team, "manager")
+            if manager_name:
+                send_message(
+                    hc_home, team,
+                    sender=manager_name,
+                    recipient=boss_name,
+                    message=(
+                        f"Delegate is online. I'm {manager_name}, your team manager. "
+                        "Standing by for instructions — send me tasks, questions, "
+                        "or anything you need the team to work on."
+                    ),
+                )
+                logger.info(
+                    "Manager %s sent startup greeting to %s | team=%s",
+                    manager_name, boss_name, team,
+                )
+    except Exception:
+        logger.exception("Error during daemon startup")
+
+    # --- Main loop ---
     while True:
         try:
             teams = _list_teams(hc_home)
             boss_name = get_boss(hc_home)
 
             for team in teams:
-                def _spawn(h: Path, t: str, a: str) -> None:
-                    spawn_agent_subprocess(h, t, a, token_budget=default_token_budget)
-
+                # Route pending messages
                 routed = route_once(hc_home, team, boss_name=boss_name)
                 if routed > 0:
                     logger.info("Routed %d message(s) for team %s", routed, team)
 
-                spawned = orchestrate_once(
-                    hc_home, team,
-                    max_concurrent=max_concurrent,
-                    spawn_fn=_spawn,
-                )
-                if spawned:
-                    logger.info("Spawned agents in %s: %s", team, ", ".join(spawned))
+                # Dispatch turns for agents with unread messages
+                for agent in agents_with_unread(hc_home, team):
+                    key = f"{team}/{agent}"
+                    if key in in_flight:
+                        continue  # already has a turn running
+                    in_flight.add(key)
+                    log_event(hc_home, team, f"Paging {agent.capitalize()}")
+                    asyncio.create_task(_dispatch_turn(team, agent))
 
                 # Process merge queue
                 merge_results = merge_once(hc_home, team)

@@ -76,7 +76,7 @@ def start(
     token_budget: int | None,
     foreground: bool,
 ) -> None:
-    """Start the delegate daemon (web UI + agent orchestration)."""
+    """Start the delegate daemon (web UI + agent runtime)."""
     import webbrowser
     import time
     from delegate.daemon import start_daemon, is_running

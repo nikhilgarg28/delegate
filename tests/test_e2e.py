@@ -1,20 +1,17 @@
-"""End-to-end tests — message passing, routing, orchestration without the UI.
+"""End-to-end tests — message passing, routing, and runtime without the UI.
 
 These tests exercise the full pipeline:
-    bootstrap → send → route → deliver → orchestrate
+    bootstrap → send → route → deliver → runtime dispatch
 using real file I/O and the SQLite database, with no mocking.
 """
 
-import os
-
 import pytest
-import yaml
 
 from delegate.bootstrap import bootstrap
 from delegate.config import set_boss, get_boss
 from delegate.mailbox import send, read_inbox, read_outbox, deliver, Message
 from delegate.router import route_once, BossQueue
-from delegate.orchestrator import orchestrate_once, get_agents_needing_spawn
+from delegate.runtime import agents_with_unread
 from delegate.chat import get_messages, log_event
 from delegate.task import create_task, get_task, change_status, assign_task, format_task_id
 from delegate.paths import (
@@ -200,43 +197,38 @@ class TestCrossTeamBoss:
 
 
 # ---------------------------------------------------------------------------
-# E2E: orchestrator spawning
+# E2E: runtime dispatch
 # ---------------------------------------------------------------------------
 
 
-class TestOrchestration:
-    """Route messages, then verify orchestrator detects agents needing spawn."""
+class TestRuntimeDispatch:
+    """Route messages, then verify runtime detects agents needing turns."""
 
-    def test_unread_triggers_spawn_candidate(self, hc):
-        """After routing, agents with unread inbox messages are spawn candidates."""
+    def test_unread_triggers_dispatch(self, hc):
+        """After routing, agents with unread messages appear in agents_with_unread."""
         send(hc, TEAM_A, "edison", "alice", "Work on T0001")
         route_once(hc, TEAM_A)
 
-        candidates = get_agents_needing_spawn(hc, TEAM_A)
+        candidates = agents_with_unread(hc, TEAM_A)
         assert "alice" in candidates
 
-    def test_no_spawn_without_messages(self, hc):
-        """Agents with empty inboxes are NOT spawn candidates."""
-        candidates = get_agents_needing_spawn(hc, TEAM_A)
+    def test_no_dispatch_without_messages(self, hc):
+        """Agents with empty inboxes are NOT dispatch candidates."""
+        candidates = agents_with_unread(hc, TEAM_A)
         assert candidates == []
 
-    def test_orchestrate_with_mock_spawn(self, hc):
-        """orchestrate_once calls spawn_fn for agents with unread messages."""
+    def test_multiple_agents_detected(self, hc):
+        """agents_with_unread detects multiple agents with unread messages."""
         send(hc, TEAM_A, "edison", "alice", "Task for alice")
         send(hc, TEAM_A, "edison", "bob", "Task for bob")
         route_once(hc, TEAM_A)
 
-        spawned = []
+        candidates = agents_with_unread(hc, TEAM_A)
+        assert "alice" in candidates
+        assert "bob" in candidates
 
-        def mock_spawn(home, team, agent):
-            spawned.append((team, agent))
-
-        result = orchestrate_once(hc, TEAM_A, spawn_fn=mock_spawn)
-        assert set(result) == {"alice", "bob"}
-        assert set(a for _, a in spawned) == {"alice", "bob"}
-
-    def test_full_pipeline_boss_to_spawn(self, hc):
-        """Boss → manager → worker → orchestrator detects spawn need."""
+    def test_full_pipeline_boss_to_dispatch(self, hc):
+        """Boss → manager → worker → runtime detects dispatch need."""
         # Boss kicks off
         send(hc, TEAM_A, DIRECTOR, "edison", "Assign T0001 to alice")
         route_once(hc, TEAM_A, boss_name=DIRECTOR)
@@ -245,45 +237,9 @@ class TestOrchestration:
         send(hc, TEAM_A, "edison", "alice", "Alice, please work on T0001")
         route_once(hc, TEAM_A)
 
-        # Orchestrator should want to spawn alice (unread inbox)
-        spawned = []
-        orchestrate_once(hc, TEAM_A, spawn_fn=lambda h, t, a: spawned.append(a))
-        assert "alice" in spawned
-
-        # Also check events were logged
-        events = get_messages(hc, TEAM_A, msg_type="event")
-        assert any("Paging Alice" in e["content"] for e in events)
-
-    def test_concurrency_limit_respected(self, hc):
-        """Orchestrator respects max_concurrent across the team."""
-        # Give all 4 agents (edison, alice, bob, sarah) messages
-        for agent in ["edison", "alice", "bob", "sarah"]:
-            deliver(hc, TEAM_A, Message(
-                sender=DIRECTOR, recipient=agent,
-                time="2026-02-08T12:00:00Z", body=f"Work, {agent}!",
-            ))
-
-        spawned = []
-        orchestrate_once(
-            hc, TEAM_A, max_concurrent=2,
-            spawn_fn=lambda h, t, a: spawned.append(a),
-        )
-        assert len(spawned) <= 2
-
-    def test_running_agent_not_double_spawned(self, hc):
-        """An agent with a live PID is not spawned again."""
-        send(hc, TEAM_A, "edison", "alice", "More work")
-        route_once(hc, TEAM_A)
-
-        # Simulate alice already running
-        state_file = agent_dir(hc, TEAM_A, "alice") / "state.yaml"
-        state = yaml.safe_load(state_file.read_text()) or {}
-        state["pid"] = os.getpid()  # current PID, definitely alive
-        state_file.write_text(yaml.dump(state, default_flow_style=False))
-
-        spawned = []
-        orchestrate_once(hc, TEAM_A, spawn_fn=lambda h, t, a: spawned.append(a))
-        assert "alice" not in spawned
+        # Runtime should detect alice needs a turn (unread inbox)
+        candidates = agents_with_unread(hc, TEAM_A)
+        assert "alice" in candidates
 
 
 # ---------------------------------------------------------------------------

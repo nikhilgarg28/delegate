@@ -787,7 +787,7 @@ def print_judge_results(results: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Eval runner orchestration (T0031)
+# Eval runner (T0031)
 # ---------------------------------------------------------------------------
 
 
@@ -994,16 +994,28 @@ def _run_daemon_loop(
     max_concurrent: int = 3,
     token_budget: int | None = None,
 ) -> None:
-    """Run the daemon loop (router + orchestrator) in a thread.
+    """Run the daemon loop (router + runtime dispatcher) in a thread.
 
     This replicates the logic from delegate/web.py:_daemon_loop but runs
-    synchronously in a thread instead of as an async task.
+    in a thread with its own event loop instead of as an async task.
     """
+    import asyncio as _asyncio
     from delegate.router import route_once
-    from delegate.orchestrator import orchestrate_once, spawn_agent_subprocess
+    from delegate.runtime import run_turn, agents_with_unread
 
-    def _spawn(h: Path, t: str, a: str) -> None:
-        spawn_agent_subprocess(h, t, a, token_budget=token_budget)
+    loop = _asyncio.new_event_loop()
+    sem = _asyncio.Semaphore(max_concurrent)
+    in_flight: set[str] = set()
+
+    async def _dispatch(agent: str) -> None:
+        key = f"{team}/{agent}"
+        async with sem:
+            try:
+                await run_turn(hc_home, team, agent)
+            except Exception:
+                logger.exception("Turn error | agent=%s", agent)
+            finally:
+                in_flight.discard(key)
 
     logger.info("Eval daemon loop started — polling every %.1fs", interval)
 
@@ -1013,18 +1025,17 @@ def _run_daemon_loop(
             if routed > 0:
                 logger.info("Routed %d message(s)", routed)
 
-            spawned = orchestrate_once(
-                hc_home, team,
-                max_concurrent=max_concurrent,
-                spawn_fn=_spawn,
-            )
-            if spawned:
-                logger.info("Spawned agents: %s", ", ".join(spawned))
+            for agent in agents_with_unread(hc_home, team):
+                key = f"{team}/{agent}"
+                if key not in in_flight:
+                    in_flight.add(key)
+                    loop.run_until_complete(_dispatch(agent))
         except Exception:
             logger.exception("Error during eval daemon cycle")
 
         stop_event.wait(timeout=interval)
 
+    loop.close()
     logger.info("Eval daemon loop stopped")
 
 
@@ -1164,7 +1175,7 @@ def run_eval(
         )
         logger.info("Sim-boss started")
 
-        # 7. Start the daemon (router + orchestrator) in a background thread
+        # 7. Start the daemon (router + runtime) in a background thread
         daemon_stop = threading.Event()
         daemon_thread = threading.Thread(
             target=_run_daemon_loop,

@@ -318,7 +318,7 @@ def recent_processed(
 def has_unread(hc_home: Path, team: str, agent: str) -> bool:
     """Check if an agent has any unread delivered messages.
 
-    Fast path for the orchestrator — avoids fetching full message content.
+    Fast path for the runtime — avoids fetching full message content.
     """
     conn = get_connection(hc_home, team)
     try:
