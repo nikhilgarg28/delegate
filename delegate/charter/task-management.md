@@ -15,6 +15,7 @@ python -m delegate.task status <home> <task_id> <new_status>
 python -m delegate.task attach <home> <task_id> <file_path>
 python -m delegate.task detach <home> <task_id> <file_path>
 python -m delegate.task comment <home> <team> <task_id> <your_name> "<body>"
+python -m delegate.task cancel <home> <team> <task_id>
 ```
 
 Statuses: `todo` → `in_progress` → `in_review` → `in_approval` → `merging` → `done`. Also: `rejected` (→ `in_progress`), `merge_failed` (→ `in_progress` or retry → `in_approval`), `cancelled` (terminal — boss can cancel from any non-terminal state).
@@ -74,6 +75,18 @@ When to add a comment:
 
 Do NOT repeat task comments in messages. Instead, add a comment and send a brief
 message referencing the task (e.g., "Added specs to T0003 comments").
+
+## Cancellation
+
+If the manager tells you a task has been cancelled:
+1. Stop any work on it immediately.
+2. Run `python -m delegate.task cancel <home> <team> <task_id>` to clean
+   up worktrees and branches. This is safe to run multiple times — it
+   re-runs cleanup idempotently in case branches or directories were
+   recreated.
+3. Acknowledge the cancellation briefly to the manager.
+
+Only the manager cancels tasks, and only when the boss requests it.
 
 ## Completion
 
