@@ -36,6 +36,7 @@ class Message:
     delivered_at: str | None = None
     seen_at: str | None = None
     processed_at: str | None = None
+    task_id: int | None = None
 
     def serialize(self) -> str:
         """Serialize message to the legacy file format (used in tests/logs)."""
@@ -74,6 +75,7 @@ def _row_to_message(row) -> Message:
         delivered_at=row["delivered_at"],
         seen_at=row["seen_at"],
         processed_at=row["processed_at"],
+        task_id=row["task_id"] if "task_id" in row.keys() else None,
     )
 
 

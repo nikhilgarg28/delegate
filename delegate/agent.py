@@ -44,10 +44,11 @@ DEFAULT_IDLE_TIMEOUT = 600
 CONTEXT_MSGS_SAME_SENDER = 5   # from the primary sender of the new message
 CONTEXT_MSGS_OTHERS = 3         # most recent from anyone else
 
-# Maximum unread messages to include in a single turn.  The agent is told to
-# act on ALL of them, and ALL are marked processed after the turn completes.
-# Any remaining messages are queued for the next turn.
-MAX_MESSAGES_PER_TURN = 3
+# Maximum unread messages to include in a single turn.  Only messages sharing
+# the same task_id as the first unread message are batched together (preserving
+# the invariant of one task per agent turn).  ALL included messages are marked
+# processed after the turn completes.
+MAX_MESSAGES_PER_TURN = 5
 
 # Model mapping by seniority
 SENIORITY_MODELS = {
@@ -760,8 +761,19 @@ def build_user_message(
 
     # --- Recent conversation history (processed messages for context) ---
     all_unread = read_inbox(hc_home, team, agent, unread_only=True)
-    # Take at most K messages for this turn
-    messages = all_unread[:MAX_MESSAGES_PER_TURN]
+    # Take at most K messages that share the same task_id as the first message.
+    # This preserves the invariant: one task per agent turn.
+    if all_unread:
+        first_task_id = all_unread[0].task_id
+        messages = []
+        for msg in all_unread:
+            if msg.task_id != first_task_id:
+                continue
+            messages.append(msg)
+            if len(messages) >= MAX_MESSAGES_PER_TURN:
+                break
+    else:
+        messages = []
     remaining = len(all_unread) - len(messages)
 
     if messages:
