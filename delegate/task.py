@@ -48,7 +48,7 @@ _TASK_FIELDS = frozenset({
     "project", "priority", "repo", "tags", "created_at", "updated_at",
     "completed_at", "depends_on", "branch", "base_sha", "commits",
     "rejection_reason", "approval_status", "merge_base", "merge_tip",
-    "attachments",
+    "attachments", "review_attempt",
 })
 
 
@@ -315,7 +315,28 @@ def change_status(hc_home: Path, team: str, task_id: int, status: str) -> dict:
     if status in ("in_review", "in_approval"):
         _backfill_branch_metadata(hc_home, team, old_task, updates)
 
+    # When entering in_approval, increment review_attempt, create a pending
+    # review row, and clear stale task-level approval fields.
+    if status == "in_approval":
+        new_attempt = old_task.get("review_attempt", 0) + 1
+        updates["review_attempt"] = new_attempt
+        # Clear stale task-level fields so they don't ghost from prior attempts
+        updates["approval_status"] = ""
+        updates["rejection_reason"] = ""
+
     task = update_task(hc_home, team, task_id, **updates)
+
+    # Create the pending review row after the task is updated
+    if status == "in_approval":
+        import logging as _logging
+        from delegate.review import create_review
+        try:
+            create_review(hc_home, team, task_id, task["review_attempt"])
+        except Exception:
+            _logging.getLogger(__name__).warning(
+                "Failed to create review row for %s attempt %d",
+                format_task_id(task_id), task.get("review_attempt", 0),
+            )
 
     new_status = status.replace("_", " ").title()
     from delegate.chat import log_event

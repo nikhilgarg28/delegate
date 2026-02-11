@@ -383,11 +383,69 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
         return _get_commit_diffs(hc_home, team, task_id)
 
+    # --- Review endpoints (team-scoped) ---
+
+    @app.get("/teams/{team}/tasks/{task_id}/reviews")
+    def get_task_reviews(team: str, task_id: int):
+        """Return all review attempts for a task."""
+        from delegate.review import get_reviews, get_comments
+        try:
+            _get_task(hc_home, team, task_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        reviews = get_reviews(hc_home, team, task_id)
+        for r in reviews:
+            r["comments"] = get_comments(hc_home, team, task_id, r["attempt"])
+        return reviews
+
+    @app.get("/teams/{team}/tasks/{task_id}/reviews/current")
+    def get_task_current_review(team: str, task_id: int):
+        """Return the current (latest) review attempt with comments."""
+        from delegate.review import get_current_review
+        try:
+            _get_task(hc_home, team, task_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        review = get_current_review(hc_home, team, task_id)
+        if review is None:
+            return {"attempt": 0, "verdict": None, "summary": "", "comments": []}
+        return review
+
+    class ReviewCommentBody(BaseModel):
+        file: str
+        line: int | None = None
+        body: str
+
+    @app.post("/teams/{team}/tasks/{task_id}/reviews/comments")
+    def post_review_comment(team: str, task_id: int, comment: ReviewCommentBody):
+        """Add an inline comment to the current review attempt."""
+        from delegate.review import add_comment
+        try:
+            task = _get_task(hc_home, team, task_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+        attempt = task.get("review_attempt", 0)
+        if attempt == 0:
+            raise HTTPException(status_code=400, detail="Task has no active review attempt.")
+
+        boss_name = get_boss(hc_home) or "boss"
+        result = add_comment(
+            hc_home, team, task_id, attempt,
+            file=comment.file, body=comment.body, author=boss_name,
+            line=comment.line,
+        )
+        return result
+
     # --- Task approval endpoints (team-scoped) ---
 
+    class ApproveBody(BaseModel):
+        summary: str = ""
+
     @app.post("/teams/{team}/tasks/{task_id}/approve")
-    def approve_task(team: str, task_id: int):
+    def approve_task(team: str, task_id: int, body: ApproveBody | None = None):
         """Approve a task for merge."""
+        from delegate.review import set_verdict
         try:
             task = _get_task(hc_home, team, task_id)
         except FileNotFoundError:
@@ -399,6 +457,14 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 detail=f"Cannot approve task in '{task['status']}' status. Task must be in 'in_approval' status.",
             )
 
+        # Record verdict on the reviews table (source of truth)
+        attempt = task.get("review_attempt", 0)
+        boss_name = get_boss(hc_home) or "boss"
+        summary = body.summary if body else ""
+        if attempt > 0:
+            set_verdict(hc_home, team, task_id, attempt, "approved", summary=summary, reviewer=boss_name)
+
+        # Task-level approval_status kept for merge.py compat (will be removed)
         updated = _update_task(hc_home, team, task_id, approval_status="approved")
         _log_event(hc_home, team, f"{format_task_id(task_id)} approved \u2713")
         return updated
@@ -409,19 +475,25 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     @app.post("/teams/{team}/tasks/{task_id}/reject")
     def reject_task(team: str, task_id: int, body: RejectBody):
         """Reject a task with a reason."""
+        from delegate.review import set_verdict
         try:
             task = _get_task(hc_home, team, task_id)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
         try:
-            updated = _change_status(hc_home, team, task_id, "rejected")
+            _change_status(hc_home, team, task_id, "rejected")
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        updated = _update_task(hc_home, team, task_id,
-                               rejection_reason=body.reason,
-                               approval_status="rejected")
+        # Record verdict on the reviews table (source of truth)
+        attempt = task.get("review_attempt", 0)
+        boss_name = get_boss(hc_home) or "boss"
+        if attempt > 0:
+            set_verdict(hc_home, team, task_id, attempt, "rejected", summary=body.reason, reviewer=boss_name)
+
+        # Re-read task after status change (change_status clears approval fields)
+        updated = _get_task(hc_home, team, task_id)
 
         # Send notification to manager via the notify module
         from delegate.notify import notify_rejection
@@ -505,13 +577,19 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
     @app.post("/tasks/{task_id}/approve")
-    def approve_task_global(task_id: int):
+    def approve_task_global(task_id: int, body: ApproveBody | None = None):
         """Approve task — scans all teams (legacy compat)."""
+        from delegate.review import set_verdict
         for t in _list_teams(hc_home):
             try:
                 task = _get_task(hc_home, t, task_id)
                 if task["status"] != "in_approval":
                     raise HTTPException(status_code=400, detail=f"Cannot approve task in '{task['status']}' status.")
+                attempt = task.get("review_attempt", 0)
+                boss_name = get_boss(hc_home) or "boss"
+                summary = body.summary if body else ""
+                if attempt > 0:
+                    set_verdict(hc_home, t, task_id, attempt, "approved", summary=summary, reviewer=boss_name)
                 updated = _update_task(hc_home, t, task_id, approval_status="approved")
                 _log_event(hc_home, t, f"{format_task_id(task_id)} approved \u2713")
                 return updated
@@ -522,11 +600,16 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     @app.post("/tasks/{task_id}/reject")
     def reject_task_global(task_id: int, body: RejectBody):
         """Reject task — scans all teams (legacy compat)."""
+        from delegate.review import set_verdict
         for t in _list_teams(hc_home):
             try:
                 task = _get_task(hc_home, t, task_id)
+                attempt = task.get("review_attempt", 0)
+                boss_name = get_boss(hc_home) or "boss"
+                if attempt > 0:
+                    set_verdict(hc_home, t, task_id, attempt, "rejected", summary=body.reason, reviewer=boss_name)
                 _change_status(hc_home, t, task_id, "rejected")
-                updated = _update_task(hc_home, t, task_id, rejection_reason=body.reason, approval_status="rejected")
+                updated = _get_task(hc_home, t, task_id)
                 from delegate.notify import notify_rejection
                 notify_rejection(hc_home, t, task, reason=body.reason)
                 _log_event(hc_home, t, f"{format_task_id(task_id)} rejected \u2014 {body.reason}")

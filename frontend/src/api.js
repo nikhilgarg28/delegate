@@ -57,10 +57,21 @@ export async function fetchTaskStats(team, taskId) {
   return r.ok ? r.json() : null;
 }
 
-export async function approveTask(team, taskId) {
+export async function fetchCurrentReview(team, taskId) {
+  const r = await fetch(`/teams/${team}/tasks/${taskId}/reviews/current`);
+  return r.ok ? r.json() : { attempt: 0, verdict: null, summary: "", comments: [] };
+}
+
+export async function fetchReviews(team, taskId) {
+  const r = await fetch(`/teams/${team}/tasks/${taskId}/reviews`);
+  return r.ok ? r.json() : [];
+}
+
+export async function approveTask(team, taskId, summary) {
   const r = await fetch(`/teams/${team}/tasks/${taskId}/approve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ summary: summary || "" }),
   });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));

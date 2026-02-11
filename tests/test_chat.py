@@ -25,7 +25,7 @@ class TestSchema:
         cursor = conn.execute("PRAGMA table_info(messages)")
         columns = {row[1] for row in cursor.fetchall()}
         conn.close()
-        assert columns == {"id", "timestamp", "sender", "recipient", "content", "type"}
+        assert columns == {"id", "timestamp", "sender", "recipient", "content", "type", "task_id"}
 
     def test_sessions_table_exists(self, tmp_team):
         conn = sqlite3.connect(str(_db_path(tmp_team, TEAM)))

@@ -481,7 +481,8 @@ class TestMergeOnce:
         assert results[0].success is True
 
     def test_manual_approved_processes(self, hc_home, tmp_path):
-        """Manual tasks with approval_status='approved' should be processed."""
+        """Manual tasks with approved review verdict should be processed."""
+        from delegate.review import set_verdict
         repo = _setup_git_repo(tmp_path)
         _make_feature_branch(repo, "alice/T0001")
 
@@ -492,7 +493,9 @@ class TestMergeOnce:
         add_repo(hc_home, SAMPLE_TEAM, "myrepo", str(repo), approval="manual")
 
         task = _make_in_approval_task(hc_home, repo="myrepo", branch="alice/T0001")
-        update_task(hc_home, SAMPLE_TEAM, task["id"], approval_status="approved")
+        # Approve via reviews table (source of truth for merge_once)
+        attempt = task.get("review_attempt", 1)
+        set_verdict(hc_home, SAMPLE_TEAM, task["id"], attempt, "approved", reviewer="boss")
 
         results = merge_once(hc_home, SAMPLE_TEAM)
         assert len(results) == 1

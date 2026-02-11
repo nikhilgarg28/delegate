@@ -124,7 +124,7 @@ def test_db_schema_created(tmp_team):
 
     cursor = conn.execute("PRAGMA table_info(messages)")
     msg_columns = {row[1] for row in cursor.fetchall()}
-    assert msg_columns == {"id", "timestamp", "sender", "recipient", "content", "type"}
+    assert msg_columns == {"id", "timestamp", "sender", "recipient", "content", "type", "task_id"}
 
     cursor = conn.execute("PRAGMA table_info(sessions)")
     sess_columns = {row[1] for row in cursor.fetchall()}

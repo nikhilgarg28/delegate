@@ -30,16 +30,19 @@ function LinkedDiv({ html, class: cls, style }) {
 }
 
 // ── Approval Badge (Details tab) ──
-function ApprovalBadge({ task }) {
-  const { status, approval_status, rejection_reason } = task;
-  if (status === "done" || approval_status === "approved") {
+function ApprovalBadge({ task, review }) {
+  const { status } = task;
+  const verdict = review ? review.verdict : null;
+  const summary = review ? review.summary : "";
+
+  if (status === "done" || verdict === "approved") {
     return <div class="task-approval-status"><div class="approval-badge approval-badge-approved">&#10004; Approved &amp; Merged</div></div>;
   }
-  if (status === "rejected" || approval_status === "rejected") {
+  if (status === "rejected" || verdict === "rejected") {
     return (
       <div class="task-approval-status">
         <div class="approval-badge approval-badge-rejected">&#10006; Rejected</div>
-        {rejection_reason && <div class="approval-rejection-reason">{rejection_reason}</div>}
+        {summary && <div class="approval-rejection-reason">{summary}</div>}
       </div>
     );
   }
@@ -63,20 +66,22 @@ function ApprovalBadge({ task }) {
 let setTabFromBadge = null;
 
 // ── Approval Actions (Changes tab) ──
-function ApprovalActions({ task, onApproved, onRejected }) {
+function ApprovalActions({ task, review, onApproved, onRejected }) {
   const [loading, setLoading] = useState(false);
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [result, setResult] = useState(null); // "approved" | "rejected" | null
   const inputRef = useRef();
 
-  const { status, approval_status, rejection_reason } = task;
+  const { status } = task;
+  const verdict = review ? review.verdict : null;
+  const summary = review ? review.summary : "";
 
-  if (status === "done" || approval_status === "approved" || result === "approved") {
+  if (status === "done" || verdict === "approved" || result === "approved") {
     return <div class="task-review-box task-review-box-approved"><div class="approval-badge approval-badge-approved">&#10004; Approved &amp; Merged</div></div>;
   }
-  if (status === "rejected" || approval_status === "rejected" || result === "rejected") {
-    const reason = result === "rejected" ? rejectReason : rejection_reason;
+  if (status === "rejected" || verdict === "rejected" || result === "rejected") {
+    const reason = result === "rejected" ? rejectReason : summary;
     return (
       <div class="task-review-box task-review-box-rejected">
         <div class="approval-badge approval-badge-rejected">&#10006; Changes Rejected</div>
@@ -342,6 +347,7 @@ export function TaskSidePanel() {
 
   const [task, setTask] = useState(null);
   const [stats, setStats] = useState(null);
+  const [review, setReview] = useState(null);
   const [activeTabLocal, setActiveTabLocal] = useState("details");
   const [diffRaw, setDiffRaw] = useState("");
   const [diffLoaded, setDiffLoaded] = useState(false);
@@ -355,11 +361,12 @@ export function TaskSidePanel() {
 
   // Load task data when panel opens
   useEffect(() => {
-    if (id === null || !team) { setTask(null); return; }
+    if (id === null || !team) { setTask(null); setReview(null); return; }
     setActiveTabLocal("details");
     setDiffRaw("");
     setDiffLoaded(false);
     setDiffTab("files");
+    setReview(null);
 
     // Find task from cached list first
     const cached = allTasks.find(t => t.id === id);
@@ -375,6 +382,11 @@ export function TaskSidePanel() {
       try {
         const s = await api.fetchTaskStats(team, id);
         setStats(s);
+      } catch (e) { }
+      // Fetch current review from the reviews table (source of truth)
+      try {
+        const r = await api.fetchCurrentReview(team, id);
+        setReview(r);
       } catch (e) { }
     })();
   }, [id, team]);
@@ -435,11 +447,11 @@ export function TaskSidePanel() {
             <>
               {/* Details tab */}
               <div style={{ display: activeTabLocal === "details" ? "" : "none" }}>
-                <DetailsTab task={t} stats={stats} />
+                <DetailsTab task={t} stats={stats} review={review} />
               </div>
               {/* Changes tab */}
               <div style={{ display: activeTabLocal === "changes" ? "" : "none" }}>
-                <ChangesTab task={t} stats={stats} diffRaw={diffRaw} diffTab={diffTab} setDiffTab={setDiffTab} onApproved={handleApproved} />
+                <ChangesTab task={t} stats={stats} review={review} diffRaw={diffRaw} diffTab={diffTab} setDiffTab={setDiffTab} onApproved={handleApproved} />
               </div>
             </>
           )}
@@ -451,7 +463,7 @@ export function TaskSidePanel() {
 }
 
 // ── Details tab content ──
-function DetailsTab({ task, stats }) {
+function DetailsTab({ task, stats, review }) {
   const t = task;
   const descHtml = t.description ? linkifyFilePaths(linkifyTaskRefs(renderMarkdown(t.description))) : "";
 
@@ -530,13 +542,13 @@ function DetailsTab({ task, stats }) {
       {/* Activity */}
       <ActivitySection taskId={t.id} task={t} />
       {/* Approval badge */}
-      <ApprovalBadge task={t} />
+      <ApprovalBadge task={t} review={review} />
     </div>
   );
 }
 
 // ── Changes tab content ──
-function ChangesTab({ task, stats, diffRaw, diffTab, setDiffTab, onApproved }) {
+function ChangesTab({ task, stats, review, diffRaw, diffTab, setDiffTab, onApproved }) {
   const t = task;
 
   return (
@@ -574,7 +586,7 @@ function ChangesTab({ task, stats, diffRaw, diffTab, setDiffTab, onApproved }) {
       {/* Diff */}
       <DiffContent diffRaw={diffRaw} taskId={t.id} diffTab={diffTab} setDiffTab={setDiffTab} />
       {/* Approval actions */}
-      <ApprovalActions task={t} onApproved={onApproved} onRejected={onApproved} />
+      <ApprovalActions task={t} review={review} onApproved={onApproved} onRejected={onApproved} />
     </div>
   );
 }

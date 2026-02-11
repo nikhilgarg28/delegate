@@ -89,6 +89,7 @@ class TestRejectNotification:
         assert msg.sender == "nikhil"
 
     def test_reject_sets_approval_status(self, tmp_team, client):
+        from delegate.review import get_current_review
         task = _task_to_in_approval(tmp_team)
         resp = client.post(
             f"/teams/{TEAM}/tasks/{task['id']}/reject",
@@ -96,8 +97,11 @@ class TestRejectNotification:
         )
         data = resp.json()
         assert data["status"] == "rejected"
-        assert data["approval_status"] == "rejected"
-        assert data["rejection_reason"] == "Needs work"
+        # Verdict is now in the reviews table, not on the task
+        review = get_current_review(tmp_team, TEAM, task["id"])
+        assert review is not None
+        assert review["verdict"] == "rejected"
+        assert review["summary"] == "Needs work"
 
     def test_reject_returns_full_task_dict(self, tmp_team, client):
         task = _task_to_in_approval(tmp_team)

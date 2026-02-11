@@ -366,14 +366,17 @@ def merge_once(hc_home: Path, team: str) -> list[MergeResult]:
             result = merge_task(hc_home, team, task_id)
             results.append(result)
         elif approval_mode == "manual":
-            # Manual: only merge if boss has approved
-            if task.get("approval_status") == "approved":
+            # Manual: only merge if boss has approved (check reviews table)
+            from delegate.review import get_current_review
+            review = get_current_review(hc_home, team, task_id)
+            verdict = review.get("verdict") if review else None
+            if verdict == "approved":
                 result = merge_task(hc_home, team, task_id)
                 results.append(result)
             else:
                 logger.debug(
-                    "%s: needs boss approval (approval_status=%s)",
-                    task_id, task.get("approval_status", ""),
+                    "%s: needs boss approval (review verdict=%s)",
+                    task_id, verdict,
                 )
         else:
             logger.warning(

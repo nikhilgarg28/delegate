@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from delegate.task import create_task, change_status, get_task, update_task, format_task_id
+from delegate.review import get_current_review
 from delegate.web import create_app
 from delegate.mailbox import read_inbox
 
@@ -35,12 +36,11 @@ class TestApproveEndpoint:
     def test_approve_sets_approval_status(self, client, in_approval_task, tmp_team):
         resp = client.post(f"/teams/{TEAM}/tasks/{in_approval_task['id']}/approve")
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["approval_status"] == "approved"
 
-        # Verify persisted
-        loaded = get_task(tmp_team, TEAM, in_approval_task["id"])
-        assert loaded["approval_status"] == "approved"
+        # Verdict is now in the reviews table
+        review = get_current_review(tmp_team, TEAM, in_approval_task["id"])
+        assert review is not None
+        assert review["verdict"] == "approved"
 
     def test_approve_returns_full_task(self, client, in_approval_task):
         resp = client.post(f"/teams/{TEAM}/tasks/{in_approval_task['id']}/approve")
@@ -103,13 +103,14 @@ class TestRejectEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "rejected"
-        assert data["rejection_reason"] == "Code quality issues"
-        assert data["approval_status"] == "rejected"
 
-        # Verify persisted
+        # Verdict is now in the reviews table, not on the task
         loaded = get_task(tmp_team, TEAM, in_approval_task["id"])
         assert loaded["status"] == "rejected"
-        assert loaded["rejection_reason"] == "Code quality issues"
+        review = get_current_review(tmp_team, TEAM, in_approval_task["id"])
+        assert review is not None
+        assert review["verdict"] == "rejected"
+        assert review["summary"] == "Code quality issues"
 
     def test_reject_returns_full_task(self, client, in_approval_task):
         resp = client.post(
@@ -188,7 +189,8 @@ class TestApprovalWorkflow:
         client.post(f"/teams/{TEAM}/tasks/{in_approval_task['id']}/approve")
         loaded = get_task(tmp_team, TEAM, in_approval_task["id"])
         assert loaded["status"] == "in_approval"
-        assert loaded["approval_status"] == "approved"
+        review = get_current_review(tmp_team, TEAM, in_approval_task["id"])
+        assert review["verdict"] == "approved"
 
     def test_reject_then_rework_cycle(self, client, in_approval_task, tmp_team):
         """Full cycle: reject -> rework (in_progress) -> in_review -> in_approval."""
@@ -210,4 +212,5 @@ class TestApprovalWorkflow:
         # Approve this time
         resp = client.post(f"/teams/{TEAM}/tasks/{in_approval_task['id']}/approve")
         assert resp.status_code == 200
-        assert resp.json()["approval_status"] == "approved"
+        review = get_current_review(tmp_team, TEAM, in_approval_task["id"])
+        assert review["verdict"] == "approved"
