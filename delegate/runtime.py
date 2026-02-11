@@ -46,6 +46,22 @@ from delegate.task import format_task_id
 
 logger = logging.getLogger(__name__)
 
+# Tools that agents are never allowed to use.
+# Agents work in task-scoped worktrees and must not perform git operations
+# that alter branch topology or interact with remotes — the merge worker
+# handles rebasing and merging via controlled temporary branches.
+DISALLOWED_TOOLS = [
+    "Bash(git rebase:*)",
+    "Bash(git merge:*)",
+    "Bash(git pull:*)",
+    "Bash(git push:*)",
+    "Bash(git fetch:*)",
+    "Bash(git checkout:*)",
+    "Bash(git switch:*)",
+    "Bash(git reset --hard:*)",
+    "Bash(git worktree:*)",
+]
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -201,6 +217,7 @@ async def run_turn(
             cwd=str(workspace),
             permission_mode="bypassPermissions",
             add_dirs=[str(hc_home)],
+            disallowed_tools=DISALLOWED_TOOLS,
         )
         if model:
             kw["model"] = model
