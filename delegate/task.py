@@ -34,7 +34,7 @@ VALID_APPROVAL_STATUSES = ("", "pending", "approved", "rejected")
 VALID_TRANSITIONS = {
     "todo": {"in_progress"},
     "in_progress": {"in_review"},
-    "in_review": {"done", "in_approval", "in_progress"},
+    "in_review": {"in_approval", "in_progress"},
     "in_approval": {"merging", "rejected"},
     "merging": {"done", "conflict"},
     "rejected": {"in_progress"},

@@ -126,7 +126,7 @@ class TestAssignTask:
 @patch("delegate.task._validate_review_gate")
 class TestChangeStatus:
     def test_valid_transition_chain(self, _mock_gate, tmp_team):
-        """Test a full valid transition chain: todo -> in_progress -> in_review -> done."""
+        """Test a full valid transition chain: todo -> in_progress -> in_review -> in_approval -> merging -> done."""
         task = create_task(tmp_team, TEAM, title="Work", assignee="alice")
         assert task["status"] == "todo"
 
@@ -135,6 +135,12 @@ class TestChangeStatus:
 
         task = change_status(tmp_team, TEAM, task["id"], "in_review")
         assert task["status"] == "in_review"
+
+        task = change_status(tmp_team, TEAM, task["id"], "in_approval")
+        assert task["status"] == "in_approval"
+
+        task = change_status(tmp_team, TEAM, task["id"], "merging")
+        assert task["status"] == "merging"
 
         task = change_status(tmp_team, TEAM, task["id"], "done")
         assert task["status"] == "done"
@@ -170,6 +176,8 @@ class TestChangeStatus:
         task = create_task(tmp_team, TEAM, title="Work", assignee="alice")
         change_status(tmp_team, TEAM, task["id"], "in_progress")
         change_status(tmp_team, TEAM, task["id"], "in_review")
+        change_status(tmp_team, TEAM, task["id"], "in_approval")
+        change_status(tmp_team, TEAM, task["id"], "merging")
         change_status(tmp_team, TEAM, task["id"], "done")
         with pytest.raises(ValueError, match="terminal status"):
             change_status(tmp_team, TEAM, task["id"], "in_progress")
@@ -180,6 +188,8 @@ class TestChangeStatus:
 
         change_status(tmp_team, TEAM, task["id"], "in_progress")
         change_status(tmp_team, TEAM, task["id"], "in_review")
+        change_status(tmp_team, TEAM, task["id"], "in_approval")
+        change_status(tmp_team, TEAM, task["id"], "merging")
         updated = change_status(tmp_team, TEAM, task["id"], "done")
         assert updated["completed_at"] != ""
         assert updated["completed_at"].startswith("20")
@@ -269,6 +279,14 @@ class TestChangeStatus:
         change_status(tmp_team, TEAM, task["id"], "conflict")
         updated = change_status(tmp_team, TEAM, task["id"], "in_progress")
         assert updated["status"] == "in_progress"
+
+    def test_in_review_cannot_go_to_done_directly(self, _mock_gate, tmp_team):
+        """in_review -> done is no longer valid (must go through in_approval → merging)."""
+        task = create_task(tmp_team, TEAM, title="Work", assignee="alice")
+        change_status(tmp_team, TEAM, task["id"], "in_progress")
+        change_status(tmp_team, TEAM, task["id"], "in_review")
+        with pytest.raises(ValueError, match="Invalid transition"):
+            change_status(tmp_team, TEAM, task["id"], "done")
 
 
 class TestListTasks:
