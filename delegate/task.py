@@ -613,30 +613,68 @@ def _diff_for_one_repo(git_cwd: str, branch: str, task: dict, repo_key: str) -> 
     return "(no diff available)"
 
 
+def _discover_commits(git_cwd: str, branch: str, base_sha: str) -> list[str]:
+    """Discover commit SHAs on *branch* since *base_sha* via ``git log``.
+
+    Returns a list of SHAs in chronological order (oldest first).
+    If *base_sha* is empty, falls back to ``main..branch``.
+    """
+    range_spec = f"{base_sha}..{branch}" if base_sha else f"main..{branch}"
+    try:
+        result = subprocess.run(
+            ["git", "log", "--reverse", "--format=%H", range_spec],
+            capture_output=True, text=True, timeout=15, cwd=git_cwd,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip().splitlines()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+    return []
+
+
 def get_task_commit_diffs(
     hc_home: Path, team: str, task_id: int,
-) -> list[dict]:
-    """Return per-commit diffs for a task.
+) -> dict[str, list[dict]]:
+    """Return per-commit diffs for a task, keyed by repo name.
 
-    Returns a list of ``{"sha": str, "repo": str, "message": str, "diff": str}``
-    entries, one per commit, ordered chronologically.
+    Returns ``{repo_name: [{"sha": str, "message": str, "diff": str}, ...]}``.
+    Commits are discovered from ``git log`` when the task's ``commits`` field is
+    empty (the common case, since agents commit via tools and the SHAs are not
+    explicitly recorded on the task object).
     """
     task = get_task(hc_home, team, task_id)
     commits_dict: dict = task.get("commits", {})
     repos: list[str] = task.get("repo", [])
+    branch: str = task.get("branch", "")
+    base_sha_dict: dict = task.get("base_sha", {})
 
     from delegate.paths import repo_path as _repo_path
 
-    results: list[dict] = []
-    for repo_name, shas in commits_dict.items():
-        if not shas:
-            continue
+    results: dict[str, list[dict]] = {}
+
+    # Build the set of repos to inspect
+    repo_names: list[str] = []
+    if commits_dict:
+        repo_names = list(commits_dict.keys())
+    elif repos:
+        repo_names = list(repos)
+
+    for repo_name in repo_names:
+        shas = list(commits_dict.get(repo_name, []))
         try:
             git_cwd = str(_repo_path(hc_home, team, repo_name))
         except FileNotFoundError:
-            for sha in shas:
-                results.append({"sha": sha, "repo": repo_name, "message": "", "diff": f"(repo '{repo_name}' not found)"})
+            entries = [{"sha": sha, "message": "", "diff": f"(repo '{repo_name}' not found)"} for sha in shas]
+            if entries:
+                results[repo_name] = entries
             continue
+
+        # If no commits recorded, discover them from git log
+        if not shas and branch:
+            base_sha = base_sha_dict.get(repo_name, "")
+            shas = _discover_commits(git_cwd, branch, base_sha)
+
+        repo_results: list[dict] = []
         for sha in shas:
             msg = ""
             diff = ""
@@ -665,7 +703,9 @@ def get_task_commit_diffs(
                         diff = show_result.stdout
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 diff = "(failed to compute diff)"
-            results.append({"sha": sha, "repo": repo_name, "message": msg, "diff": diff or "(empty diff)"})
+            repo_results.append({"sha": sha, "message": msg, "diff": diff or "(empty diff)"})
+        if repo_results:
+            results[repo_name] = repo_results
     return results
 
 

@@ -452,12 +452,12 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
     @app.get("/teams/{team}/tasks/{task_id}/commits")
     def get_team_task_commits(team: str, task_id: int):
-        """Return per-commit diffs for a task."""
+        """Return per-commit diffs for a task, keyed by repo."""
         try:
             _get_task(hc_home, team, task_id)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-        return _get_commit_diffs(hc_home, team, task_id)
+        return {"commit_diffs": _get_commit_diffs(hc_home, team, task_id)}
 
     # --- Review endpoints (team-scoped) ---
 
