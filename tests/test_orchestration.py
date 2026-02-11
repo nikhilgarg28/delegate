@@ -116,8 +116,8 @@ async def _mock_query(prompt: str, options=None):
 
 
 class TestRunTurn:
-    @patch("delegate.runtime._check_reflection_due", return_value=False)
-    def test_processes_message_and_marks_processed(self, _mock_ref, tmp_team):
+    @patch("delegate.runtime.random.random", return_value=1.0)  # no reflection
+    def test_processes_message_and_marks_processed(self, _mock_rng, tmp_team):
         """run_turn should process the oldest unread message and mark it."""
         _deliver_msg(tmp_team, "alice", body="Please do task 1")
 
@@ -141,9 +141,9 @@ class TestRunTurn:
         remaining = agents_with_unread(tmp_team, TEAM)
         assert "alice" not in remaining
 
-    @patch("delegate.runtime._check_reflection_due", return_value=False)
-    def test_no_messages_still_runs(self, _mock_ref, tmp_team):
-        """run_turn with no unread messages should still complete without error."""
+    @patch("delegate.runtime.random.random", return_value=1.0)
+    def test_no_messages_returns_early(self, _mock_rng, tmp_team):
+        """run_turn with no unread messages should return early with no turns."""
         result = asyncio.run(
             run_turn(
                 tmp_team, TEAM, "alice",
@@ -153,10 +153,10 @@ class TestRunTurn:
         )
 
         assert result.error is None
-        assert result.turns >= 1
+        assert result.turns == 0  # no messages → early return
 
-    @patch("delegate.runtime._check_reflection_due", return_value=False)
-    def test_sdk_error_captured(self, _mock_ref, tmp_team):
+    @patch("delegate.runtime.random.random", return_value=1.0)
+    def test_sdk_error_captured(self, _mock_rng, tmp_team):
         """If the SDK query fails, the error is captured in TurnResult."""
         _deliver_msg(tmp_team, "alice")
 
@@ -175,8 +175,8 @@ class TestRunTurn:
         assert result.error is not None
         assert "SDK connection failed" in result.error
 
-    @patch("delegate.runtime._check_reflection_due", return_value=False)
-    def test_worklog_written(self, _mock_ref, tmp_team):
+    @patch("delegate.runtime.random.random", return_value=1.0)
+    def test_worklog_written(self, _mock_rng, tmp_team):
         """run_turn should write a worklog file."""
         _deliver_msg(tmp_team, "alice")
 
@@ -193,8 +193,8 @@ class TestRunTurn:
         worklogs = list(logs_dir.glob("*.worklog.md"))
         assert len(worklogs) >= 1
 
-    @patch("delegate.runtime._check_reflection_due", return_value=False)
-    def test_session_created_in_db(self, _mock_ref, tmp_team):
+    @patch("delegate.runtime.random.random", return_value=1.0)
+    def test_session_created_in_db(self, _mock_rng, tmp_team):
         """run_turn should create a session in the database."""
         _deliver_msg(tmp_team, "alice")
 
@@ -208,8 +208,8 @@ class TestRunTurn:
 
         assert result.session_id > 0
 
-    @patch("delegate.runtime._check_reflection_due", return_value=False)
-    def test_context_md_saved(self, _mock_ref, tmp_team):
+    @patch("delegate.runtime.random.random", return_value=1.0)
+    def test_context_md_saved(self, _mock_rng, tmp_team):
         """run_turn should save context.md for the next session."""
         _deliver_msg(tmp_team, "alice")
 
@@ -227,8 +227,8 @@ class TestRunTurn:
         text = context.read_text()
         assert "Last session:" in text
 
-    @patch("delegate.runtime._check_reflection_due", return_value=False)
-    def test_cache_tokens_tracked(self, _mock_ref, tmp_team):
+    @patch("delegate.runtime.random.random", return_value=1.0)
+    def test_cache_tokens_tracked(self, _mock_rng, tmp_team):
         """run_turn should track cache_read and cache_write tokens."""
         _deliver_msg(tmp_team, "alice", body="Work on this")
 
@@ -243,8 +243,8 @@ class TestRunTurn:
         assert result.cache_read == 20
         assert result.cache_write == 10
 
-    @patch("delegate.runtime._check_reflection_due", return_value=True)
-    def test_reflection_turn_runs_when_due(self, _mock_ref, tmp_team):
+    @patch("delegate.runtime.random.random", return_value=0.0)  # always reflect
+    def test_reflection_turn_runs_when_due(self, _mock_rng, tmp_team):
         """When reflection coin-flip lands, a second turn runs without marking mail."""
         _deliver_msg(tmp_team, "alice", body="Work on this")
 
@@ -263,3 +263,26 @@ class TestRunTurn:
         # Cache tokens should also be doubled
         assert result.cache_read == 40
         assert result.cache_write == 20
+
+    @patch("delegate.runtime.random.random", return_value=1.0)
+    def test_batch_same_task_id(self, _mock_rng, tmp_team):
+        """Messages with the same task_id should be batched together."""
+        # Deliver 3 messages with task_id=None (no --task flag)
+        _deliver_msg(tmp_team, "alice", body="Hello 1")
+        _deliver_msg(tmp_team, "alice", body="Hello 2")
+        _deliver_msg(tmp_team, "alice", body="Hello 3")
+
+        result = asyncio.run(
+            run_turn(
+                tmp_team, TEAM, "alice",
+                sdk_query=_mock_query,
+                sdk_options_class=_FakeOptions,
+            )
+        )
+
+        assert result.error is None
+        assert result.turns == 1
+
+        # All 3 messages should be processed (same task_id=None)
+        remaining = agents_with_unread(tmp_team, TEAM)
+        assert "alice" not in remaining

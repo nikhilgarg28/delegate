@@ -30,6 +30,12 @@ export const knownAgentNames = signal([]);
 // ── Chat filter direction ──
 export const chatFilterDirection = signal("one-way"); // "one-way" | "bidi"
 
+// ── Agent activity (live tool usage from SSE) ──
+// { agentName: { tool, detail, timestamp } } — last activity per agent
+export const agentLastActivity = signal({});
+// Full activity stream for the activity tab in agent side panel
+export const agentActivityLog = signal([]); // [{agent, tool, detail, timestamp}]
+
 // ── Computed helpers ──
 export const actionItems = computed(() => {
   const boss = bossName.value.toLowerCase();

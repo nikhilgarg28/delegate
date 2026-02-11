@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "preact/hooks";
 import {
   currentTeam, diffPanelMode, diffPanelTarget, taskPanelId,
+  agentActivityLog,
 } from "../state.js";
 import * as api from "../api.js";
 import {
@@ -69,26 +70,23 @@ function DiffView({ taskId }) {
 // ── Agent panel ──
 function AgentView({ agentName }) {
   const team = currentTeam.value;
-  const [tab, setTab] = useState("inbox");
+  const [tab, setTab] = useState("activity");
   const [tabData, setTabData] = useState({});
   const [role, setRole] = useState("");
+  const activityEndRef = useRef(null);
 
   useEffect(() => {
     if (!agentName || !team) return;
-    setTab("inbox"); setTabData({});
+    setTab("activity"); setTabData({});
     api.fetchAgents(team).then(agents => {
       const a = agents.find(x => x.name === agentName);
       if (a) setRole(cap(a.role));
-    }).catch(() => {});
-    // Load inbox immediately
-    api.fetchAgentTab(team, agentName, "inbox").then(d => {
-      setTabData(prev => ({ ...prev, inbox: d }));
     }).catch(() => {});
   }, [agentName, team]);
 
   const switchTab = useCallback((t) => {
     setTab(t);
-    if (!tabData[t]) {
+    if (t !== "activity" && !tabData[t]) {
       api.fetchAgentTab(team, agentName, t).then(d => {
         setTabData(prev => ({ ...prev, [t]: d }));
       }).catch(() => {});
@@ -185,7 +183,41 @@ function AgentView({ agentName }) {
     ));
   };
 
-  const TABS = ["inbox", "outbox", "logs", "reflections", "journal", "stats"];
+  // --- Activity tab (live SSE stream, tail -f style) ---
+  const renderActivity = () => {
+    const allEntries = agentActivityLog.value;
+    const entries = allEntries.filter(e => e.agent === agentName);
+
+    // Auto-scroll to bottom on new entries
+    useEffect(() => {
+      if (tab === "activity" && activityEndRef.current) {
+        activityEndRef.current.scrollIntoView({ behavior: "smooth" });
+      }
+    }, [entries.length, tab]);
+
+    if (!entries.length) {
+      return <div class="diff-empty">No activity yet — waiting for agent actions...</div>;
+    }
+
+    return (
+      <div class="agent-activity-log">
+        {entries.map((e, i) => {
+          const toolLower = (e.tool || "").toLowerCase();
+          const ts = e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : "";
+          return (
+            <div key={i} class="agent-activity-entry">
+              <span class="agent-activity-ts">{ts}</span>
+              <span class={"agent-activity-tool agent-activity-tool-" + toolLower}>{toolLower}</span>
+              <span class="agent-activity-detail" title={e.detail || ""}>{e.detail || ""}</span>
+            </div>
+          );
+        })}
+        <div ref={activityEndRef} />
+      </div>
+    );
+  };
+
+  const TABS = ["activity", "inbox", "outbox", "logs", "reflections", "journal", "stats"];
   const data = tabData[tab];
 
   return (
@@ -199,7 +231,8 @@ function AgentView({ agentName }) {
         ))}
       </div>
       <div class="diff-panel-body">
-        {data === undefined ? <div class="diff-empty">Loading...</div>
+        {tab === "activity" ? renderActivity()
+          : data === undefined ? <div class="diff-empty">Loading...</div>
           : tab === "inbox" ? renderInbox(data)
           : tab === "outbox" ? renderOutbox(data)
           : tab === "logs" ? renderLogs(data)

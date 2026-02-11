@@ -332,6 +332,47 @@ def recent_processed(
     return [_row_to_message(r) for r in reversed(rows)]
 
 
+def recent_conversation(
+    hc_home: Path,
+    team: str,
+    agent: str,
+    peer: str | None = None,
+    limit: int = 10,
+) -> list[Message]:
+    """Return recent bidirectional messages (sent AND received) for context.
+
+    When *peer* is specified, returns messages between *agent* and *peer*
+    (in either direction).  Otherwise returns all recent messages involving
+    *agent*.
+
+    Only processed incoming messages are included (unprocessed ones haven't
+    been acted on yet).  Outgoing messages are always included.
+
+    Results are in chronological order (oldest first).
+    """
+    conn = get_connection(hc_home, team)
+    try:
+        if peer:
+            rows = conn.execute(
+                "SELECT * FROM mailbox WHERE "
+                "((recipient = ? AND sender = ? AND processed_at IS NOT NULL) "
+                " OR (sender = ? AND recipient = ?)) "
+                "ORDER BY id DESC LIMIT ?",
+                (agent, peer, agent, peer, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM mailbox WHERE "
+                "(recipient = ? AND processed_at IS NOT NULL) "
+                "OR sender = ? "
+                "ORDER BY id DESC LIMIT ?",
+                (agent, agent, limit),
+            ).fetchall()
+    finally:
+        conn.close()
+    return [_row_to_message(r) for r in reversed(rows)]
+
+
 def has_unread(hc_home: Path, team: str, agent: str) -> bool:
     """Check if an agent has any unread delivered messages.
 

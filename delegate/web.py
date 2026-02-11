@@ -31,6 +31,7 @@ as asyncio tasks when agents have unread messages.
 import asyncio
 import base64
 import contextlib
+import json
 import logging
 import os
 import shutil
@@ -41,7 +42,7 @@ from pathlib import Path
 
 import yaml
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -893,6 +894,52 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                         content = content[-(50 * 1024):]
                     entries.append({"filename": f.name, "content": content})
         return {"entries": entries}
+
+    # --- Agent activity (ring buffer history + SSE stream) ---
+
+    @app.get("/teams/{team}/agents/{name}/activity")
+    def get_agent_activity(team: str, name: str, n: int = 100):
+        """Return the most recent activity entries for an agent."""
+        from delegate.activity import get_recent
+        return get_recent(name, n=n)
+
+    @app.get("/teams/{team}/activity/stream")
+    async def activity_stream(team: str):
+        """SSE endpoint streaming real-time agent activity events.
+
+        The client opens an ``EventSource`` to this URL and receives
+        ``data: {...}`` events for every tool invocation across all
+        agents on this team.
+        """
+        from delegate.activity import subscribe, unsubscribe
+
+        queue = subscribe()
+
+        async def _generate():
+            try:
+                # Send a ping immediately so the client knows the stream is alive
+                yield f"data: {json.dumps({'type': 'connected'})}\n\n"
+                while True:
+                    try:
+                        entry = await asyncio.wait_for(queue.get(), timeout=30.0)
+                        yield f"data: {json.dumps(entry)}\n\n"
+                    except asyncio.TimeoutError:
+                        # Send keepalive comment to prevent proxy/browser timeout
+                        yield ": keepalive\n\n"
+            except asyncio.CancelledError:
+                pass
+            finally:
+                unsubscribe(queue)
+
+        return StreamingResponse(
+            _generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     # --- Shared files endpoints ---
 

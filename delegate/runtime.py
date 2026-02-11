@@ -3,12 +3,17 @@
 The daemon dispatches ``run_turn()`` for each agent that has unread
 messages.  Each call:
 
-1. Reads unread inbox messages, builds prompt
-2. Calls ``claude_code_sdk.query()`` (spawns a short-lived ``claude`` process)
-3. Processes the response (tokens, worklogs)
-4. Marks the first unread message as processed
-5. Optionally runs a reflection follow-up (20% chance)
-6. Writes worklog, saves context, ends session
+1. Reads unread inbox messages and selects a batch of ≤5 messages that
+   share the same ``task_id`` as the first message.
+2. Marks the selected messages as *seen*.
+3. Resolves the task (if any) and all repo worktree paths.
+4. Builds the user message with bidirectional conversation history,
+   task context, and the selected messages.
+5. Calls ``claude_code_sdk.query()`` — streaming tool summaries to the
+   in-memory ring buffer, SSE subscribers, and the worklog.
+6. Marks ALL selected messages as *processed*.
+7. Optionally runs a reflection follow-up (1-in-10 coin flip).
+8. Finalises the session: writes worklog, saves context, ends session.
 
 All agents are "always online" — there is no PID tracking or subprocess
 management.  The daemon owns the event loop and dispatches turns as
@@ -16,6 +21,7 @@ asyncio tasks with a semaphore for concurrency control.
 """
 
 import logging
+import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,7 +34,6 @@ from delegate.agent import (
     build_system_prompt,
     build_user_message,
     build_reflection_message,
-    _check_reflection_due,
     _agent_dir,
     _read_state,
     _next_worklog_number,
@@ -36,15 +41,22 @@ from delegate.agent import (
     TurnTokens,
     SENIORITY_MODELS,
     DEFAULT_SENIORITY,
+    MAX_BATCH_SIZE,
 )
 from delegate.mailbox import (
     read_inbox,
     mark_seen_batch,
-    mark_processed,
+    mark_processed_batch,
+    Message,
 )
 from delegate.task import format_task_id
+from delegate.activity import broadcast as broadcast_activity
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
 # Tools that agents are never allowed to use.
 # Agents work in task-scoped worktrees and must not perform git operations
@@ -61,6 +73,12 @@ DISALLOWED_TOOLS = [
     "Bash(git reset --hard:*)",
     "Bash(git worktree:*)",
 ]
+
+# Reflection: 1-in-10 coin flip per turn
+REFLECTION_PROBABILITY = 0.1
+
+# In-memory turn counter per agent (module-level; single-process safe)
+_turn_counts: dict[str, int] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +120,76 @@ def _write_worklog(ad: Path, lines: list[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Message selection — pick ≤K messages with the same task_id
+# ---------------------------------------------------------------------------
+
+def _select_batch(inbox: list[Message], max_size: int = MAX_BATCH_SIZE) -> list[Message]:
+    """Select up to *max_size* messages from *inbox* that share the
+    same ``task_id`` as the first message.
+
+    The inbox is assumed to be sorted by id (oldest first).
+    Both ``task_id = None`` and ``task_id = N`` are valid grouping keys.
+    """
+    if not inbox:
+        return []
+
+    target_task_id = inbox[0].task_id
+    batch: list[Message] = []
+    for msg in inbox:
+        if msg.task_id != target_task_id:
+            break
+        batch.append(msg)
+        if len(batch) >= max_size:
+            break
+    return batch
+
+
+# ---------------------------------------------------------------------------
+# Workspace resolution — multi-repo worktree paths
+# ---------------------------------------------------------------------------
+
+def _resolve_workspace(
+    hc_home: Path,
+    team: str,
+    agent: str,
+    task: dict | None,
+) -> tuple[Path, dict[str, Path]]:
+    """Determine the cwd and per-repo worktree paths for a turn.
+
+    Returns ``(cwd, workspace_paths)`` where *cwd* is the working
+    directory to pass to the SDK and *workspace_paths* maps each repo
+    name to its worktree path (for the user message).
+
+    Falls back to the agent's own workspace directory when there is no
+    task or no repos.
+    """
+    from delegate.repo import get_task_worktree_path
+
+    ad = _agent_dir(hc_home, team, agent)
+    fallback = ad / "workspace"
+    fallback.mkdir(parents=True, exist_ok=True)
+
+    if not task:
+        return fallback, {}
+
+    repos: list[str] = task.get("repo", [])
+    if not repos:
+        return fallback, {}
+
+    workspace_paths: dict[str, Path] = {}
+    cwd: Path = fallback
+
+    for i, repo_name in enumerate(repos):
+        wt = get_task_worktree_path(hc_home, team, repo_name, task["id"])
+        if wt.is_dir():
+            workspace_paths[repo_name] = wt
+            if i == 0:
+                cwd = wt  # first available worktree is the cwd
+
+    return cwd, workspace_paths
+
+
+# ---------------------------------------------------------------------------
 # Turn result
 # ---------------------------------------------------------------------------
 
@@ -122,6 +210,32 @@ class TurnResult:
 
 
 # ---------------------------------------------------------------------------
+# Tool-summary extractor (feeds ring buffer + SSE + worklog)
+# ---------------------------------------------------------------------------
+
+def _extract_tool_summary(block: Any) -> tuple[str, str]:
+    """Extract a ``(tool_name, detail)`` pair from an AssistantMessage block.
+
+    Returns ``("", "")`` if the block is not a tool invocation.
+    """
+    if not hasattr(block, "name"):
+        return "", ""
+
+    name = block.name
+    inp = getattr(block, "input", {}) or {}
+
+    if name == "Bash":
+        return name, (inp.get("command", "") or "")[:120]
+    elif name in ("Edit", "Write", "Read", "MultiEdit"):
+        return name, inp.get("file_path", "")
+    elif name in ("Grep", "Glob"):
+        return name, inp.get("pattern", "")
+    else:
+        keys = ", ".join(sorted(inp.keys())[:3]) if inp else ""
+        return name, f"{name}({keys})" if keys else name
+
+
+# ---------------------------------------------------------------------------
 # Core: run a single turn for one agent
 # ---------------------------------------------------------------------------
 
@@ -135,9 +249,13 @@ async def run_turn(
 ) -> TurnResult:
     """Run a single turn for an agent.
 
-    One call to ``run_turn`` processes the oldest unread message.
-    If the 20% reflection coin-flip lands, a second (reflection) turn
-    is appended within the same session.
+    Selects ≤5 unread messages that share the same ``task_id``, resolves
+    the task and worktree paths, builds a prompt with bidirectional
+    history, executes the turn (streaming tool summaries to the activity
+    ring buffer / SSE), then marks every selected message as processed.
+
+    If the 1-in-10 reflection coin-flip lands, a second (reflection)
+    turn is appended within the same session.
 
     Returns a ``TurnResult`` with token usage and cost.
     """
@@ -146,21 +264,27 @@ async def run_turn(
         end_session,
         update_session_tokens,
         update_session_task,
-        log_event,
     )
 
+    # --- SDK setup ---
     if sdk_query is None or sdk_options_class is None:
-        from claude_code_sdk import (
-            query as default_query,
-            ClaudeCodeOptions as DefaultOptions,
-        )
-        sdk_query = sdk_query or default_query
-        sdk_options_class = sdk_options_class or DefaultOptions
+        try:
+            from claude_code_sdk import (
+                query as default_query,
+                ClaudeCodeOptions as DefaultOptions,
+            )
+            sdk_query = sdk_query or default_query
+            sdk_options_class = sdk_options_class or DefaultOptions
+        except ImportError:
+            raise RuntimeError(
+                "claude_code_sdk is required for agent turns "
+                "(install with: pip install claude-code-sdk)"
+            )
 
     alog = AgentLogger(agent)
     result = TurnResult(agent=agent, team=team)
 
-    # --- Setup ---
+    # --- Agent setup ---
     ad = _agent_dir(hc_home, team, agent)
     state = _read_state(ad)
     seniority = state.get("seniority", DEFAULT_SENIORITY)
@@ -172,28 +296,38 @@ async def run_turn(
     token_budget = state.get("token_budget")
     max_turns = max(1, token_budget // 4000) if token_budget else None
 
-    # Determine task from first unread message's task_id
-    inbox_peek = read_inbox(hc_home, team, agent, unread_only=True)
-    first_msg = inbox_peek[0] if inbox_peek else None
-    current_task_id: int | None = first_msg.task_id if first_msg else None
+    # --- Message selection: pick ≤5 with same task_id ---
+    inbox = read_inbox(hc_home, team, agent, unread_only=True)
+    batch = _select_batch(inbox)
+
+    if not batch:
+        log_caller.reset(_prev_caller)
+        return result  # nothing to do
+
+    current_task_id: int | None = batch[0].task_id
     current_task: dict | None = None
-    workspace: Path = ad / "workspace"
-    workspace.mkdir(parents=True, exist_ok=True)
 
     if current_task_id is not None:
         try:
             from delegate.task import get_task as _get_task
             current_task = _get_task(hc_home, team, current_task_id)
-            repos = current_task.get("repo", [])
-            if repos:
-                from delegate.repo import get_task_worktree_path
-                wt = get_task_worktree_path(hc_home, team, repos[0], current_task_id)
-                if wt.is_dir():
-                    workspace = wt
         except Exception:
-            logger.debug("Could not resolve task %s for workspace", current_task_id)
+            logger.debug("Could not resolve task %s", current_task_id)
 
-    # Start session
+    # --- Workspace resolution ---
+    workspace, workspace_paths = _resolve_workspace(
+        hc_home, team, agent, current_task,
+    )
+
+    # --- Mark selected messages as seen ---
+    seen_ids = [m.filename for m in batch if m.filename]
+    if seen_ids:
+        mark_seen_batch(hc_home, team, seen_ids)
+
+    for inbox_msg in batch:
+        alog.message_received(inbox_msg.sender, len(inbox_msg.body))
+
+    # --- Start session ---
     session_id = start_session(hc_home, team, agent, task_id=current_task_id)
     result.session_id = session_id
 
@@ -205,13 +339,9 @@ async def run_turn(
         session_id=session_id,
     )
 
-    # Build SDK options
+    # --- Build SDK options (stable system prompt) ---
     def _build_options() -> Any:
-        sys_prompt = build_system_prompt(
-            hc_home, team, agent,
-            current_task=current_task,
-            workspace_path=workspace,
-        )
+        sys_prompt = build_system_prompt(hc_home, team, agent)
         kw: dict[str, Any] = dict(
             system_prompt=sys_prompt,
             cwd=str(workspace),
@@ -227,53 +357,65 @@ async def run_turn(
 
     options = _build_options()
 
-    # Build user message
-    user_msg = build_user_message(hc_home, team, agent, include_context=True)
+    # --- Build user message (task context + history + messages) ---
+    user_msg = build_user_message(
+        hc_home, team, agent,
+        messages=batch,
+        current_task=current_task,
+        workspace_paths=workspace_paths or None,
+    )
 
-    # --- Main turn ---
     task_label = format_task_id(current_task_id) if current_task_id else ""
     worklog_lines: list[str] = [
         f"# Worklog — {agent}",
         f"Task: {task_label}" if task_label else "Task: (none)",
         f"Session: {datetime.now(timezone.utc).isoformat()}",
+        f"Messages in batch: {len(batch)}",
         f"\n## Turn 1\n{user_msg}",
     ]
 
-    # Mark messages as seen (reuse the inbox_peek we already fetched)
-    messages = inbox_peek
-    seen_ids = [m.filename for m in messages if m.filename]
-    if seen_ids:
-        mark_seen_batch(hc_home, team, seen_ids)
-    for inbox_msg in messages:
-        alog.message_received(inbox_msg.sender, len(inbox_msg.body))
-
     alog.turn_start(1, user_msg)
 
+    # --- Main turn: execute SDK query ---
     turn = TurnTokens()
     turn_tools: list[str] = []
 
     try:
         async for msg in sdk_query(prompt=user_msg, options=options):
+            # Standard processing: tokens, worklog, tool list
             _process_turn_messages(
                 msg, alog, turn, turn_tools, worklog_lines,
                 agent=agent, task_label=task_label,
             )
+
+            # Stream tool summaries to activity ring buffer + SSE
+            if hasattr(msg, "content"):
+                for block in msg.content:
+                    tool_name, detail = _extract_tool_summary(block)
+                    if tool_name:
+                        broadcast_activity(agent, tool_name, detail)
+
     except Exception as exc:
         alog.session_error(exc)
         result.error = str(exc)
         result.turns = 1
-        end_session(
-            hc_home, team, session_id,
-            tokens_in=turn.input, tokens_out=turn.output,
-            cost_usd=turn.cost_usd,
-            cache_read_tokens=turn.cache_read,
-            cache_write_tokens=turn.cache_write,
-        )
+        # Still mark messages as processed so they don't replay forever
+        _mark_batch_processed(hc_home, team, batch)
+        try:
+            end_session(
+                hc_home, team, session_id,
+                tokens_in=turn.input, tokens_out=turn.output,
+                cost_usd=turn.cost_usd,
+                cache_read_tokens=turn.cache_read,
+                cache_write_tokens=turn.cache_write,
+            )
+        except Exception:
+            logger.exception("Failed to end session after error")
         _write_worklog(ad, worklog_lines)
         log_caller.reset(_prev_caller)
         return result
 
-    # Log turn end
+    # --- Post-turn bookkeeping ---
     alog.turn_end(
         1,
         tokens_in=turn.input,
@@ -285,7 +427,6 @@ async def run_turn(
         tool_calls=turn_tools or None,
     )
 
-    # Persist running totals
     update_session_tokens(
         hc_home, team, session_id,
         tokens_in=turn.input,
@@ -295,11 +436,8 @@ async def run_turn(
         cache_write_tokens=turn.cache_write,
     )
 
-    # Mark the first unread message as processed
-    first_unread = read_inbox(hc_home, team, agent, unread_only=True)
-    if first_unread and first_unread[0].filename:
-        mark_processed(hc_home, team, first_unread[0].filename)
-        alog.mail_marked_read(first_unread[0].filename)
+    # Mark ALL messages in the batch as processed
+    _mark_batch_processed(hc_home, team, batch)
 
     # Re-check task association (may have been assigned during the turn)
     if current_task_id is None:
@@ -316,7 +454,7 @@ async def run_turn(
         except Exception:
             pass
 
-    # --- Optional reflection turn (20% chance) ---
+    # --- Optional reflection turn (1-in-10 coin flip) ---
     total = TurnTokens(
         input=turn.input, output=turn.output,
         cache_read=turn.cache_read, cache_write=turn.cache_write,
@@ -324,7 +462,10 @@ async def run_turn(
     )
     turn_num = 1
 
-    if _check_reflection_due():
+    # Increment in-memory turn counter
+    _turn_counts[agent] = _turn_counts.get(agent, 0) + 1
+
+    if random.random() < REFLECTION_PROBABILITY:
         turn_num = 2
         ref_msg = build_reflection_message(hc_home, team, agent)
         worklog_lines.append(f"\n## Turn 2 (reflection)\n{ref_msg}")
@@ -363,7 +504,7 @@ async def run_turn(
         except Exception as exc:
             alog.error("Reflection turn failed: %s", exc)
 
-    # --- Finalize ---
+    # --- Finalize session ---
     result.tokens_in = total.input
     result.tokens_out = total.output
     result.cache_read = total.cache_read
@@ -371,7 +512,6 @@ async def run_turn(
     result.cost_usd = total.cost_usd
     result.turns = turn_num
 
-    # End session
     end_session(
         hc_home, team, session_id,
         tokens_in=total.input, tokens_out=total.output,
@@ -381,7 +521,6 @@ async def run_turn(
     )
 
     # Log session summary
-    total_tokens = total.input + total.output
     alog.session_end_log(
         turns=turn_num,
         tokens_in=total.input,
@@ -393,6 +532,7 @@ async def run_turn(
     _write_worklog(ad, worklog_lines)
 
     # Save context.md for next session
+    total_tokens = total.input + total.output
     (ad / "context.md").write_text(
         f"Last session: {datetime.now(timezone.utc).isoformat()}\n"
         f"Turns: {turn_num}\n"
@@ -403,3 +543,14 @@ async def run_turn(
     log_caller.reset(_prev_caller)
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Helpers (post-turn)
+# ---------------------------------------------------------------------------
+
+def _mark_batch_processed(hc_home: Path, team: str, batch: list[Message]) -> None:
+    """Mark all messages in the batch as processed."""
+    ids = [m.filename for m in batch if m.filename]
+    if ids:
+        mark_processed_batch(hc_home, team, ids)

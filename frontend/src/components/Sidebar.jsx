@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "preact/hooks";
 import {
   currentTeam, teams, bossName, tasks, agents, agentStatsMap,
   activeTab, openTaskCount, taskPanelId, diffPanelMode, diffPanelTarget,
+  agentLastActivity,
 } from "../state.js";
 import {
   cap, esc, fmtStatus, fmtCost, fmtRelativeTime, fmtRelativeTimeShort,
@@ -137,6 +138,19 @@ function AgentsWidget() {
             taskDisplay = <span class="sidebar-agent-offline">Offline</span>;
           }
 
+          // Live tool activity from SSE
+          const lastAct = agentLastActivity.value[a.name];
+          let activityLine = null;
+          if (lastAct && lastAct.tool) {
+            const toolLower = lastAct.tool.toLowerCase();
+            const det = lastAct.detail ? lastAct.detail.split("/").pop().substring(0, 30) : "";
+            activityLine = (
+              <span class="sidebar-agent-tool" title={lastAct.detail || lastAct.tool}>
+                {toolLower}{det ? ": " + det : ""}
+              </span>
+            );
+          }
+
           let lastActiveDisplay = "";
           if (a.pid) {
             const assignedTask = allTasks.find(t => t.assignee === a.name);
@@ -153,7 +167,9 @@ function AgentsWidget() {
             >
               <span class={"sidebar-agent-dot " + dotClass} title={dotTooltip}></span>
               <span class="sidebar-agent-name">{cap(a.name)}</span>
-              <span class="sidebar-agent-activity">{taskDisplay}</span>
+              <span class="sidebar-agent-activity">
+                {activityLine || taskDisplay}
+              </span>
               {lastActiveDisplay && <span class="sidebar-agent-time">{lastActiveDisplay}</span>}
             </div>
           );

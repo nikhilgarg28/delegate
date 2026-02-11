@@ -5,6 +5,7 @@ import {
   currentTeam, teams, bossName, tasks, agents, agentStatsMap, messages,
   activeTab, knownAgentNames,
   taskPanelId, diffPanelMode, diffPanelTarget,
+  agentLastActivity, agentActivityLog,
 } from "./state.js";
 import * as api from "./api.js";
 import { Sidebar } from "./components/Sidebar.jsx";
@@ -180,6 +181,47 @@ function App() {
         });
       } catch (e) { }
     })();
+  }, [currentTeam.value]);
+
+  // SSE: live agent activity stream
+  useEffect(() => {
+    const team = currentTeam.value;
+    if (!team) return;
+
+    const MAX_LOG_ENTRIES = 500;
+    let es = null;
+
+    const connect = () => {
+      es = new EventSource(`/teams/${team}/activity/stream`);
+
+      es.onmessage = (evt) => {
+        try {
+          const entry = JSON.parse(evt.data);
+          if (entry.type === "connected") return; // handshake
+
+          // Update per-agent last activity
+          const prev = agentLastActivity.value;
+          agentLastActivity.value = { ...prev, [entry.agent]: entry };
+
+          // Append to global activity log (capped)
+          const log = agentActivityLog.value;
+          const next = log.length >= MAX_LOG_ENTRIES
+            ? [...log.slice(log.length - MAX_LOG_ENTRIES + 1), entry]
+            : [...log, entry];
+          agentActivityLog.value = next;
+        } catch (e) { /* ignore malformed events */ }
+      };
+
+      es.onerror = () => {
+        // EventSource auto-reconnects; just log
+      };
+    };
+
+    connect();
+
+    return () => {
+      if (es) es.close();
+    };
   }, [currentTeam.value]);
 
   return (

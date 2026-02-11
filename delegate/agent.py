@@ -318,12 +318,14 @@ def build_system_prompt(
     hc_home: Path,
     team: str,
     agent: str,
-    current_task: dict | None = None,
-    workspace_path: Path | None = None,
 ) -> str:
-    """Build the system prompt, ordered for maximal prompt-cache reuse.
+    """Build the system prompt — stable per-agent for prompt-cache reuse.
 
-    Layout (top = most shared / stable, bottom = most specific / volatile):
+    This prompt is identical across turns for a given agent.  Task-specific
+    context (current task, worktree paths) goes in the *user message*
+    instead, so the system prompt can be fully cached.
+
+    Layout (top = most shared / stable, bottom = most specific):
 
     1. TEAM CHARTER — identical for all agents on the team (cache prefix)
     2. ROLE CHARTER — from charter/roles/<role>.md (shared per role)
@@ -332,7 +334,6 @@ def build_system_prompt(
     5. COMMANDS — mailbox, task CLI (includes agent-specific paths)
     6. REFLECTIONS — inlined from notes/reflections.md (agent-specific)
     7. REFERENCE FILES — file pointers (journals, notes, shared, roster, bios)
-    8. WORKSPACE — worktree / git info (task-specific, most volatile)
     """
     ad = _resolve_agent_dir(hc_home, team, agent)
     python = sys.executable
@@ -384,6 +385,8 @@ def build_system_prompt(
         content = team_override.read_text().strip()
         if content:
             override_block = f"\n\n---\n\n# Team Overrides\n\n{content}"
+
+    # --- 4–5. Agent identity + commands (stable per agent) ---
 
     # --- 6. Reflections & feedback (inline if present) ---
     inlined_notes_block = ""
@@ -446,22 +449,6 @@ def build_system_prompt(
 
     files_block = "\n".join(file_pointers)
 
-    # --- 8. Workspace / worktree ---
-    ws = workspace_path or (ad / "workspace")
-    worktree_block = ""
-    if current_task and current_task.get("repo"):
-        branch = current_task.get("branch", "")
-        task_id = current_task["id"]
-        worktree_block = f"""
-GIT WORKTREE:
-    Your working directory is set to the task worktree automatically for {format_task_id(task_id)}.
-    Your branch: {branch}
-
-    - Commit your changes frequently with clear messages.
-    - Do NOT switch branches — stay on {branch}.
-    - Your branch is local-only and will be merged by the merge worker when approved.
-"""
-
     return f"""\
 === TEAM CHARTER ===
 
@@ -502,90 +489,155 @@ Other commands:
 REFERENCE FILES (read as needed):
 {files_block}
 
-Your workspace: {ws}
-Team data:      {hc_home}/teams/{team}/
-{worktree_block}"""
+Team data: {hc_home}/teams/{team}/"""
 
 
-REFLECTION_PROBABILITY = 0.2  # ~1 in 5 turns trigger a reflection prompt
+REFLECTION_PROBABILITY = 0.1  # ~1 in 10 turns trigger a reflection prompt
 
 
 def _check_reflection_due() -> bool:
-    """Return True with ~20% probability (random coin flip)."""
+    """Return True with ~10% probability (random coin flip)."""
     import random
     return random.random() < REFLECTION_PROBABILITY
+
+
+# Maximum messages to batch per turn (all must share the same task_id).
+MAX_BATCH_SIZE = 5
+
+# Context limits for bidirectional conversation history
+HISTORY_WITH_PEER = 8       # messages with the primary sender (both directions)
+HISTORY_WITH_OTHERS = 4     # messages with anyone else
 
 
 def build_user_message(
     hc_home: Path,
     team: str,
     agent: str,
-    include_context: bool = False,
+    *,
+    messages: list | None = None,
+    current_task: dict | None = None,
+    workspace_paths: dict[str, Path] | None = None,
 ) -> str:
-    """Build the user message from unread inbox messages + assigned tasks."""
-    parts = []
+    """Build the user message for a turn.
 
-    # Previous session context (cold start only)
-    if include_context:
-        ad = _resolve_agent_dir(hc_home, team, agent)
-        context = ad / "context.md"
-        if context.exists() and context.read_text().strip():
+    This is the *volatile* part of the prompt — task context, conversation
+    history, and the new messages the agent should act on.  The system
+    prompt (charter, identity, commands) stays stable across turns.
+
+    Args:
+        hc_home: Delegate home directory.
+        team: Team name.
+        agent: Agent name.
+        messages: Pre-selected batch of inbox messages for this turn.
+            If ``None``, falls back to reading the inbox (legacy compat).
+        current_task: Task dict for the turn's focal task, or ``None``.
+        workspace_paths: ``{repo_name: worktree_path}`` map for all repos
+            in the task.  The agent's cwd is already set to the first, but
+            multi-repo tasks need to know all paths.
+    """
+    from delegate.mailbox import recent_conversation
+
+    parts: list[str] = []
+
+    # --- Previous session context (cold start bootstrap) ---
+    ad = _resolve_agent_dir(hc_home, team, agent)
+    context = ad / "context.md"
+    if context.exists() and context.read_text().strip():
+        parts.append(
+            f"=== PREVIOUS SESSION CONTEXT ===\n{context.read_text().strip()}"
+        )
+
+    # --- Current task context ---
+    if current_task:
+        tid = format_task_id(current_task["id"])
+        parts.append(f"=== CURRENT TASK — {tid} ===")
+        parts.append(
+            f"This turn is focused on {tid}. "
+            "All your work and responses should relate to this task.\n"
+        )
+        parts.append(f"Title:       {current_task.get('title', '(untitled)')}")
+        parts.append(f"Status:      {current_task.get('status', 'unknown')}")
+        if current_task.get("description"):
+            parts.append(f"Description: {current_task['description']}")
+        if current_task.get("branch"):
+            parts.append(f"Branch:      {current_task['branch']}")
+        if current_task.get("priority"):
+            parts.append(f"Priority:    {current_task['priority']}")
+        if current_task.get("dri"):
+            parts.append(f"DRI:         {current_task['dri']}")
+        if workspace_paths:
+            parts.append("\nRepo worktrees:")
+            for rn, wp in workspace_paths.items():
+                parts.append(f"  {rn}: {wp}")
             parts.append(
-                f"=== PREVIOUS SESSION CONTEXT ===\n{context.read_text().strip()}"
+                "\n- Commit your changes frequently with clear messages."
+                f"\n- Do NOT switch branches — stay on {current_task.get('branch', '')}."
+                "\n- Your branch is local-only and will be merged by the merge worker when approved."
             )
+        parts.append("")
 
-    # --- Recent conversation history (processed messages for context) ---
-    messages = read_inbox(hc_home, team, agent, unread_only=True)
+    # --- Bidirectional conversation history ---
+    # Resolve the batch of messages to show (use explicit list if provided)
+    if messages is None:
+        messages = list(read_inbox(hc_home, team, agent, unread_only=True))
+
     if messages:
         primary_sender = messages[0].sender
 
-        # Fetch recent processed messages from the primary sender
-        history_same = recent_processed(
-            hc_home, team, agent, from_sender=primary_sender,
-            limit=CONTEXT_MSGS_SAME_SENDER,
+        # Recent messages with the primary sender (both directions)
+        history_peer = recent_conversation(
+            hc_home, team, agent, peer=primary_sender,
+            limit=HISTORY_WITH_PEER,
         )
-        # Fetch recent processed messages from anyone else
+        # Recent messages with others (both directions)
         history_others = [
-            m for m in recent_processed(hc_home, team, agent, limit=CONTEXT_MSGS_OTHERS * 2)
-            if m.sender != primary_sender
-        ][:CONTEXT_MSGS_OTHERS]
+            m for m in recent_conversation(hc_home, team, agent, limit=HISTORY_WITH_OTHERS * 2)
+            if m.sender != primary_sender and m.recipient != primary_sender
+        ][:HISTORY_WITH_OTHERS]
 
-        if history_same or history_others:
+        all_history = sorted(history_peer + history_others, key=lambda m: m.id or 0)
+        if all_history:
             parts.append("=== RECENT CONVERSATION HISTORY ===")
             parts.append("(Previously processed messages — for context only.)\n")
-            for msg in sorted(history_same + history_others, key=lambda m: m.id or 0):
-                parts.append(f"[{msg.time}] From {msg.sender}:\n{msg.body}\n")
+            for msg in all_history:
+                direction = "→" if msg.sender == agent else "←"
+                parts.append(
+                    f"[{msg.time}] {msg.sender} {direction} {msg.recipient}:\n{msg.body}\n"
+                )
 
-    # --- New messages — act on the first, read the rest for context ---
+    # --- New messages to act on ---
     if messages:
-        parts.append(f"=== NEW MESSAGES ({len(messages)}) ===")
+        n = len(messages)
+        parts.append(f"=== NEW MESSAGES ({n}) ===")
         for i, msg in enumerate(messages, 1):
-            if i == 1:
-                parts.append(f">>> ACTION REQUIRED — Message {i}/{len(messages)} <<<")
-            else:
-                parts.append(f"--- Upcoming message {i}/{len(messages)} (for context only) ---")
-            parts.append(f"[{msg.time}] From {msg.sender}:\n{msg.body}")
+            parts.append(f"--- Message {i}/{n} ---")
+            parts.append(f"[{msg.time}] {msg.sender} → {msg.recipient}:\n{msg.body}")
         parts.append(
-            "\n\U0001f449 Respond to the ACTION REQUIRED message above (message 1). "
-            "You may read the other messages for context and adapt your "
-            "response accordingly, but only take action on message 1. "
-            "The remaining messages will be delivered for action in subsequent turns."
+            f"\n\U0001f449 You have {n} message(s) above. "
+            "You MUST address ALL of them in this turn — do not skip any. "
+            "Handle each message: respond, take action, or acknowledge. "
+            "If messages are related, you may address them together in a "
+            "single coherent response."
         )
     else:
         parts.append("No new messages.")
 
-    # Current task assignments
+    # --- Other assigned tasks (for awareness) ---
     try:
         from delegate.task import list_tasks
-        tasks = list_tasks(hc_home, team, assignee=agent)
-        if tasks:
-            active = [t for t in tasks if t["status"] in ("todo", "in_progress")]
-            if active:
-                parts.append("\n=== YOUR ASSIGNED TASKS ===")
-                for t in active:
+        all_tasks = list_tasks(hc_home, team, assignee=agent)
+        if all_tasks:
+            current_id = current_task["id"] if current_task else None
+            other_active = [
+                t for t in all_tasks
+                if t["status"] in ("todo", "in_progress") and t["id"] != current_id
+            ]
+            if other_active:
+                parts.append("\n=== YOUR OTHER ASSIGNED TASKS ===")
+                parts.append("(For awareness — focus on the current task above.)")
+                for t in other_active:
                     parts.append(
                         f"- {format_task_id(t['id'])} ({t['status']}): {t['title']}"
-                        + (f"\n  {t['description']}" if t.get("description") else "")
                     )
     except Exception:
         pass
