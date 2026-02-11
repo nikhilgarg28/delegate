@@ -523,7 +523,9 @@ class TestBranchMetadataBackfill:
         mock_run.return_value = mock_result
 
         updated = change_status(tmp_team, TEAM, task["id"], "in_review")
-        assert updated["branch"] == f"delegate/{TEAM}/T0001"
+        from delegate.paths import get_team_id
+        tid = get_team_id(tmp_team, TEAM)
+        assert updated["branch"] == f"delegate/{tid}/{TEAM}/T0001"
 
     @patch("delegate.task.subprocess.run")
     def test_in_review_backfills_base_sha_when_empty(self, mock_run, _mock_gate, tmp_team):
@@ -585,7 +587,9 @@ class TestBranchMetadataBackfill:
 
         # Branch was backfilled during in_review; verify it's still there for in_approval
         updated = change_status(tmp_team, TEAM, task["id"], "in_approval")
-        assert updated["branch"] == f"delegate/{TEAM}/T0001"
+        from delegate.paths import get_team_id
+        tid = get_team_id(tmp_team, TEAM)
+        assert updated["branch"] == f"delegate/{tid}/{TEAM}/T0001"
 
 
 class TestValidTransitions:

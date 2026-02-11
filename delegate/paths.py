@@ -56,6 +56,29 @@ def team_dir(hc_home: Path, team: str) -> Path:
     return teams_dir(hc_home) / team
 
 
+def team_id_path(hc_home: Path, team: str) -> Path:
+    """Path to the file storing the team's unique instance ID."""
+    return team_dir(hc_home, team) / "team_id"
+
+
+def get_team_id(hc_home: Path, team: str) -> str:
+    """Read the 6-char hex team instance ID.
+
+    Every team gets a random ID at bootstrap time.  This ID is embedded in
+    branch names (``delegate/<team_id>/<team>/T<NNN>``) so that recreating
+    a team with the same name doesn't collide with leftover branches.
+
+    Falls back to the team name if the file doesn't exist (pre-migration
+    teams).
+    """
+    p = team_id_path(hc_home, team)
+    if p.exists():
+        tid = p.read_text().strip()
+        if tid:
+            return tid
+    return team
+
+
 def db_path(hc_home: Path, team: str) -> Path:
     """Per-team SQLite database."""
     return team_dir(hc_home, team) / "db.sqlite"

@@ -9,6 +9,7 @@ Usage:
 
 import argparse
 import subprocess
+import uuid
 from pathlib import Path
 
 import yaml
@@ -16,6 +17,7 @@ import yaml
 from delegate.db import ensure_schema
 from delegate.paths import (
     team_dir as _team_dir,
+    team_id_path as _team_id_path,
     teams_dir as _teams_dir,
     agents_dir as _agents_dir,
     repos_dir as _repos_dir,
@@ -204,6 +206,13 @@ def bootstrap(
     # Team directory
     td = _team_dir(hc_home, team_name)
     td.mkdir(parents=True, exist_ok=True)
+
+    # Generate a unique team instance ID (6-char hex) if not already present.
+    # This ID is embedded in branch names to avoid collisions when a team
+    # is deleted and recreated with the same name.
+    tid_path = _team_id_path(hc_home, team_name)
+    if not tid_path.exists():
+        tid_path.write_text(uuid.uuid4().hex[:6] + "\n")
 
     # Per-team repos directory
     _repos_dir(hc_home, team_name).mkdir(parents=True, exist_ok=True)

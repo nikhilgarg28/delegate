@@ -24,7 +24,7 @@ Tasks are stored per-team in SQLite. Associate with one or more repos using `--r
 
 Each task has two ownership fields:
 
-- **DRI** (Directly Responsible Individual) — set automatically on first assignment, never changes. The branch name is derived from the team (`delegate/<team>/T<NNNN>`).
+- **DRI** (Directly Responsible Individual) — set automatically on first assignment, never changes. The branch name is derived from the team (`delegate/<team_id>/<team>/T<NNNN>`).
 - **Assignee** — who currently owns the ball. The manager updates this as the task moves through stages (e.g., author → reviewer → boss for approval).
 
 The boss's "Action Queue" in the UI shows tasks where the boss is the current assignee.

@@ -147,7 +147,9 @@ def create_task(
     if repo_list:
         import logging
         _task_log = logging.getLogger(__name__)
-        branch_name = f"delegate/{team}/{format_task_id(task_id)}"
+        from delegate.paths import get_team_id
+        tid = get_team_id(hc_home, team)
+        branch_name = f"delegate/{tid}/{team}/{format_task_id(task_id)}"
         for repo_name in repo_list:
             try:
                 from delegate.repo import create_task_worktree
@@ -279,9 +281,15 @@ def _backfill_branch_metadata(hc_home: Path, team: str, task: dict, updates: dic
 
     # Backfill branch name
     if not task.get("branch") and "branch" not in updates:
-        branch = f"delegate/{team}/{format_task_id(task_id)}"
+        from delegate.paths import get_team_id
+        tid = get_team_id(hc_home, team)
+        branch = f"delegate/{tid}/{team}/{format_task_id(task_id)}"
         updates["branch"] = branch
-        _log.info("Backfilling branch=%s on task %s during status change", branch, task_id)
+        _log.warning(
+            "Backfilling branch=%s on task %s during status change — "
+            "this should have been set at task creation",
+            branch, task_id,
+        )
 
     # Backfill base_sha (per-repo dict)
     branch = updates.get("branch") or task.get("branch", "")

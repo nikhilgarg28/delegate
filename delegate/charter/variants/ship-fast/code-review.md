@@ -5,7 +5,7 @@
 All work happens on feature branches in git worktrees. Branch naming convention:
 
 ```
-delegate/<team>/T<NNNN>
+delegate/<team_id>/<team>/T<NNNN>
 ```
 
 No direct pushes to main.

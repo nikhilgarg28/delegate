@@ -6,7 +6,7 @@ Each agent works in their own git worktree, created automatically for tasks with
 
 ## Branches
 
-All work on feature branches: `delegate/<team>/T<NNNN>` (e.g., `delegate/myteam/T0012`). The branch name is derived from the team, not the current assignee, so it stays stable even when the task is reassigned for review. No direct pushes to main.
+All work on feature branches: `delegate/<team_id>/<team>/T<NNNN>` (e.g., `delegate/3f5776/myteam/T0012`). The `<team_id>` is a 6-char hex ID generated at team creation to prevent branch collisions if a team is deleted and recreated. The team name is included for human readability. No direct pushes to main.
 
 ## Merge Flow
 

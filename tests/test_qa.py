@@ -141,7 +141,10 @@ class TestExtractTaskIdFromBranch:
         assert _extract_task_id_from_branch("main") is None
 
     def test_delegate_team_convention(self):
-        """New convention: delegate/<team>/T<NNNN>."""
+        """Convention: delegate/<team_id>/<team>/T<NNNN>."""
+        # Current format: delegate/<team_id>/<team>/T<NNN>
+        assert _extract_task_id_from_branch("delegate/a1b2c3/myteam/T0042") == 42
+        # Legacy format: delegate/<team>/T<NNN>
         assert _extract_task_id_from_branch("delegate/myteam/T0042") == 42
 
 

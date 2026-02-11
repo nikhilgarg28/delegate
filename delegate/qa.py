@@ -265,13 +265,15 @@ def _extract_task_id_from_branch(branch: str) -> int | None:
     """Extract a task ID from a branch name, if present.
 
     Supports formats:
-        delegate/<team>/T<id>          (current convention)
-        <agent>/T<id>                  (legacy)
-        <agent>/T<id>-<slug>           (legacy)
-        <agent>/<project>/<id>-<slug>  (legacy)
+        delegate/<team_id>/<team>/T<id>  (current convention)
+        delegate/<team>/T<id>            (legacy)
+        <agent>/T<id>                    (legacy)
+        <agent>/T<id>-<slug>             (legacy)
+        <agent>/<project>/<id>-<slug>    (legacy)
     """
-    # Try new convention: delegate/<team>/T<id>
-    match = re.match(r"delegate/[^/]+/T(\d+)(?:-|$)", branch)
+    # Try current convention: delegate/<team_id>/<team>/T<id>
+    # Also matches legacy: delegate/<team>/T<id>
+    match = re.match(r"delegate/[^/]+/(?:[^/]+/)?T(\d+)(?:-|$)", branch)
     if match:
         return int(match.group(1))
     # Try legacy naming convention: <agent>/T<id> (with optional legacy slug)
