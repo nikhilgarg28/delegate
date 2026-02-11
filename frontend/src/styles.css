@@ -437,21 +437,24 @@ body {
   bottom: 100%;
   left: 0;
   right: 0;
-  background: var(--bg-input);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-default);
   border-radius: 6px;
   z-index: 100;
   max-height: 200px;
   overflow-y: auto;
   margin-bottom: 4px;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.25);
 }
 .sb-team-option {
   padding: 8px 12px;
   font-size: 12px;
+  color: var(--text-secondary);
   cursor: pointer;
+  transition: background 100ms, color 100ms;
 }
-.sb-team-option:hover { background: var(--bg-hover); }
-.sb-team-option.active { color: var(--accent); }
+.sb-team-option:hover { background: var(--bg-active); color: var(--text-primary); }
+.sb-team-option.active { color: var(--text-primary); font-weight: 500; }
 
 @media (max-width: 900px) { .sb { display: none; } }
 
@@ -764,19 +767,22 @@ body {
 .chat-input-toolbar-spacer { flex: 1; }
 
 .chat-input-recipient {
-  border: none;
-  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-active) url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23858585' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 6px center;
   color: var(--text-secondary);
   font-family: inherit;
   font-size: 12px;
   outline: none;
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 4px 22px 4px 8px;
   border-radius: 4px;
-  transition: color 100ms;
+  transition: color 100ms, border-color 100ms;
 }
-.chat-input-recipient:hover { color: var(--text-primary); }
-.chat-input-recipient option { background: var(--bg-input); color: var(--text-primary); }
+.chat-input-recipient:hover { color: var(--text-primary); border-color: var(--text-muted); }
+.chat-input-recipient:focus { border-color: var(--border-focus); }
+.chat-input-recipient option { background: var(--bg-elevated); color: var(--text-primary); }
 
 .chat-tool-btn {
   width: 28px;
@@ -811,20 +817,32 @@ body {
   flex-shrink: 0;
   flex-wrap: wrap;
 }
-.chat-filters select, .task-filters select {
-  padding: 5px 8px;
+/* ── Global select styling ── */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 5px 26px 5px 10px;
   border-radius: 6px;
   border: 1px solid var(--border-default);
-  background: var(--bg-input);
+  background: var(--bg-input) url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23858585' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 8px center;
   color: var(--text-secondary);
   font-family: inherit;
   font-size: 12px;
+  line-height: 1.4;
   outline: none;
   cursor: pointer;
+  transition: border-color 100ms, color 100ms;
 }
-.chat-filters select option, .task-filters select option {
-  background: var(--bg-input);
+select:hover { border-color: var(--text-muted); color: var(--text-primary); }
+select:focus { border-color: var(--border-focus); }
+select option {
+  background: var(--bg-elevated);
   color: var(--text-primary);
+  padding: 6px 10px;
+}
+select option:checked { background: var(--bg-active); }
+.chat-filters select, .task-filters select {
+  /* inherits global select styles */
 }
 .chat-filters label, .task-filters label {
   display: flex;
@@ -985,17 +1003,57 @@ body {
 .fb-add-btn svg { flex-shrink: 0; }
 .fb-clear-btn { padding: 5px 8px; border-radius: 4px; border: none; background: transparent; color: var(--text-muted); font-family: inherit; font-size: 11px; cursor: pointer; transition: color 100ms; }
 .fb-clear-btn:hover { color: var(--text-primary); }
-.fb-dropdown { position: absolute; top: calc(100% + 4px); left: 0; min-width: 180px; max-height: 260px; background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 6px; z-index: 300; display: flex; flex-direction: column; overflow: hidden; }
-.fb-dropdown-search { padding: 8px 10px; border: none; border-bottom: 1px solid var(--border-default); background: transparent; color: var(--text-primary); font-family: inherit; font-size: 12px; outline: none; }
+.fb-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 200px;
+  max-height: 280px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+.fb-dropdown-search {
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
 .fb-dropdown-search::placeholder { color: var(--text-faint); }
 .fb-dropdown-list { overflow-y: auto; flex: 1; padding: 4px 0; }
-.fb-dropdown-item { padding: 6px 12px; font-size: 12px; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 100ms, color 100ms; }
+.fb-dropdown-item {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 80ms, color 80ms;
+}
 .fb-dropdown-item.focused { background: var(--bg-active); color: var(--text-primary); }
-.fb-dropdown-item.selected { color: var(--text-primary); }
-.fb-dropdown-item:hover { background: var(--bg-active); }
-.fb-dropdown-empty { padding: 12px; font-size: 12px; color: var(--text-muted); text-align: center; }
-.fb-dropdown-done { padding: 8px 12px; border-top: 1px solid var(--border-default); font-size: 11px; color: var(--text-secondary); cursor: pointer; text-align: center; transition: background 100ms; }
-.fb-dropdown-done:hover { background: var(--bg-active); }
+.fb-dropdown-item.selected { color: var(--text-primary); font-weight: 500; }
+.fb-dropdown-item:hover { background: var(--bg-active); color: var(--text-primary); }
+.fb-dropdown-empty { padding: 16px 12px; font-size: 12px; color: var(--text-muted); text-align: center; }
+.fb-dropdown-done {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: center;
+  transition: background 80ms, color 80ms;
+}
+.fb-dropdown-done:hover { background: var(--bg-active); color: var(--text-primary); }
 .fb-check { width: 14px; height: 14px; border: 1px solid var(--border-input); border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; color: transparent; transition: background 100ms, border-color 100ms, color 100ms; }
 .fb-check.checked { background: var(--text-secondary); border-color: var(--text-secondary); color: #fff; }
 
