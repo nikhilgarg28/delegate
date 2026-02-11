@@ -3,7 +3,7 @@
 The merge sequence for a task in ``in_approval`` with an approved review
 (or ``approval == 'auto'`` on the repo):
 
-1. Create a temporary branch ``_merge/<uuid>`` from the feature branch.
+1. Create a temporary branch mirroring the feature branch name with ``_merge/<uuid>`` inserted.
 2. ``git rebase --onto main <base_sha> <temp>``  — rebase onto latest main.
 3. If conflict: delete temp branch, set task to ``conflict``, notify manager.
 4. Run test suite on the temp branch.
@@ -62,9 +62,24 @@ def _run_git(args: list[str], cwd: str, **kwargs) -> subprocess.CompletedProcess
 def _create_temp_branch(repo_dir: str, source_branch: str) -> str:
     """Create a temporary branch from source_branch for merge attempt.
 
-    Returns the temp branch name (``_merge/<uuid>``).
+    The temp branch mirrors the feature branch structure with ``_merge/<uuid>``
+    inserted before the task id segment::
+
+        delegate/3f5776/myteam/T0001  →  delegate/3f5776/myteam/_merge/a1b2c3d4e5f6/T0001
+        delegate/myteam/T0001         →  delegate/myteam/_merge/a1b2c3d4e5f6/T0001
+
+    This makes it easy to see which task the temp branch belongs to and
+    to clean up stale temp branches later.
+
+    Returns the temp branch name.
     """
-    temp_name = f"_merge/{uuid.uuid4().hex[:12]}"
+    uid = uuid.uuid4().hex[:12]
+    # Insert _merge/<uuid> just before the last path segment (the task id)
+    parts = source_branch.rsplit("/", 1)
+    if len(parts) == 2:
+        temp_name = f"{parts[0]}/_merge/{uid}/{parts[1]}"
+    else:
+        temp_name = f"_merge/{uid}/{source_branch}"
     result = _run_git(["branch", temp_name, source_branch], cwd=repo_dir)
     if result.returncode != 0:
         raise RuntimeError(f"Could not create temp branch {temp_name}: {result.stderr}")
