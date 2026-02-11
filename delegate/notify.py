@@ -134,8 +134,8 @@ def notify_conflict(
 ) -> str | None:
     """Send a merge conflict notification to the manager.
 
-    Called when the daemon merge worker detects a conflict and sets
-    the task status to 'conflict'.
+    Called when the daemon merge worker detects a merge failure and sets
+    the task status to 'merge_failed'.
 
     Args:
         hc_home: Delegate home directory.

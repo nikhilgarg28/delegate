@@ -30,7 +30,7 @@ from delegate.config import (
     add_repo, get_repo_approval, get_repo_test_cmd, update_repo_test_cmd, set_boss,
     get_pre_merge_script, set_pre_merge_script,
 )
-from delegate.merge import merge_task, merge_once, _run_pre_merge, _other_unmerged_tasks_on_branch, MergeResult
+from delegate.merge import merge_task, merge_once, _run_pre_merge, _other_unmerged_tasks_on_branch, MergeResult, MergeFailureReason
 from delegate.bootstrap import bootstrap
 
 
@@ -130,7 +130,7 @@ class TestMergeTask:
         assert "Add feature.py" in log.stdout
 
     def test_rebase_conflict(self, hc_home, tmp_path):
-        """Rebase conflict → status becomes 'conflict' and manager notified."""
+        """Rebase conflict → merge_task returns REBASE_CONFLICT reason."""
         repo = _setup_git_repo(tmp_path)
 
         # Create feature branch that modifies file.txt
@@ -144,17 +144,12 @@ class TestMergeTask:
         _register_repo_with_symlink(hc_home, "myrepo", repo)
 
         task = _make_in_approval_task(hc_home, repo="myrepo", branch="alice/T0001", merging=True)
-        update_task(hc_home, SAMPLE_TEAM, task["id"], approval_status="approved")
 
-        with patch("delegate.merge.notify_conflict") as mock_notify:
-            result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
 
         assert result.success is False
+        assert result.reason == MergeFailureReason.REBASE_CONFLICT
         assert "conflict" in result.message.lower() or "rebase" in result.message.lower()
-
-        updated = get_task(hc_home, SAMPLE_TEAM, task["id"])
-        assert updated["status"] == "conflict"
-        mock_notify.assert_called_once()
 
     def test_missing_branch(self, hc_home):
         """Task with no branch should fail."""
@@ -225,14 +220,11 @@ class TestMergeTask:
 
         task = _make_in_approval_task(hc_home, repo="myrepo", branch=branch, merging=True)
 
-        with patch("delegate.merge.notify_conflict"):
-            result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
 
         assert result.success is False
+        assert result.reason == MergeFailureReason.DIRTY_MAIN
         assert "uncommitted" in result.message.lower()
-
-        updated = get_task(hc_home, SAMPLE_TEAM, task["id"])
-        assert updated["status"] == "conflict"
 
         # Dirty file should be preserved
         assert (repo / "dirty_file.txt").exists()
@@ -313,11 +305,10 @@ class TestMergeTask:
         set_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo", "false")  # Tests will fail
 
         task = _make_in_approval_task(hc_home, repo="myrepo", branch=branch, merging=True)
-
-        with patch("delegate.merge.notify_conflict"):
-            result = merge_task(hc_home, SAMPLE_TEAM, task["id"])
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"])
 
         assert result.success is False
+        assert result.reason == MergeFailureReason.PRE_MERGE_FAILED
 
         # Feature branch must be at its ORIGINAL tip (never touched)
         post_tip = subprocess.run(
@@ -345,9 +336,7 @@ class TestMergeTask:
         set_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo", "false")  # Force failure
 
         task = _make_in_approval_task(hc_home, repo="myrepo", branch=branch, merging=True)
-
-        with patch("delegate.merge.notify_conflict"):
-            result = merge_task(hc_home, SAMPLE_TEAM, task["id"])
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"])
 
         assert result.success is False
         assert wt_path.exists(), "Agent worktree was removed on merge failure — should be preserved"
@@ -386,9 +375,7 @@ class TestMergeTask:
         set_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo", "false")  # Force failure
 
         task = _make_in_approval_task(hc_home, repo="myrepo", branch=branch, merging=True)
-
-        with patch("delegate.merge.notify_conflict"):
-            result = merge_task(hc_home, SAMPLE_TEAM, task["id"])
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"])
 
         assert result.success is False
 
@@ -617,12 +604,11 @@ class TestMergeBaseAndTip:
         _register_repo_with_symlink(hc_home, "myrepo", repo)
 
         task = _make_in_approval_task(hc_home, repo="myrepo", branch="alice/T0001", merging=True)
-        update_task(hc_home, SAMPLE_TEAM, task["id"], approval_status="approved")
 
-        with patch("delegate.merge.notify_conflict"):
-            result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
 
         assert result.success is False
+        assert result.reason == MergeFailureReason.REBASE_CONFLICT
         updated = get_task(hc_home, SAMPLE_TEAM, task["id"])
         assert updated["merge_base"] == {}
         assert updated["merge_tip"] == {}
@@ -853,14 +839,11 @@ class TestRunPreMerge:
 
         task = _make_in_approval_task(hc_home, repo="myrepo", branch=branch, merging=True)
 
-        with patch("delegate.merge.notify_conflict"):
-            result = merge_task(hc_home, SAMPLE_TEAM, task["id"])
+        result = merge_task(hc_home, SAMPLE_TEAM, task["id"])
 
         assert result.success is False
+        assert result.reason == MergeFailureReason.PRE_MERGE_FAILED
         assert "pre-merge" in result.message.lower() or "failed" in result.message.lower()
-
-        updated = get_task(hc_home, SAMPLE_TEAM, task["id"])
-        assert updated["status"] == "conflict"
 
     def test_merge_with_script_success(self, hc_home, tmp_path):
         """merge_task should succeed when pre-merge script passes."""

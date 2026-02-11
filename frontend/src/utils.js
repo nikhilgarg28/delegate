@@ -183,7 +183,7 @@ export { diff2HtmlRender, diff2HtmlParse };
 
 // ── Task sorting ──
 export function taskTier(t) {
-  if (t.status === "in_approval" || t.status === "merging") return 0;
+  if (t.status === "in_approval" || t.status === "merging" || t.status === "merge_failed") return 0;
   if (t.status === "in_progress" || t.status === "in_review") return 1;
   if (t.status === "todo") return 2;
   if (t.status === "done") return 3;

@@ -587,6 +587,35 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         _log_event(hc_home, team, f"{format_task_id(task_id)} rejected \u2014 {body.reason}", task_id=task_id)
         return updated
 
+    @app.post("/teams/{team}/tasks/{task_id}/retry-merge")
+    def retry_merge(team: str, task_id: int):
+        """Retry a failed merge.
+
+        Resets ``merge_attempts`` to 0, clears ``status_detail``, and
+        transitions the task back to ``in_approval`` with the manager as
+        assignee.  The merge worker will pick it up on the next daemon cycle.
+        """
+        try:
+            task = _get_task(hc_home, team, task_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+        if task["status"] != "merge_failed":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Task is in '{task['status']}', not 'merge_failed'",
+            )
+
+        from delegate.task import transition_task
+        # Reset counters and detail
+        _update_task(hc_home, team, task_id,
+                     merge_attempts=0, status_detail="")
+        # Transition back to in_approval with manager as assignee
+        from delegate.bootstrap import get_member_by_role
+        manager = get_member_by_role(hc_home, team, "manager") or "manager"
+        updated = transition_task(hc_home, team, task_id, "in_approval", manager)
+        return updated
+
     # --- Message endpoints (team-scoped) ---
 
     @app.get("/teams/{team}/messages")

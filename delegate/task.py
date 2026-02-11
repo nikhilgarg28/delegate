@@ -26,7 +26,7 @@ from pathlib import Path
 from delegate.db import get_connection, task_row_to_dict, _JSON_COLUMNS
 
 
-VALID_STATUSES = ("todo", "in_progress", "in_review", "in_approval", "merging", "done", "rejected", "conflict")
+VALID_STATUSES = ("todo", "in_progress", "in_review", "in_approval", "merging", "done", "rejected", "merge_failed")
 VALID_PRIORITIES = ("low", "medium", "high", "critical")
 VALID_APPROVAL_STATUSES = ("", "pending", "approved", "rejected")
 
@@ -36,9 +36,9 @@ VALID_TRANSITIONS = {
     "in_progress": {"in_review"},
     "in_review": {"in_approval", "in_progress"},
     "in_approval": {"merging", "rejected"},
-    "merging": {"done", "conflict"},
+    "merging": {"done", "merge_failed", "in_approval"},
     "rejected": {"in_progress"},
-    "conflict": {"in_progress"},
+    "merge_failed": {"in_progress", "in_approval"},
     # done is the sole terminal state — no transitions out
     "done": set(),
 }
@@ -49,7 +49,7 @@ _TASK_FIELDS = frozenset({
     "project", "priority", "repo", "tags", "created_at", "updated_at",
     "completed_at", "depends_on", "branch", "base_sha",
     "rejection_reason", "approval_status", "merge_base", "merge_tip",
-    "attachments", "review_attempt",
+    "attachments", "review_attempt", "status_detail", "merge_attempts",
 })
 
 

@@ -188,6 +188,12 @@ CREATE INDEX IF NOT EXISTS idx_review_comments_task_attempt
 ALTER TABLE sessions ADD COLUMN cache_read_tokens INTEGER DEFAULT 0;
 ALTER TABLE sessions ADD COLUMN cache_write_tokens INTEGER DEFAULT 0;
 """,
+
+    # --- V7: merge failure tracking ---
+    """\
+ALTER TABLE tasks ADD COLUMN status_detail TEXT NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN merge_attempts INTEGER NOT NULL DEFAULT 0;
+""",
 ]
 
 # Columns that store JSON arrays and need parse/serialize on read/write.

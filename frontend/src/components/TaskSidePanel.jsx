@@ -71,10 +71,44 @@ function ApprovalBadge({ task, currentReview }) {
       </div>
     );
   }
-  if (status === "conflict") {
-    return <div class="task-approval-status"><div class="approval-badge" style={{ background: "rgba(251,146,60,0.12)", color: "#fb923c" }}>&#9888; Merge Conflict</div></div>;
+  if (status === "merge_failed") {
+    return <div class="task-approval-status"><div class="approval-badge" style={{ background: "rgba(251,146,60,0.12)", color: "#fb923c" }}>&#9888; Merge Failed</div></div>;
   }
   return null;
+}
+
+// ── Retry Merge Button ──
+function RetryMergeButton({ task }) {
+  const [loading, setLoading] = useState(false);
+  const team = currentTeam.value;
+
+  const handleRetry = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      await api.retryMerge(team, task.id);
+      // Refresh task list
+      const refreshed = await api.fetchTasks(team);
+      tasks.value = refreshed;
+    } catch (err) {
+      alert("Retry failed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: "8px" }}>
+      <button
+        class="approve-btn"
+        onClick={handleRetry}
+        disabled={loading}
+        style={{ width: "100%" }}
+      >
+        {loading ? "Retrying..." : "Retry Merge"}
+      </button>
+    </div>
+  );
 }
 
 // Module-level variable for badge→tab communication
@@ -624,8 +658,16 @@ function DetailsTab({ task, stats, currentReview }) {
       )}
       {/* Activity */}
       <ActivitySection taskId={t.id} task={t} />
+      {/* Status detail (merge failure reason etc.) */}
+      {t.status_detail && (
+        <div style={{ fontSize: "12px", color: "var(--text-muted)", padding: "8px 12px", background: "rgba(251,191,36,0.06)", borderRadius: "6px", marginBottom: "8px", border: "1px solid rgba(251,191,36,0.15)" }}>
+          {t.status_detail}
+        </div>
+      )}
       {/* Approval badge */}
       <ApprovalBadge task={t} currentReview={currentReview} />
+      {/* Retry merge button */}
+      {t.status === "merge_failed" && <RetryMergeButton task={t} />}
     </div>
   );
 }

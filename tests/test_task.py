@@ -222,15 +222,15 @@ class TestChangeStatus:
         task = change_status(tmp_team, TEAM, task["id"], "done")
         assert task["status"] == "done"
 
-    def test_merging_to_conflict(self, _mock_gate, tmp_team):
-        """merging -> conflict is a valid transition."""
+    def test_merging_to_merge_failed(self, _mock_gate, tmp_team):
+        """merging -> merge_failed is a valid transition."""
         task = create_task(tmp_team, TEAM, title="Work", assignee="alice")
         change_status(tmp_team, TEAM, task["id"], "in_progress")
         change_status(tmp_team, TEAM, task["id"], "in_review")
         change_status(tmp_team, TEAM, task["id"], "in_approval")
         change_status(tmp_team, TEAM, task["id"], "merging")
-        task = change_status(tmp_team, TEAM, task["id"], "conflict")
-        assert task["status"] == "conflict"
+        task = change_status(tmp_team, TEAM, task["id"], "merge_failed")
+        assert task["status"] == "merge_failed"
 
     def test_in_approval_cannot_go_to_done_directly(self, _mock_gate, tmp_team):
         """in_approval -> done is no longer valid (must go through merging)."""
@@ -250,14 +250,14 @@ class TestChangeStatus:
         updated = change_status(tmp_team, TEAM, task["id"], "rejected")
         assert updated["status"] == "rejected"
 
-    def test_in_approval_cannot_go_to_conflict_directly(self, _mock_gate, tmp_team):
-        """in_approval -> conflict is no longer valid (must go through merging)."""
+    def test_in_approval_cannot_go_to_merge_failed_directly(self, _mock_gate, tmp_team):
+        """in_approval -> merge_failed is no longer valid (must go through merging)."""
         task = create_task(tmp_team, TEAM, title="Work", assignee="alice")
         change_status(tmp_team, TEAM, task["id"], "in_progress")
         change_status(tmp_team, TEAM, task["id"], "in_review")
         change_status(tmp_team, TEAM, task["id"], "in_approval")
         with pytest.raises(ValueError, match="Invalid transition"):
-            change_status(tmp_team, TEAM, task["id"], "conflict")
+            change_status(tmp_team, TEAM, task["id"], "merge_failed")
 
     def test_rejected_to_in_progress(self, _mock_gate, tmp_team):
         """rejected -> in_progress (rework) is a valid transition."""
@@ -269,14 +269,14 @@ class TestChangeStatus:
         updated = change_status(tmp_team, TEAM, task["id"], "in_progress")
         assert updated["status"] == "in_progress"
 
-    def test_conflict_to_in_progress(self, _mock_gate, tmp_team):
-        """conflict -> in_progress (rebase) is a valid transition."""
+    def test_merge_failed_to_in_progress(self, _mock_gate, tmp_team):
+        """merge_failed -> in_progress (rework) is a valid transition."""
         task = create_task(tmp_team, TEAM, title="Work", assignee="alice")
         change_status(tmp_team, TEAM, task["id"], "in_progress")
         change_status(tmp_team, TEAM, task["id"], "in_review")
         change_status(tmp_team, TEAM, task["id"], "in_approval")
         change_status(tmp_team, TEAM, task["id"], "merging")
-        change_status(tmp_team, TEAM, task["id"], "conflict")
+        change_status(tmp_team, TEAM, task["id"], "merge_failed")
         updated = change_status(tmp_team, TEAM, task["id"], "in_progress")
         assert updated["status"] == "in_progress"
 

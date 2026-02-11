@@ -107,7 +107,7 @@ class TestNotifyConflict:
         task = _make_task_at_in_approval(notify_team)
         task["branch"] = "alice/T0001"
         change_status(notify_team, TEAM, task["id"], "merging")
-        change_status(notify_team, TEAM, task["id"], "conflict")
+        change_status(notify_team, TEAM, task["id"], "merge_failed")
 
         result = notify_conflict(
             notify_team, TEAM, task, conflict_details="Conflict in auth.py"
@@ -124,7 +124,7 @@ class TestNotifyConflict:
         task = _make_task_at_in_approval(notify_team)
         task["branch"] = "alice/T0001"
         change_status(notify_team, TEAM, task["id"], "merging")
-        change_status(notify_team, TEAM, task["id"], "conflict")
+        change_status(notify_team, TEAM, task["id"], "merge_failed")
 
         notify_conflict(
             notify_team, TEAM, task,
@@ -144,7 +144,7 @@ class TestNotifyConflict:
         task = _make_task_at_in_approval(notify_team)
         task["branch"] = "alice/T0001"
         change_status(notify_team, TEAM, task["id"], "merging")
-        change_status(notify_team, TEAM, task["id"], "conflict")
+        change_status(notify_team, TEAM, task["id"], "merge_failed")
 
         notify_conflict(notify_team, TEAM, task)
 
@@ -158,7 +158,7 @@ class TestNotifyConflict:
         task = _make_task_at_in_approval(notify_team)
         task["branch"] = "alice/T0001"
         change_status(notify_team, TEAM, task["id"], "merging")
-        change_status(notify_team, TEAM, task["id"], "conflict")
+        change_status(notify_team, TEAM, task["id"], "merge_failed")
 
         notify_conflict(notify_team, TEAM, task, conflict_details="")
 
@@ -170,7 +170,7 @@ class TestNotifyConflict:
         """notify_conflict returns the message id as a string."""
         task = _make_task_at_in_approval(notify_team)
         change_status(notify_team, TEAM, task["id"], "merging")
-        change_status(notify_team, TEAM, task["id"], "conflict")
+        change_status(notify_team, TEAM, task["id"], "merge_failed")
 
         result = notify_conflict(notify_team, TEAM, task, conflict_details="Test")
         assert result is not None

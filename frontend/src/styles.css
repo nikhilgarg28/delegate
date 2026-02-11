@@ -81,8 +81,8 @@ html, body { height: 100%; }
   --status-done-bg: rgba(86,91,115,0.10);
   --status-rejected: #F87171;
   --status-rejected-bg: rgba(248,113,113,0.10);
-  --status-conflict: #FBBF24;
-  --status-conflict-bg: rgba(251,191,36,0.10);
+  --status-merge_failed: #FBBF24;
+  --status-merge_failed-bg: rgba(251,191,36,0.10);
 
   /* Agent identity colors */
   --agent-1: #7DD3FC;
@@ -369,7 +369,7 @@ body {
 .sidebar-task-dot.dot-merging { background: var(--status-merging); box-shadow: 0 0 6px rgba(167,139,250,0.4); }
 .sidebar-task-dot.dot-done { background: var(--status-done); }
 .sidebar-task-dot.dot-rejected { background: var(--status-rejected); }
-.sidebar-task-dot.dot-conflict { background: var(--status-conflict); }
+.sidebar-task-dot.dot-merge_failed { background: var(--status-merge_failed); }
 .sidebar-agent-list { display: flex; flex-direction: column; gap: 0; max-height: calc(28px * 7); overflow-y: auto; }
 .sidebar-agent-row { display: flex; align-items: center; gap: 8px; height: 28px; min-height: 28px; font-size: 12px; padding: 0 4px; cursor: pointer; border-radius: 4px; transition: background 100ms; }
 .sidebar-agent-row:hover { background: var(--bg-hover); }
@@ -441,7 +441,7 @@ body {
 .badge-merging { background: var(--status-merging-bg); color: var(--status-merging); }
 .badge-done { background: var(--status-done-bg); color: var(--status-done); }
 .badge-rejected { background: var(--status-rejected-bg); color: var(--status-rejected); }
-.badge-conflict { background: var(--status-conflict-bg); color: var(--status-conflict); }
+.badge-merge_failed { background: var(--status-merge_failed-bg); color: var(--status-merge_failed); }
 
 /* ---- Task approval ---- */
 /* Approval status indicator (Details tab) */
