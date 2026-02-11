@@ -73,7 +73,7 @@ function ApprovalBadge({ task, currentReview }) {
     );
   }
   if (status === "merge_failed") {
-    return <div class="task-approval-status"><div class="approval-badge" style={{ background: "rgba(251,146,60,0.12)", color: "#fb923c" }}>&#9888; Merge Failed</div></div>;
+    return <div class="task-approval-status"><div class="approval-badge" style={{ background: "rgba(204,167,0,0.08)", color: "var(--semantic-orange)" }}>&#9888; Merge Failed</div></div>;
   }
   return null;
 }
@@ -728,7 +728,7 @@ function DetailsTab({ task, stats, currentReview }) {
       <ActivitySection taskId={t.id} task={t} />
       {/* Status detail (merge failure reason etc.) */}
       {t.status_detail && (
-        <div style={{ fontSize: "12px", color: "var(--text-muted)", padding: "8px 12px", background: "rgba(251,191,36,0.06)", borderRadius: "6px", marginBottom: "8px", border: "1px solid rgba(251,191,36,0.15)" }}>
+        <div style={{ fontSize: "12px", color: "var(--text-muted)", padding: "8px 12px", background: "rgba(204,167,0,0.06)", borderRadius: "6px", marginBottom: "8px", border: "1px solid rgba(204,167,0,0.12)" }}>
           {t.status_detail}
         </div>
       )}

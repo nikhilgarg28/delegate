@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "preact/hooks"
 import {
   currentTeam, messages, agents, activeTab,
   chatFilterDirection, diffPanelMode, diffPanelTarget, taskPanelId,
-  knownAgentNames,
+  knownAgentNames, isMuted,
 } from "../state.js";
 import * as api from "../api.js";
 import {
-  cap, esc, fmtTimestamp, renderMarkdown, avatarColor, avatarInitial,
+  cap, esc, fmtTimestamp, renderMarkdown,
   linkifyTaskRefs, linkifyFilePaths, agentifyRefs, msgStatusIcon, taskIdStr,
 } from "../utils.js";
 import { playMsgSound } from "../audio.js";
@@ -87,6 +87,25 @@ function useSpeechRecognition(inputRef) {
   return { active, toggle, supported: supported.current };
 }
 
+// ── Bell/mute icon ──
+function BellIcon({ muted }) {
+  if (muted) {
+    return (
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4.5 6.5V6a3.5 3.5 0 017 0v.5c0 2 1 3 1 3H3.5s1-1 1-3z" />
+        <path d="M6.5 13a1.5 1.5 0 003 0" />
+        <line x1="2" y1="2" x2="14" y2="14" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.5 6.5V6a3.5 3.5 0 017 0v.5c0 2 1 3 1 3H3.5s1-1 1-3z" />
+      <path d="M6.5 13a1.5 1.5 0 003 0" />
+    </svg>
+  );
+}
+
 export function ChatPanel() {
   const team = currentTeam.value;
   const msgs = messages.value;
@@ -112,6 +131,7 @@ export function ChatPanel() {
   const initialScrollDone = useRef(false);
 
   const mic = useSpeechRecognition(inputRef);
+  const muted = isMuted.value;
 
   // Restore filters from session storage
   useEffect(() => {
@@ -177,7 +197,7 @@ export function ChatPanel() {
     return filtered;
   }, [msgs, showEvents, filterFrom, filterTo, filterSearch, direction]);
 
-  // Track scroll position to decide whether to auto-scroll
+  // Track scroll position
   useEffect(() => {
     const el = logRef.current;
     if (!el) return;
@@ -190,7 +210,7 @@ export function ChatPanel() {
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Scroll to bottom on initial load (once messages are available)
+  // Scroll to bottom on initial load
   useEffect(() => {
     const el = logRef.current;
     if (!el || !filteredMsgs.length || initialScrollDone.current) return;
@@ -246,7 +266,6 @@ export function ChatPanel() {
       if (inputRef.current) { inputRef.current.value = ""; inputRef.current.style.height = "auto"; }
       setInputVal("");
       setSendBtnActive(false);
-      // Always scroll to bottom after sending
       isAtBottomRef.current = true;
       setShowJumpBtn(false);
       requestAnimationFrame(() => {
@@ -269,24 +288,26 @@ export function ChatPanel() {
     chatFilterDirection.value = direction === "one-way" ? "bidi" : "one-way";
   }, [direction]);
 
+  const toggleMute = useCallback(() => {
+    const next = !isMuted.value;
+    isMuted.value = next;
+    localStorage.setItem("delegate-muted", next ? "true" : "false");
+  }, []);
+
   const onSearchInput = useCallback((e) => {
     const val = e.target.value;
     clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => setFilterSearch(val), 300);
   }, []);
 
-  // ── Render ──
-  const searchIcon = (
-    <svg class="filter-search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="6" cy="6" r="4.5" /><line x1="9.5" y1="9.5" x2="13" y2="13" />
-    </svg>
-  );
-
   return (
     <div class="panel active" style={{ display: activeTab.value === "chat" ? "" : "none" }}>
+      {/* Minimal filter bar */}
       <div class="chat-filters">
         <div class="filter-search-wrap">
-          {searchIcon}
+          <svg class="filter-search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="6" cy="6" r="4.5" /><line x1="9.5" y1="9.5" x2="13" y2="13" />
+          </svg>
           <input
             type="text"
             class="filter-search"
@@ -296,25 +317,27 @@ export function ChatPanel() {
           />
         </div>
         <select value={filterFrom} onChange={e => setFilterFrom(e.target.value)}>
-          <option value="">Anyone</option>
+          <option value="">From: All</option>
           {agentOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <span
           class={"filter-arrow" + (direction === "bidi" ? " bidi" : "")}
           onClick={toggleDirection}
-          title="Toggle direction: one-way / bidirectional"
+          title="Toggle direction"
         >
           {direction === "bidi" ? "\u2194" : "\u2192"}
         </span>
         <select value={filterTo} onChange={e => setFilterTo(e.target.value)}>
-          <option value="">Anyone</option>
+          <option value="">To: All</option>
           {agentOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <label>
           <input type="checkbox" checked={showEvents} onChange={e => setShowEvents(e.target.checked)} />
-          {" "}Activity
+          {" "}Events
         </label>
       </div>
+
+      {/* Message list */}
       <div class="chat-log" ref={logRef}>
         {filteredMsgs.map((m, i) => {
           if (m.type === "event") {
@@ -332,26 +355,21 @@ export function ChatPanel() {
             );
           }
           const contentHtml = linkifyFilePaths(linkifyTaskRefs(renderMarkdown(m.content)));
-          // Three-tier name coloring: boss=white, manager=blue, agents=grey
           const senderLower = m.sender.toLowerCase();
-          const senderRole = allAgents.find(a => a.name === senderLower)?.role || "";
-          let senderColor = "var(--text-secondary)"; // default: agents
-          if (senderLower === "nikhil") senderColor = "var(--text-primary)"; // boss: white
-          else if (senderRole === "manager") senderColor = "var(--accent)"; // manager: blue
-          // Manager message elevated background
-          const msgClass = (senderRole === "manager") ? "msg msg-manager" : "msg";
+          const isBoss = senderLower === "nikhil" || senderLower === "boss";
+          const isToBoss = (m.recipient || "").toLowerCase() === "nikhil" || (m.recipient || "").toLowerCase() === "boss";
+          const msgClass = (isBoss || isToBoss) ? "msg msg-boss" : "msg";
           return (
             <div key={m.id || i} class={msgClass}>
               <div class="msg-body">
                 <div class="msg-header">
                   <span
                     class="msg-sender"
-                    style={{ cursor: "pointer", color: senderColor }}
                     onClick={() => { diffPanelMode.value = "agent"; diffPanelTarget.value = m.sender; }}
                   >
                     {cap(m.sender)}
                   </span>
-                  <span class="msg-recipient" style={{ color: "var(--text-secondary)" }}> → {cap(m.recipient)}</span>
+                  <span class="msg-recipient"> → {cap(m.recipient)}</span>
                   <span class="msg-time" dangerouslySetInnerHTML={{ __html: fmtTimestamp(m.timestamp) }} />
                   <span class="msg-checkmark" dangerouslySetInnerHTML={{ __html: msgStatusIcon(m) }} />
                   {m.task_id != null && (
@@ -370,6 +388,8 @@ export function ChatPanel() {
           );
         })}
       </div>
+
+      {/* Jump to bottom */}
       {showJumpBtn && (
         <button class="chat-jump-btn" onClick={jumpToBottom} title="Jump to latest">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -377,14 +397,9 @@ export function ChatPanel() {
           </svg>
         </button>
       )}
-      <div class="chat-input-container">
-        <div class="chat-input-top">
-          <select value={recipient} onChange={e => setRecipient(e.target.value)}>
-            {recipientOptions.map(a => (
-              <option key={a.name} value={a.name}>{cap(a.name)} ({a.role || "worker"})</option>
-            ))}
-          </select>
-        </div>
+
+      {/* Chat input — Cursor-style: textarea on top, toolbar on bottom */}
+      <div class="chat-input-box">
         <textarea
           ref={inputRef}
           placeholder="Send a message..."
@@ -396,32 +411,41 @@ export function ChatPanel() {
             setSendBtnActive(!!e.target.value.trim());
           }}
         />
-        <div class="chat-input-actions">
+        <div class="chat-input-toolbar">
+          <select class="chat-input-recipient" value={recipient} onChange={e => setRecipient(e.target.value)}>
+            {recipientOptions.map(a => (
+              <option key={a.name} value={a.name}>{cap(a.name)}</option>
+            ))}
+          </select>
+          <div class="chat-input-toolbar-spacer" />
           {mic.supported && (
             <button
-              class={"mic-btn" + (mic.active ? " recording" : "")}
+              class={"chat-tool-btn" + (mic.active ? " recording" : "")}
               onClick={mic.toggle}
               title={mic.active ? "Stop recording" : "Voice input"}
-              aria-label="Voice input"
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="5.5" y="1" width="5" height="9" rx="2.5" />
                 <path d="M3 7.5a5 5 0 0 0 10 0" />
                 <line x1="8" y1="12.5" x2="8" y2="15" />
-                <line x1="5.5" y1="15" x2="10.5" y2="15" />
               </svg>
             </button>
           )}
           <button
-            class={"send-btn" + (sendBtnActive ? " active" : "")}
+            class="chat-tool-btn"
+            onClick={toggleMute}
+            title={muted ? "Unmute notifications" : "Mute notifications"}
+          >
+            <BellIcon muted={muted} />
+          </button>
+          <button
+            class={"chat-tool-btn send-btn" + (sendBtnActive ? " active" : "")}
             onClick={handleSend}
             title="Send message"
-            aria-label="Send message"
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="8" cy="8" r="7" />
-              <line x1="8" y1="11" x2="8" y2="5" />
-              <polyline points="5.5,7.5 8,5 10.5,7.5" />
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="8" y1="12" x2="8" y2="4" />
+              <polyline points="4.5,7.5 8,4 11.5,7.5" />
             </svg>
           </button>
         </div>

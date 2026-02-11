@@ -9,7 +9,6 @@ import {
 } from "./state.js";
 import * as api from "./api.js";
 import { Sidebar } from "./components/Sidebar.jsx";
-import { Header } from "./components/Header.jsx";
 import { ChatPanel } from "./components/ChatPanel.jsx";
 import { TasksPanel } from "./components/TasksPanel.jsx";
 import { AgentsPanel } from "./components/AgentsPanel.jsx";
@@ -17,25 +16,6 @@ import { TaskSidePanel } from "./components/TaskSidePanel.jsx";
 import { DiffPanel } from "./components/DiffPanel.jsx";
 import { ToastContainer } from "./components/Toast.jsx";
 import { showToast } from "./toast.js";
-
-// ── Attention Banner ──
-function AttentionBanner() {
-  const allTasks = tasks.value;
-  const approvalTasks = allTasks.filter(t => t.status === "in_approval");
-  const count = approvalTasks.length;
-
-  if (count === 0) return null;
-
-  const handleClick = () => {
-    activeTab.value = "tasks";
-  };
-
-  return (
-    <div class="attention-banner" onClick={handleClick}>
-      🔴 {count} task{count !== 1 ? "s" : ""} need your attention
-    </div>
-  );
-}
 
 // ── Main App ──
 function App() {
@@ -61,7 +41,6 @@ function App() {
       if (valid.includes(path)) {
         activeTab.value = path;
       } else {
-        // Unknown or empty path — default to chat
         activeTab.value = "chat";
         if (path !== "") {
           window.history.replaceState(null, "", "/chat");
@@ -69,7 +48,6 @@ function App() {
       }
     };
     window.addEventListener("popstate", onPath);
-    // Init from path
     onPath();
     return () => window.removeEventListener("popstate", onPath);
   }, []);
@@ -98,7 +76,6 @@ function App() {
       if (!active) return;
       const team = currentTeam.value;
       if (!team) {
-        // Try loading teams if not available
         try {
           const teamList = await api.fetchTeams();
           if (teamList.length) {
@@ -110,13 +87,11 @@ function App() {
       }
 
       try {
-        // Fetch tasks and agents in parallel (needed by sidebar + active tab)
         const [taskData, agentData] = await Promise.all([
           api.fetchTasks(team),
           api.fetchAgents(team),
         ]);
 
-        // Fetch agent stats in parallel
         const statsMap = {};
         await Promise.all(
           agentData.map(async (a) => {
@@ -127,7 +102,6 @@ function App() {
           })
         );
 
-        // Fetch messages only if chat tab is active
         let msgData = messages.value;
         if (activeTab.value === "chat") {
           try {
@@ -135,7 +109,6 @@ function App() {
           } catch (e) { }
         }
 
-        // Batch update signals (single re-render)
         if (active) {
           batch(() => {
             tasks.value = taskData;
@@ -152,7 +125,6 @@ function App() {
       }
     };
 
-    // Initial poll
     poll();
     const interval = setInterval(poll, 2000);
     return () => { active = false; clearInterval(interval); };
@@ -168,7 +140,6 @@ function App() {
       agentStatsMap.value = {};
       messages.value = [];
     });
-    // Immediate fetch for the new team
     (async () => {
       try {
         const [taskData, agentData] = await Promise.all([
@@ -197,9 +168,8 @@ function App() {
       es.onmessage = (evt) => {
         try {
           const entry = JSON.parse(evt.data);
-          if (entry.type === "connected") return; // handshake
+          if (entry.type === "connected") return;
 
-          // Task updates: patch the tasks signal in-place
           if (entry.type === "task_update") {
             const tid = entry.task_id;
             const cur = tasks.value;
@@ -215,11 +185,9 @@ function App() {
             return;
           }
 
-          // Update per-agent last activity
           const prev = agentLastActivity.value;
           agentLastActivity.value = { ...prev, [entry.agent]: entry };
 
-          // Append to global activity log (capped)
           const log = agentActivityLog.value;
           const next = log.length >= MAX_LOG_ENTRIES
             ? [...log.slice(log.length - MAX_LOG_ENTRIES + 1), entry]
@@ -228,9 +196,7 @@ function App() {
         } catch (e) { /* ignore malformed events */ }
       };
 
-      es.onerror = () => {
-        // EventSource auto-reconnects; just log
-      };
+      es.onerror = () => { };
     };
 
     connect();
@@ -244,8 +210,6 @@ function App() {
     <>
       <Sidebar />
       <div class="main">
-        <Header />
-        <AttentionBanner />
         <div class="content">
           <ChatPanel />
           <TasksPanel />

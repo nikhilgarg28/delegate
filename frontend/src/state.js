@@ -18,6 +18,7 @@ export const messages = signal([]);
 // ── UI state ──
 export const activeTab = signal("chat");
 export const isMuted = signal(localStorage.getItem("delegate-muted") === "true");
+export const sidebarCollapsed = signal(localStorage.getItem("delegate-sidebar-collapsed") === "true");
 
 // ── Panel state ──
 export const taskPanelId = signal(null);       // numeric task id or null
