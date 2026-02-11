@@ -260,6 +260,12 @@ function DiffFile({ diffFile, taskId, commentIndex, oldCommentIndex, showOld, on
             </div>
           ))}
           <table class="rc-diff-table">
+            <colgroup>
+              <col style="width:40px" />
+              <col style="width:40px" />
+              <col style="width:24px" />
+              <col />
+            </colgroup>
             <tbody>
               {diffFile.blocks.map((block, i) => (
                 <DiffBlock
