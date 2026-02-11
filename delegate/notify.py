@@ -89,8 +89,11 @@ def notify_rejection(
                     + "\n".join(parts)
                     + "\n"
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "Failed to fetch review comments for %s attempt %s: %s",
+                format_task_id(task_id), attempt, e
+            )
 
     body = (
         f"TASK_REJECTED: {format_task_id(task_id)}\n"
@@ -119,9 +122,15 @@ def notify_rejection(
             "Rejection notification sent for %s to %s", task_id, manager
         )
         return filename
-    except (ValueError, FileNotFoundError) as e:
+    except ValueError as e:
         logger.warning(
-            "Failed to send rejection notification for %s: %s", task_id, e
+            "Invalid data when sending rejection notification for %s: %s", task_id, e
+        )
+        return None
+    except FileNotFoundError as e:
+        logger.warning(
+            "Mailbox directory not found when sending rejection notification for %s: %s",
+            task_id, e
         )
         return None
 
@@ -179,8 +188,14 @@ def notify_conflict(
             "Conflict notification sent for %s to %s", task_id, manager
         )
         return filename
-    except (ValueError, FileNotFoundError) as e:
+    except ValueError as e:
         logger.warning(
-            "Failed to send conflict notification for %s: %s", task_id, e
+            "Invalid data when sending conflict notification for %s: %s", task_id, e
+        )
+        return None
+    except FileNotFoundError as e:
+        logger.warning(
+            "Mailbox directory not found when sending conflict notification for %s: %s",
+            task_id, e
         )
         return None

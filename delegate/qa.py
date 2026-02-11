@@ -96,12 +96,18 @@ def checkout_branch(hc_home: Path, team: str, repo_name: str, branch: str) -> Pa
 
     if wt_dest.exists():
         # Already exists — fetch and check out branch
-        subprocess.run(
+        fetch_result = subprocess.run(
             ["git", "fetch", "--all"],
             cwd=str(wt_dest),
             capture_output=True,
             check=False,
+            text=True,
         )
+        if fetch_result.returncode != 0:
+            logger.debug(
+                "git fetch failed in worktree %s (returncode %d): %s",
+                wt_dest, fetch_result.returncode, fetch_result.stderr
+            )
         subprocess.run(
             ["git", "checkout", branch],
             cwd=str(wt_dest),
@@ -110,12 +116,18 @@ def checkout_branch(hc_home: Path, team: str, repo_name: str, branch: str) -> Pa
         )
     else:
         # Fetch latest in the repo first
-        subprocess.run(
+        fetch_result = subprocess.run(
             ["git", "fetch", "--all"],
             cwd=str(real_repo),
             capture_output=True,
             check=False,
+            text=True,
         )
+        if fetch_result.returncode != 0:
+            logger.debug(
+                "git fetch failed in repo %s (returncode %d): %s",
+                real_repo, fetch_result.returncode, fetch_result.stderr
+            )
         # Create worktree
         subprocess.run(
             ["git", "worktree", "add", str(wt_dest), branch],
@@ -162,7 +174,11 @@ def run_tests(repo_path: Path, test_command: str | None = None) -> ReviewResult:
             repo=repo_path.name,
             branch="unknown",
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
+        logger.warning(
+            "Test command timed out after 300s in %s: %s",
+            repo_path.name, test_command
+        )
         return ReviewResult(
             approved=False,
             output="Tests timed out after 300 seconds.",
@@ -199,7 +215,11 @@ def run_pre_merge_script(repo_path: Path, script: str) -> ReviewResult:
             repo=repo_path.name,
             branch="unknown",
         )
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
+        logger.warning(
+            "Pre-merge script timed out after 600s in %s: %s",
+            repo_path.name, script
+        )
         return ReviewResult(
             approved=False,
             output="Pre-merge script timed out after 600 seconds.",
@@ -255,9 +275,17 @@ def check_test_coverage(repo_path: Path, min_coverage: int = MIN_COVERAGE_PERCEN
 
         return True, f"Could not parse coverage percentage.\n{output}"
 
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
+        logger.warning(
+            "Coverage check timed out after 300s in %s: pytest --cov",
+            repo_path.name
+        )
         return False, "Coverage check timed out after 300 seconds."
-    except FileNotFoundError:
+    except FileNotFoundError as e:
+        logger.debug(
+            "Python executable not found when running coverage check in %s",
+            repo_path.name
+        )
         return True, "Python not found, skipping coverage check."
 
 
