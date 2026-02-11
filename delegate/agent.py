@@ -482,6 +482,9 @@ Other commands:
     {python} -m delegate.task attach {hc_home} {team} <task_id> <file_path>
     {python} -m delegate.task detach {hc_home} {team} <task_id> <file_path>
 
+    # Task comments (durable notes on a task — specs, findings, decisions)
+    {python} -m delegate.task comment {hc_home} {team} <task_id> {agent} "<body>"
+
     # Check your inbox
     {python} -m delegate.mailbox inbox {hc_home} {team} {agent}
 {inlined_notes_block}
@@ -574,6 +577,24 @@ def build_user_message(
                 f"\n- Do NOT switch branches — stay on {current_task.get('branch', '')}."
                 "\n- Your branch is local-only and will be merged by the merge worker when approved."
             )
+
+        # Task activity — status/assignee transitions, comments, events
+        try:
+            from delegate.chat import get_task_timeline
+            activity = get_task_timeline(hc_home, team, current_task["id"], limit=20)
+            if activity:
+                parts.append(f"\n--- Task Activity (latest {len(activity)} items) ---")
+                for item in activity:
+                    ts = item.get("timestamp", "")
+                    if item.get("type") == "comment":
+                        parts.append(f"[{ts}] [comment] {item['sender']}: {item['content']}")
+                    elif item.get("type") == "event":
+                        parts.append(f"[{ts}] {item['content']}")
+                    elif item.get("type") == "chat":
+                        parts.append(f"[{ts}] [msg] {item.get('sender', '?')} -> {item.get('recipient', '?')}: {item['content']}")
+        except Exception:
+            pass
+
         parts.append("")
 
     # --- Bidirectional conversation history ---

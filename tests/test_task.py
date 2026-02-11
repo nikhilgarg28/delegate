@@ -15,6 +15,8 @@ from delegate.task import (
     list_tasks,
     set_task_branch,
     get_task_diff,
+    add_comment,
+    get_comments,
     VALID_STATUSES,
     VALID_TRANSITIONS,
     VALID_APPROVAL_STATUSES,
@@ -625,3 +627,113 @@ class TestValidTransitions:
                 assert target in VALID_STATUSES, (
                     f"Transition target '{target}' from '{from_status}' is not a valid status"
                 )
+
+
+class TestTaskComments:
+    """Tests for add_comment() and get_comments()."""
+
+    def test_add_and_get_comment(self, tmp_team):
+        """Basic add + get round-trip."""
+        task = create_task(tmp_team, TEAM, title="Comment Task", assignee="alice")
+        cid = add_comment(tmp_team, TEAM, task["id"], "alice", "Found a bug in the parser")
+        assert cid >= 1
+
+        comments = get_comments(tmp_team, TEAM, task["id"])
+        assert len(comments) == 1
+        assert comments[0]["author"] == "alice"
+        assert comments[0]["body"] == "Found a bug in the parser"
+        assert comments[0]["task_id"] == task["id"]
+
+    def test_multiple_comments_ordered(self, tmp_team):
+        """Comments are returned oldest-first."""
+        task = create_task(tmp_team, TEAM, title="Multi Comment", assignee="bob")
+        add_comment(tmp_team, TEAM, task["id"], "alice", "First comment")
+        add_comment(tmp_team, TEAM, task["id"], "bob", "Second comment")
+        add_comment(tmp_team, TEAM, task["id"], "alice", "Third comment")
+
+        comments = get_comments(tmp_team, TEAM, task["id"])
+        assert len(comments) == 3
+        assert comments[0]["body"] == "First comment"
+        assert comments[1]["body"] == "Second comment"
+        assert comments[2]["body"] == "Third comment"
+
+    def test_comments_scoped_to_task(self, tmp_team):
+        """Comments on one task don't leak to another."""
+        t1 = create_task(tmp_team, TEAM, title="Task A", assignee="alice")
+        t2 = create_task(tmp_team, TEAM, title="Task B", assignee="alice")
+        add_comment(tmp_team, TEAM, t1["id"], "alice", "Comment on A")
+        add_comment(tmp_team, TEAM, t2["id"], "bob", "Comment on B")
+
+        c1 = get_comments(tmp_team, TEAM, t1["id"])
+        c2 = get_comments(tmp_team, TEAM, t2["id"])
+        assert len(c1) == 1
+        assert c1[0]["body"] == "Comment on A"
+        assert len(c2) == 1
+        assert c2[0]["body"] == "Comment on B"
+
+    def test_comment_limit(self, tmp_team):
+        """Limit parameter caps the number of returned comments."""
+        task = create_task(tmp_team, TEAM, title="Lots of Comments", assignee="alice")
+        for i in range(10):
+            add_comment(tmp_team, TEAM, task["id"], "alice", f"Comment {i}")
+
+        comments = get_comments(tmp_team, TEAM, task["id"], limit=3)
+        assert len(comments) == 3
+        assert comments[0]["body"] == "Comment 0"
+
+    def test_comment_on_nonexistent_task(self, tmp_team):
+        """Adding a comment to a missing task raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError):
+            add_comment(tmp_team, TEAM, 9999, "alice", "This should fail")
+
+    def test_empty_comments(self, tmp_team):
+        """get_comments for a task with no comments returns empty list."""
+        task = create_task(tmp_team, TEAM, title="No Comments", assignee="alice")
+        comments = get_comments(tmp_team, TEAM, task["id"])
+        assert comments == []
+
+
+class TestTaskTimeline:
+    """Tests for get_task_timeline() merging comments and events."""
+
+    def test_timeline_includes_events_and_comments(self, tmp_team):
+        """Timeline should contain both system events and comments."""
+        from delegate.chat import get_task_timeline
+
+        task = create_task(tmp_team, TEAM, title="Timeline Task", assignee="alice")
+        # create_task logs a "created" event automatically
+        add_comment(tmp_team, TEAM, task["id"], "alice", "Starting work on this")
+
+        timeline = get_task_timeline(tmp_team, TEAM, task["id"])
+        types = [item["type"] for item in timeline]
+        # Should have at least one event (from creation + comment event) and one comment
+        assert "event" in types
+        assert "comment" in types
+
+    def test_timeline_chronological_order(self, tmp_team):
+        """Timeline items should be ordered by timestamp."""
+        from delegate.chat import get_task_timeline
+
+        task = create_task(tmp_team, TEAM, title="Order Task", assignee="alice")
+        add_comment(tmp_team, TEAM, task["id"], "alice", "Early comment")
+        add_comment(tmp_team, TEAM, task["id"], "bob", "Later comment")
+
+        timeline = get_task_timeline(tmp_team, TEAM, task["id"])
+        timestamps = [item["timestamp"] for item in timeline]
+        assert timestamps == sorted(timestamps)
+
+    def test_comment_entries_have_correct_shape(self, tmp_team):
+        """Comment entries should have type=comment, sender=author, content=body."""
+        from delegate.chat import get_task_timeline
+
+        task = create_task(tmp_team, TEAM, title="Shape Test", assignee="alice")
+        add_comment(tmp_team, TEAM, task["id"], "alice", "Testing shape")
+
+        timeline = get_task_timeline(tmp_team, TEAM, task["id"])
+        comments = [item for item in timeline if item["type"] == "comment"]
+        assert len(comments) == 1
+        c = comments[0]
+        assert c["sender"] == "alice"
+        assert c["content"] == "Testing shape"
+        assert c["recipient"] == ""
+        assert c["task_id"] == task["id"]

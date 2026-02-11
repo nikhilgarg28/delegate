@@ -27,6 +27,29 @@ Check inbox: `python -m delegate.mailbox inbox <home> <team> <your_name>`
 - **Don't wait silently.** If blocked on someone, say so explicitly.
 - **Don't ack.** Never send "Got it", "Standing by", or "Thanks" unless you're also conveying new information. Unnecessary messages trigger sessions for recipients, creating costly feedback loops.
 
+## Task Comments vs. Messages
+
+Use **task comments** for durable information that belongs to the task:
+- Follow-up specs, clarifications, scope changes
+- Findings, bugs, technical discoveries
+- Design decisions and rationale
+- Blockers and resolution notes
+- Notes about attached files
+
+Use **messages** for brief coordination:
+- Status pings ("T0003 is ready for review")
+- Questions that need an immediate answer
+- Handoff notifications ("Assigned T0005 to you — see task comments for context")
+
+When handing off a task, do NOT repeat task details in the message.
+Add a task comment with the new information and send a brief message
+referencing the task.
+
+When attaching files to a task, always add a comment explaining what
+was attached and why.
+
+Add a comment: `python -m delegate.task comment <home> <team> <task_id> <your_name> "<body>"`
+
 ## Long-Running Work
 
 When working on a task that takes more than a few minutes and someone may be waiting for the result (especially the boss or manager), send a brief progress update every few minutes. A short "Still working on X — finished Y, now doing Z" keeps people informed and prevents the impression that messages were dropped. Don't wait until everything is done to communicate.

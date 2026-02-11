@@ -535,6 +535,55 @@ def detach_file(hc_home: Path, team: str, task_id: int, file_path: str) -> dict:
     return update_task(hc_home, team, task_id, attachments=attachments)
 
 
+# ---------------------------------------------------------------------------
+# Task comments
+# ---------------------------------------------------------------------------
+
+def add_comment(hc_home: Path, team: str, task_id: int, author: str, body: str) -> int:
+    """Add a comment to a task. Returns the comment ID.
+
+    Also logs a system event for the activity timeline.
+    """
+    get_task(hc_home, team, task_id)  # Verify task exists
+
+    conn = get_connection(hc_home, team)
+    try:
+        cursor = conn.execute(
+            "INSERT INTO task_comments (task_id, author, body) VALUES (?, ?, ?)",
+            (task_id, author, body),
+        )
+        conn.commit()
+        comment_id = cursor.lastrowid
+    finally:
+        conn.close()
+
+    from delegate.chat import log_event
+    log_event(
+        hc_home, team,
+        f"{author.capitalize()} commented on {format_task_id(task_id)}",
+        task_id=task_id,
+    )
+
+    return comment_id
+
+
+def get_comments(hc_home: Path, team: str, task_id: int, limit: int = 50) -> list[dict]:
+    """Return comments for a task, oldest first.
+
+    Returns ``[{id, task_id, author, body, created_at}, ...]``.
+    """
+    conn = get_connection(hc_home, team)
+    try:
+        rows = conn.execute(
+            "SELECT id, task_id, author, body, created_at "
+            "FROM task_comments WHERE task_id = ? ORDER BY id ASC LIMIT ?",
+            (task_id, limit),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [dict(row) for row in rows]
+
+
 def get_task_diff(hc_home: Path, team: str, task_id: int) -> dict[str, str]:
     """Return the git diff for the task's branch, keyed by repo name.
 
@@ -796,6 +845,14 @@ def main():
     p_detach.add_argument("task_id", type=int)
     p_detach.add_argument("file", help="Path of the file to detach")
 
+    # comment
+    p_comment = sub.add_parser("comment", help="Add a comment to a task")
+    p_comment.add_argument("home", type=Path)
+    p_comment.add_argument("team")
+    p_comment.add_argument("task_id", type=int)
+    p_comment.add_argument("author", help="Name of the comment author")
+    p_comment.add_argument("body", help="Comment body text")
+
     args = parser.parse_args()
 
     if args.command == "create":
@@ -860,6 +917,10 @@ def main():
     elif args.command == "detach":
         task = detach_file(args.home, args.team, args.task_id, args.file)
         print(f"Detached '{args.file}' from {format_task_id(task['id'])}")
+
+    elif args.command == "comment":
+        cid = add_comment(args.home, args.team, args.task_id, args.author, args.body)
+        print(f"Comment #{cid} added to {format_task_id(args.task_id)} by {args.author}")
 
 
 if __name__ == "__main__":

@@ -1207,6 +1207,81 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- Task Comments in Activity Timeline ---- */
+.task-comment-entry {
+  flex-direction: column !important;
+  gap: 4px !important;
+  padding: 8px 0 !important;
+}
+.task-comment-entry .task-activity-icon {
+  position: absolute;
+}
+.task-comment-entry {
+  position: relative;
+  padding-left: 28px !important;
+}
+.task-comment-body {
+  flex: 1;
+}
+.task-comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.task-comment-author {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.task-comment-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.task-comment-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+.task-comment-input {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  outline: none;
+}
+.task-comment-input:focus {
+  border-color: var(--accent-blue);
+}
+.task-comment-submit {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-active);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.task-comment-submit:hover:not(:disabled) {
+  background: var(--accent-blue);
+  color: white;
+  border-color: var(--accent-blue);
+}
+.task-comment-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ---- Toast Notifications ---- */
 .toast-container {
   position: fixed;

@@ -62,6 +62,26 @@ export async function fetchTaskActivity(team, taskId) {
   return r.ok ? r.json() : [];
 }
 
+// --- Task Comments ---
+
+export async function fetchTaskComments(team, taskId) {
+  const r = await fetch(`/teams/${team}/tasks/${taskId}/comments`);
+  return r.ok ? r.json() : [];
+}
+
+export async function postTaskComment(team, taskId, author, body) {
+  const r = await fetch(`/teams/${team}/tasks/${taskId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ author, body }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || r.statusText);
+  }
+  return r.json();
+}
+
 // --- Reviews ---
 
 export async function fetchReviews(team, taskId) {

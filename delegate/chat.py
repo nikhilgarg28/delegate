@@ -125,6 +125,56 @@ def get_task_activity(
     return [dict(row) for row in rows]
 
 
+def get_task_timeline(
+    hc_home: Path,
+    team: str,
+    task_id: int,
+    limit: int | None = None,
+) -> list[dict]:
+    """Return interleaved activity events and task comments for a task.
+
+    Merges rows from ``messages`` (events + chat) and ``task_comments``
+    into a single chronological list, ordered oldest first.
+
+    Comment rows are returned with ``type: "comment"`` and use the
+    ``author`` as ``sender``.  This makes the shape uniform with event/chat
+    rows so the UI can render them in a single timeline.
+    """
+    conn = get_connection(hc_home, team)
+
+    # --- Messages (events + chat) ---
+    msg_query = """
+        SELECT id, timestamp, sender, recipient, content, type, task_id
+        FROM messages
+        WHERE task_id = ?
+        ORDER BY id ASC
+    """
+    msg_rows = conn.execute(msg_query, (task_id,)).fetchall()
+    items: list[dict] = [dict(row) for row in msg_rows]
+
+    # --- Task comments ---
+    comment_query = """
+        SELECT id, created_at AS timestamp, author AS sender,
+               '' AS recipient, body AS content, 'comment' AS type,
+               task_id
+        FROM task_comments
+        WHERE task_id = ?
+        ORDER BY id ASC
+    """
+    comment_rows = conn.execute(comment_query, (task_id,)).fetchall()
+    items.extend(dict(row) for row in comment_rows)
+
+    conn.close()
+
+    # Sort by timestamp, then by id for stable ordering within the same ts
+    items.sort(key=lambda r: (r.get("timestamp", ""), r.get("id", 0)))
+
+    if limit:
+        items = items[:limit]
+
+    return items
+
+
 # --- Session tracking ---
 
 

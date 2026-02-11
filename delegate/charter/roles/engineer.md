@@ -31,3 +31,16 @@
 - Check task attachments before starting — they may contain specs,
   designs, or reference material. Attach your own artifacts (design
   previews, screenshots) to the task when submitting for review.
+
+## Task Comments
+
+- When starting a task, read the description and check task comments for
+  any follow-up context (clarifications, scope changes, prior feedback).
+- When making decisions or discoveries, add a task comment so the team
+  has a record.
+- When submitting for review, add a comment summarizing what was done
+  and key decisions.
+- When attaching files (specs, screenshots, prototypes), always add a
+  comment explaining what was attached and why.
+- Do NOT repeat task details in messages to other agents — add a comment
+  and send a brief message referencing the task instead.

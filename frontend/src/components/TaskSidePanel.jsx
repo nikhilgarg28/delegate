@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "preact/hooks";
 import {
-  currentTeam, tasks, taskPanelId, knownAgentNames,
+  currentTeam, tasks, taskPanelId, knownAgentNames, bossName,
   diffPanelMode, diffPanelTarget,
 } from "../state.js";
 import * as api from "../api.js";
@@ -243,42 +243,69 @@ function ApprovalActions({ task, currentReview, onApproved, onRejected }) {
   );
 }
 
-// ── Activity section ──
+// ── Activity section (interleaved events + comments) ──
 function ActivitySection({ taskId, task }) {
-  const [events, setEvents] = useState(null);
-  const [expanded, setExpanded] = useState(false);
+  const [timeline, setTimeline] = useState(null);
+  const [expanded, setExpanded] = useState(true);
+  const [commentText, setCommentText] = useState("");
+  const [posting, setPosting] = useState(false);
   const team = currentTeam.value;
+  const boss = bossName.value || "boss";
+
+  const loadTimeline = useCallback(async () => {
+    try {
+      const activity = await api.fetchTaskActivity(team, taskId);
+      const items = activity.map((m) => {
+        if (m.type === "comment") {
+          return {
+            type: "comment",
+            time: m.timestamp,
+            author: m.sender || "unknown",
+            body: m.content || "",
+            icon: "\u270E",
+          };
+        }
+        if (m.type === "event") {
+          const text = m.content || "Event";
+          let icon = "\u21BB";
+          if (/created/i.test(text)) icon = "+";
+          else if (/assign/i.test(text)) icon = "\u2192";
+          else if (/approved|merged/i.test(text)) icon = "\u2713";
+          else if (/rejected/i.test(text)) icon = "\u2717";
+          else if (/review/i.test(text)) icon = "\u2299";
+          else if (/commented/i.test(text)) icon = "\u270E";
+          return { type: "event", time: m.timestamp, text, icon };
+        }
+        const sender = cap(m.sender || "unknown");
+        const recipient = cap(m.recipient || "unknown");
+        return { type: "chat", time: m.timestamp, text: `${sender} \u2192 ${recipient}`, icon: "\u25B7" };
+      });
+      setTimeline(items);
+    } catch (e) {
+      setTimeline([]);
+    }
+  }, [team, taskId]);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const activity = await api.fetchTaskActivity(team, taskId);
-        if (cancelled) return;
-        const evts = activity.map((m) => {
-          if (m.type === "event") {
-            // System events: task created, assigned, status changes, etc.
-            const text = m.content || "Event";
-            let icon = "\uD83D\uDD04"; // default: 🔄
-            if (/created/i.test(text)) icon = "\u2795";
-            else if (/assign/i.test(text)) icon = "\uD83D\uDC64";
-            else if (/approved|merged/i.test(text)) icon = "\u2705";
-            else if (/rejected/i.test(text)) icon = "\u274C";
-            else if (/review/i.test(text)) icon = "\uD83D\uDD0D";
-            return { type: "event", time: m.timestamp, text, icon };
-          }
-          // Chat messages: "sender → recipient"
-          const sender = cap(m.sender || "unknown");
-          const recipient = cap(m.recipient || "unknown");
-          return { type: "chat", time: m.timestamp, text: `${sender} \u2192 ${recipient}`, icon: "\uD83D\uDCAC" };
-        });
-        setEvents(evts);
-      } catch (e) {
-        if (!cancelled) setEvents([]);
-      }
-    })();
+    loadTimeline().then(() => { if (cancelled) return; });
     return () => { cancelled = true; };
-  }, [taskId, team]);
+  }, [taskId, team, loadTimeline]);
+
+  const handlePostComment = async () => {
+    const body = commentText.trim();
+    if (!body || posting) return;
+    setPosting(true);
+    try {
+      await api.postTaskComment(team, taskId, boss, body);
+      setCommentText("");
+      await loadTimeline();
+    } catch (e) {
+      showToast("Failed to post comment: " + e.message, "error");
+    } finally {
+      setPosting(false);
+    }
+  };
 
   return (
     <div class="task-activity-section">
@@ -287,19 +314,52 @@ function ActivitySection({ taskId, task }) {
         <span class="task-panel-section-label" style={{ marginBottom: 0 }}>Activity</span>
       </div>
       <div class={"task-activity-list" + (expanded ? " expanded" : "")}>
-        {events === null ? (
+        {timeline === null ? (
           <div class="diff-empty">Loading activity...</div>
-        ) : events.length === 0 ? (
+        ) : timeline.length === 0 ? (
           <div class="diff-empty">No activity yet</div>
         ) : (
-          events.map((e, i) => (
-            <div key={i} class="task-activity-event">
-              <span class="task-activity-icon">{e.icon}</span>
-              <span class="task-activity-text">{e.text}</span>
-              <span class="task-activity-time">{fmtRelativeTime(e.time)}</span>
-            </div>
-          ))
+          timeline.map((e, i) =>
+            e.type === "comment" ? (
+              <div key={i} class="task-activity-event task-comment-entry">
+                <span class="task-activity-icon">{e.icon}</span>
+                <div class="task-comment-body">
+                  <div class="task-comment-meta">
+                    <span class="task-comment-author">{cap(e.author)}</span>
+                    <span class="task-activity-time">{fmtRelativeTime(e.time)}</span>
+                  </div>
+                  <div class="task-comment-text">{e.body}</div>
+                </div>
+              </div>
+            ) : (
+              <div key={i} class="task-activity-event">
+                <span class="task-activity-icon">{e.icon}</span>
+                <span class="task-activity-text">{e.text}</span>
+                <span class="task-activity-time">{fmtRelativeTime(e.time)}</span>
+              </div>
+            )
+          )
         )}
+        {/* Comment input for the boss */}
+        <div class="task-comment-input-row">
+          <input
+            type="text"
+            class="task-comment-input"
+            placeholder="Add a comment..."
+            value={commentText}
+            onInput={(e) => setCommentText(e.target.value)}
+            onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") handlePostComment(); }}
+            onClick={(e) => e.stopPropagation()}
+            disabled={posting}
+          />
+          <button
+            class="task-comment-submit"
+            onClick={(e) => { e.stopPropagation(); handlePostComment(); }}
+            disabled={posting || !commentText.trim()}
+          >
+            {posting ? "..." : "\u2192"}
+          </button>
+        </div>
       </div>
     </div>
   );

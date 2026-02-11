@@ -456,14 +456,41 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
     @app.get("/teams/{team}/tasks/{task_id}/activity")
     def get_team_task_activity(team: str, task_id: int, limit: int | None = None):
-        """Return all activity (events + messages) for a task."""
-        from delegate.chat import get_task_activity
+        """Return interleaved activity (events + messages + comments) for a task."""
+        from delegate.chat import get_task_timeline
 
         try:
             _get_task(hc_home, team, task_id)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-        return get_task_activity(hc_home, team, task_id, limit=limit)
+        return get_task_timeline(hc_home, team, task_id, limit=limit)
+
+    # --- Task comments endpoints (team-scoped) ---
+
+    @app.get("/teams/{team}/tasks/{task_id}/comments")
+    def get_team_task_comments(team: str, task_id: int, limit: int = 50):
+        """Return comments for a task."""
+        from delegate.task import get_comments as _get_comments
+        try:
+            _get_task(hc_home, team, task_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        return _get_comments(hc_home, team, task_id, limit=limit)
+
+    class TaskCommentBody(BaseModel):
+        author: str
+        body: str
+
+    @app.post("/teams/{team}/tasks/{task_id}/comments")
+    def post_team_task_comment(team: str, task_id: int, comment: TaskCommentBody):
+        """Add a comment to a task."""
+        from delegate.task import add_comment as _add_comment
+        try:
+            _get_task(hc_home, team, task_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        cid = _add_comment(hc_home, team, task_id, comment.author, comment.body)
+        return {"id": cid, "task_id": task_id, "author": comment.author, "body": comment.body}
 
     # --- Review endpoints (team-scoped) ---
 
@@ -695,12 +722,12 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     @app.get("/api/tasks/{task_id}/activity")
     def get_task_activity_global(task_id: int, limit: int | None = None):
         """Get task activity — scans all teams (legacy compat)."""
-        from delegate.chat import get_task_activity
+        from delegate.chat import get_task_timeline
 
         for t in _list_teams(hc_home):
             try:
                 _get_task(hc_home, t, task_id)
-                return get_task_activity(hc_home, t, task_id, limit=limit)
+                return get_task_timeline(hc_home, t, task_id, limit=limit)
             except (FileNotFoundError, Exception):
                 continue
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")

@@ -14,6 +14,7 @@ python -m delegate.task assign <home> <task_id> <assignee>
 python -m delegate.task status <home> <task_id> <new_status>
 python -m delegate.task attach <home> <task_id> <file_path>
 python -m delegate.task detach <home> <task_id> <file_path>
+python -m delegate.task comment <home> <team> <task_id> <your_name> "<body>"
 ```
 
 Statuses: `todo` → `in_progress` → `in_review` → `in_approval` → `merging` → `done`. Also: `rejected` (→ `in_progress`), `merge_failed` (→ `in_progress` or retry → `in_approval`).
@@ -58,6 +59,21 @@ Specify with `--depends-on <ids>`. A task with incomplete dependencies must NOT 
 ## Blockers
 
 Message the manager immediately. Don't spend more than 15 minutes stuck before raising it.
+
+## Task Comments
+
+Use task comments to record durable information on a task. Comments are visible
+to all agents in the task prompt and in the UI timeline.
+
+When to add a comment:
+- **Before starting work**: capture clarifications, scope decisions, or follow-up specs.
+- **During work**: record findings, bugs, design decisions, or technical notes.
+- **When blocked**: explain what you're stuck on and what you've tried.
+- **When submitting for review**: summarize what was done and key decisions.
+- **When attaching files**: explain what was attached and why.
+
+Do NOT repeat task comments in messages. Instead, add a comment and send a brief
+message referencing the task (e.g., "Added specs to T0003 comments").
 
 ## Completion
 

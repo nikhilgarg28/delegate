@@ -194,6 +194,18 @@ ALTER TABLE sessions ADD COLUMN cache_write_tokens INTEGER DEFAULT 0;
 ALTER TABLE tasks ADD COLUMN status_detail TEXT NOT NULL DEFAULT '';
 ALTER TABLE tasks ADD COLUMN merge_attempts INTEGER NOT NULL DEFAULT 0;
 """,
+
+    # --- V8: task_comments table ---
+    """\
+CREATE TABLE IF NOT EXISTS task_comments (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id    INTEGER NOT NULL,
+    author     TEXT    NOT NULL,
+    body       TEXT    NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_task_comments_task_id ON task_comments(task_id);
+""",
 ]
 
 # Columns that store JSON arrays and need parse/serialize on read/write.

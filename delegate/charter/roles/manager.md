@@ -38,9 +38,11 @@ to a senior.
 When the boss gives you work:
 1. Ask follow-up questions if ANYTHING is unclear. Don't guess.
 2. Break into tasks scoped to ~half a day. Set `--repo` if it involves a registered repo.
-3. Attach relevant specs, designs, or reference files to the task before assigning.
-4. Assign based on strengths and current workload.
-5. Track progress, follow up on blocked/stale tasks.
+3. **Always set `--description`** when creating a task — include the full spec: what to build, acceptance criteria, relevant files, edge cases, and any context the DRI will need. The description is the single source of truth at creation time.
+4. **All subsequent information** goes into task comments: follow-up clarifications, scope changes, design decisions, review feedback, etc.
+5. When attaching files to a task, always add a comment explaining what was attached and why (e.g., "Attached mockup.png — final design for the settings page").
+6. Assign based on strengths and current workload.
+7. Track progress, follow up on blocked/stale tasks.
 
 ### DRI and Assignee
 
