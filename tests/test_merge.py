@@ -1,10 +1,11 @@
 """Tests for delegate/merge.py — merge worker logic.
 
-Tests the new merge flow:
-    1. rebase onto main
-    2. run tests (skippable)
-    3. fast-forward merge
-    4. cleanup
+Tests the merge flow:
+    1. Create temp worktree for feature branch
+    2. Rebase onto main (inside temp worktree)
+    3. Run tests (inside temp worktree, skippable)
+    4. Atomic fast-forward via update-ref CAS
+    5. Cleanup
 """
 
 import subprocess
@@ -26,6 +27,15 @@ from delegate.config import (
 )
 from delegate.merge import merge_task, merge_once, _run_pre_merge, _other_unmerged_tasks_on_branch, MergeResult
 from delegate.bootstrap import bootstrap
+
+
+def _file_in_git_tree(repo: Path, ref: str, filename: str) -> bool:
+    """Check whether *filename* exists in the git tree at *ref*."""
+    result = subprocess.run(
+        ["git", "show", f"{ref}:{filename}"],
+        cwd=str(repo), capture_output=True, text=True,
+    )
+    return result.returncode == 0
 
 
 SAMPLE_TEAM = "myteam"
@@ -93,7 +103,7 @@ def _register_repo_with_symlink(hc_home: Path, name: str, source_repo: Path):
 
 class TestMergeTask:
     def test_successful_merge(self, hc_home, tmp_path):
-        """Full merge: rebase, skip-tests, ff-merge."""
+        """Full merge: rebase in temp worktree, update-ref CAS."""
         repo = _setup_git_repo(tmp_path)
         _make_feature_branch(repo, "alice/T0001")
         _register_repo_with_symlink(hc_home, "myrepo", repo)
@@ -105,7 +115,8 @@ class TestMergeTask:
 
         updated = get_task(hc_home, SAMPLE_TEAM, task["id"])
         assert updated["status"] == "done"
-        assert (repo / "feature.py").exists()  # Feature is on main
+        # update-ref doesn't touch the working tree, so check git tree
+        assert _file_in_git_tree(repo, "main", "feature.py")
 
     def test_rebase_conflict(self, hc_home, tmp_path):
         """Rebase conflict → status becomes 'conflict' and manager notified."""
@@ -186,7 +197,7 @@ class TestMergeTask:
         assert updated["status"] == "done"
 
     def test_merge_succeeds_with_unstaged_changes(self, hc_home, tmp_path):
-        """Merge should stash unstaged changes before rebasing and restore after."""
+        """Merge uses a temp worktree so unstaged changes in the main repo are untouched."""
         repo = _setup_git_repo(tmp_path)
         branch = "alice/T0001"
         _make_feature_branch(repo, branch)
@@ -202,11 +213,11 @@ class TestMergeTask:
         updated = get_task(hc_home, SAMPLE_TEAM, task["id"])
         assert updated["status"] == "done"
 
-        # The untracked file should still be present after merge
-        assert (repo / "untracked_file.js").exists(), "Stashed file should be restored"
+        # The untracked file should still be present — update-ref doesn't touch working tree
+        assert (repo / "untracked_file.js").exists(), "Untracked file should be untouched"
 
     def test_merge_succeeds_with_modified_tracked_file(self, hc_home, tmp_path):
-        """Merge should stash modified tracked files before rebasing."""
+        """Merge uses a temp worktree so modified tracked files are untouched."""
         repo = _setup_git_repo(tmp_path)
         branch = "alice/T0001"
         _make_feature_branch(repo, branch)
@@ -221,6 +232,9 @@ class TestMergeTask:
 
         updated = get_task(hc_home, SAMPLE_TEAM, task["id"])
         assert updated["status"] == "done"
+
+        # Modified file should still have our local changes — working tree untouched
+        assert (repo / "README.md").read_text() == "# Modified but not staged\n"
 
     def test_rebase_onto_with_base_sha(self, hc_home, tmp_path):
         """When base_sha is set on the task, rebase uses --onto to replay
@@ -256,7 +270,7 @@ class TestMergeTask:
 
         updated = get_task(hc_home, SAMPLE_TEAM, task["id"])
         assert updated["status"] == "done"
-        assert (repo / "onto_feature.py").exists()  # Agent's commit landed
+        assert _file_in_git_tree(repo, "main", "onto_feature.py")  # Agent's commit landed
 
     def test_rebase_fallback_without_base_sha(self, hc_home, tmp_path):
         """When base_sha is empty/None the merge falls back to plain rebase."""
@@ -274,7 +288,7 @@ class TestMergeTask:
 
         updated = get_task(hc_home, SAMPLE_TEAM, task["id"])
         assert updated["status"] == "done"
-        assert (repo / "nobase.py").exists()
+        assert _file_in_git_tree(repo, "main", "nobase.py")
 
     def test_rebase_onto_excludes_reverted_commits(self, hc_home, tmp_path):
         """--onto correctly excludes commits that were reverted from main.
@@ -337,11 +351,11 @@ class TestMergeTask:
         updated = get_task(hc_home, SAMPLE_TEAM, task["id"])
         assert updated["status"] == "done"
 
-        # Agent's work should be on main
-        assert (repo / "agent_work.py").exists()
+        # Agent's work should be on main (check git tree, not working dir)
+        assert _file_in_git_tree(repo, "main", "agent_work.py")
         # M1 and M2 files should NOT be on main (they were reverted)
-        assert not (repo / "m1.txt").exists(), "m1.txt should not be on main (reverted commit)"
-        assert not (repo / "m2.txt").exists(), "m2.txt should not be on main (reverted commit)"
+        assert not _file_in_git_tree(repo, "main", "m1.txt"), "m1.txt should not be on main (reverted commit)"
+        assert not _file_in_git_tree(repo, "main", "m2.txt"), "m2.txt should not be on main (reverted commit)"
 
 
 # ---------------------------------------------------------------------------
@@ -381,9 +395,9 @@ class TestMergeBaseAndTip:
         assert updated["merge_tip"]["myrepo"] != ""
         assert updated["merge_tip"]["myrepo"] != updated["merge_base"]["myrepo"]
 
-        # merge_tip should be the current HEAD of main
+        # merge_tip should be the current main ref (not necessarily HEAD in working tree)
         post_merge = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=str(repo),
+            ["git", "rev-parse", "refs/heads/main"], cwd=str(repo),
             capture_output=True, text=True, check=True,
         )
         assert updated["merge_tip"]["myrepo"] == post_merge.stdout.strip()
@@ -598,7 +612,8 @@ class TestRunPreMerge:
 
         set_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo", "echo all-checks-pass")
 
-        ok, output = _run_pre_merge(str(repo), branch, hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
+        # _run_pre_merge now takes work_dir (no branch arg, no checkout)
+        ok, output = _run_pre_merge(str(repo), hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
         assert ok is True
         assert "all-checks-pass" in output
 
@@ -611,7 +626,7 @@ class TestRunPreMerge:
 
         set_pre_merge_script(hc_home, SAMPLE_TEAM, "myrepo", "false")
 
-        ok, output = _run_pre_merge(str(repo), branch, hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
+        ok, output = _run_pre_merge(str(repo), hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
         assert ok is False
 
     def test_backward_compat_test_cmd(self, hc_home, tmp_path):
@@ -623,7 +638,7 @@ class TestRunPreMerge:
 
         update_repo_test_cmd(hc_home, SAMPLE_TEAM, "myrepo", "echo legacy-test-passed")
 
-        ok, output = _run_pre_merge(str(repo), branch, hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
+        ok, output = _run_pre_merge(str(repo), hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
         assert ok is True
         assert "legacy-test-passed" in output
 
@@ -635,7 +650,7 @@ class TestRunPreMerge:
         _register_repo_with_symlink(hc_home, "myrepo", repo)
 
         # No script, no test_cmd, no pyproject.toml → skip tests
-        ok, output = _run_pre_merge(str(repo), branch, hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
+        ok, output = _run_pre_merge(str(repo), hc_home=hc_home, team=SAMPLE_TEAM, repo_name="myrepo")
         assert ok is True
         assert "no test runner" in output.lower()
 

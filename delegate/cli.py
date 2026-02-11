@@ -245,6 +245,39 @@ def team_list(ctx: click.Context) -> None:
         click.echo(f"  - {t}")
 
 
+@team.command("remove")
+@click.argument("name")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt.")
+@click.pass_context
+def team_remove(ctx: click.Context, name: str, yes: bool) -> None:
+    """Remove a team and prune its git worktrees."""
+    import shutil
+    import subprocess as _sp
+
+    from delegate.config import get_repos
+
+    hc_home = _get_home(ctx)
+    td = _teams_dir(hc_home) / name
+    if not td.is_dir():
+        raise click.ClickException(f"Team '{name}' not found.")
+
+    if not yes:
+        click.confirm(f"Remove team '{name}' and all its data?", abort=True)
+
+    # Prune git worktrees for every registered repo
+    repos = get_repos(hc_home, name)
+    for repo_name, meta in repos.items():
+        source = meta.get("source", "")
+        repo_dir = Path(source) if source else None
+        if repo_dir and repo_dir.is_dir():
+            _sp.run(["git", "worktree", "prune"], cwd=str(repo_dir), capture_output=True, check=False)
+            click.echo(f"  Pruned worktrees in repo '{repo_name}' ({repo_dir})")
+
+    # Remove team directory
+    shutil.rmtree(td, ignore_errors=True)
+    click.echo(f"Removed team '{name}'.")
+
+
 # ──────────────────────────────────────────────────────────────
 # delegate agent add
 # ──────────────────────────────────────────────────────────────

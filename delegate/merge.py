@@ -3,20 +3,27 @@
 The merge sequence for a task in ``in_approval`` with an approved review verdict
 (or ``approval == 'auto'`` on the repo):
 
-1. ``git rebase --onto main <base_sha> <branch>``  — rebase the agent's commits onto latest main.
-2. If conflict: set task to ``conflict``, notify manager, abort.
-3. Run test suite on the rebased branch.
-4. If tests fail: set task to ``conflict``, notify manager.
-5. ``git merge --ff-only <branch>`` — atomic fast-forward of main.
-6. Set task to ``done``.
-7. Clean up: remove worktree, delete branch, prune.
+1. Create a **temporary worktree** for the feature branch — the main repo's
+   working tree is never touched.
+2. ``git rebase --onto main <base_sha>`` in the temp worktree.
+3. If conflict: set task to ``conflict``, notify manager, abort.
+4. Run test suite in the temp worktree.
+5. If tests fail: set task to ``conflict``, notify manager.
+6. Atomic fast-forward via ``git update-ref`` with compare-and-swap:
+   verify ``main`` is an ancestor of the rebased branch tip, then
+   ``git update-ref refs/heads/main <branch_tip> <old_main>`` — fails
+   if another merge moved ``main`` in the meantime.
+7. Set task to ``done``.
+8. Clean up: remove temp worktree, agent worktree, delete branch, prune.
 
 The merge worker is called from the daemon loop (via ``merge_once``).
 """
 
 import logging
 import shlex
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from delegate.config import get_repo_approval, get_pre_merge_script
@@ -53,70 +60,98 @@ def _run_git(args: list[str], cwd: str, **kwargs) -> subprocess.CompletedProcess
     )
 
 
-def _rebase_branch(repo_dir: str, branch: str, base_sha: str | None = None) -> tuple[bool, str]:
-    """Rebase the branch onto main.
+# ---------------------------------------------------------------------------
+# Temporary worktree helpers
+# ---------------------------------------------------------------------------
+
+def _create_merge_worktree(
+    repo_dir: str,
+    branch: str,
+    task_id: int,
+    repo_name: str,
+) -> tuple[str | None, str]:
+    """Create a temporary worktree checked out to *branch*.
+
+    Returns ``(worktree_path, error_msg)``.  On failure *worktree_path* is
+    ``None`` and *error_msg* describes the problem.
+    """
+    wt_path = Path(tempfile.mkdtemp(
+        prefix=f"delegate-merge-T{task_id:04d}-{repo_name}-",
+    ))
+    # --force: allow even if branch is checked out elsewhere (safety net).
+    result = _run_git(
+        ["worktree", "add", "--force", str(wt_path), branch],
+        cwd=repo_dir,
+    )
+    if result.returncode != 0:
+        shutil.rmtree(wt_path, ignore_errors=True)
+        return None, f"Could not create merge worktree: {result.stderr}"
+    return str(wt_path), ""
+
+
+def _remove_merge_worktree(repo_dir: str, wt_path: str) -> None:
+    """Remove a temporary merge worktree (best effort)."""
+    _run_git(["worktree", "remove", wt_path, "--force"], cwd=repo_dir)
+    _run_git(["worktree", "prune"], cwd=repo_dir)
+    # Belt and suspenders — remove directory if git left it
+    if Path(wt_path).exists():
+        shutil.rmtree(wt_path, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Rebase (runs in temp worktree, never touches main repo working tree)
+# ---------------------------------------------------------------------------
+
+def _rebase_branch(
+    wt_dir: str,
+    base_sha: str | None = None,
+) -> tuple[bool, str]:
+    """Rebase the current branch onto main inside a worktree.
+
+    The worktree must already be checked out to the feature branch.
+    No branch argument is needed — git rebases the current HEAD.
 
     When *base_sha* is provided the rebase uses ``--onto``::
 
-        git rebase --onto main <base_sha> <branch>
+        git rebase --onto main <base_sha>
 
-    This ensures only the commits *after* base_sha are replayed onto main,
-    which is important when main has been reset/reverted since the task
-    started.  When base_sha is ``None`` or empty the original behaviour is
-    preserved (``git rebase main <branch>``).
+    This ensures only commits *after* base_sha are replayed onto main.
+    When base_sha is empty, uses plain ``git rebase main``.
 
-    Stashes any unstaged changes before rebasing and restores them after,
-    so that untracked/modified files in the working directory (e.g. generated
-    static assets) don't cause ``git rebase`` to fail.
-
-    Returns (success, output).
+    Returns ``(success, output)``.
     """
-    # Stash any uncommitted changes (including untracked files) as a safety net
-    stash_result = _run_git(["stash", "--include-untracked"], cwd=repo_dir)
-    did_stash = stash_result.returncode == 0 and "No local changes" not in stash_result.stdout
-
     if base_sha:
-        rebase_cmd = ["rebase", "--onto", "main", base_sha, branch]
+        rebase_cmd = ["rebase", "--onto", "main", base_sha]
     else:
-        rebase_cmd = ["rebase", "main", branch]
-    result = _run_git(rebase_cmd, cwd=repo_dir)
-    if result.returncode != 0:
-        # Abort the failed rebase to leave repo in clean state
-        _run_git(["rebase", "--abort"], cwd=repo_dir)
-        # Restore stashed changes even on failure
-        if did_stash:
-            _run_git(["stash", "pop"], cwd=repo_dir)
-        return False, result.stderr + result.stdout
+        rebase_cmd = ["rebase", "main"]
 
-    # Restore stashed changes after successful rebase
-    if did_stash:
-        _run_git(["stash", "pop"], cwd=repo_dir)
+    result = _run_git(rebase_cmd, cwd=wt_dir)
+    if result.returncode != 0:
+        _run_git(["rebase", "--abort"], cwd=wt_dir)
+        return False, result.stderr + result.stdout
 
     return True, result.stdout
 
 
+# ---------------------------------------------------------------------------
+# Pre-merge tests (runs in temp worktree, no git checkout needed)
+# ---------------------------------------------------------------------------
+
 def _run_pre_merge(
-    repo_dir: str,
-    branch: str,
+    work_dir: str,
+    *,
     hc_home: Path | None = None,
     team: str | None = None,
     repo_name: str | None = None,
 ) -> tuple[bool, str]:
     """Run the pre-merge script (or fall back to auto-detection).
 
-    If a ``pre_merge_script`` is configured for the repo, it is executed as
-    a single shell command.
+    *work_dir* is the directory where tests should run — typically the
+    temp merge worktree which is already checked out to the rebased branch.
+    No ``git checkout`` is performed.
 
-    When no script is configured, falls back to auto-detection based on
-    project files (pyproject.toml, package.json, Makefile).
-
-    Returns (success, output).
+    Returns ``(success, output)``.
     """
-    # Check out the branch in the repo (it's already rebased)
-    result = _run_git(["checkout", branch], cwd=repo_dir)
-    if result.returncode != 0:
-        return False, f"Could not checkout {branch}: {result.stderr}"
-
     # Check for a configured pre-merge script
     script: str | None = None
     if hc_home is not None and team is not None and repo_name:
@@ -127,7 +162,7 @@ def _run_pre_merge(
         try:
             script_result = subprocess.run(
                 cmd,
-                cwd=repo_dir,
+                cwd=work_dir,
                 capture_output=True,
                 text=True,
                 timeout=600,
@@ -137,17 +172,15 @@ def _run_pre_merge(
             return ok, output if not ok else f"Pre-merge script passed:\n{output}"
         except subprocess.TimeoutExpired:
             return False, "Pre-merge script timed out after 600 seconds."
-        finally:
-            _run_git(["checkout", "main"], cwd=repo_dir)
 
     # Fall back to auto-detection (no script configured)
     test_cmd: list[str] | None = None
-    repo_path = Path(repo_dir)
-    if (repo_path / "pyproject.toml").exists() or (repo_path / "tests").is_dir():
+    work_path = Path(work_dir)
+    if (work_path / "pyproject.toml").exists() or (work_path / "tests").is_dir():
         test_cmd = ["python", "-m", "pytest", "-x", "-q"]
-    elif (repo_path / "package.json").exists():
+    elif (work_path / "package.json").exists():
         test_cmd = ["npm", "test"]
-    elif (repo_path / "Makefile").exists():
+    elif (work_path / "Makefile").exists():
         test_cmd = ["make", "test"]
 
     if test_cmd is None:
@@ -156,7 +189,7 @@ def _run_pre_merge(
     try:
         test_result = subprocess.run(
             test_cmd,
-            cwd=repo_dir,
+            cwd=work_dir,
             capture_output=True,
             text=True,
             timeout=300,
@@ -165,9 +198,6 @@ def _run_pre_merge(
         return test_result.returncode == 0, output
     except subprocess.TimeoutExpired:
         return False, "Tests timed out after 300 seconds."
-    finally:
-        # Switch back to main
-        _run_git(["checkout", "main"], cwd=repo_dir)
 
 
 # Keep old names as aliases for backward compatibility
@@ -175,23 +205,68 @@ _run_tests = _run_pre_merge
 _run_pipeline = _run_pre_merge
 
 
-def _ff_merge(repo_dir: str, branch: str) -> tuple[bool, str]:
-    """Fast-forward merge the branch into main.
+# ---------------------------------------------------------------------------
+# Atomic fast-forward via update-ref (never touches working tree)
+# ---------------------------------------------------------------------------
 
-    Returns (success, output).
+def _ff_merge_update_ref(repo_dir: str, branch: str) -> tuple[bool, str]:
+    """Fast-forward ``main`` to *branch* tip using ``git update-ref``.
+
+    1. Resolve current ``main`` and *branch* SHAs.
+    2. Verify *main* is an ancestor of *branch* (fast-forward check).
+    3. Atomically advance ``refs/heads/main`` via compare-and-swap:
+       ``git update-ref refs/heads/main <new> <old>`` — fails if another
+       process moved ``main`` between steps 1 and 3.
+
+    The main repo's working tree is **never modified**.
+
+    Returns ``(success, output)``.
     """
-    # Ensure we're on main
-    result = _run_git(["checkout", "main"], cwd=repo_dir)
-    if result.returncode != 0:
-        return False, f"Could not checkout main: {result.stderr}"
+    main_result = _run_git(["rev-parse", "refs/heads/main"], cwd=repo_dir)
+    if main_result.returncode != 0:
+        return False, f"Could not resolve main: {main_result.stderr}"
+    main_sha = main_result.stdout.strip()
 
-    # Fast-forward merge
-    result = _run_git(["merge", "--ff-only", branch], cwd=repo_dir)
-    if result.returncode != 0:
-        return False, f"Fast-forward merge failed: {result.stderr}"
+    branch_result = _run_git(["rev-parse", f"refs/heads/{branch}"], cwd=repo_dir)
+    if branch_result.returncode != 0:
+        return False, f"Could not resolve {branch}: {branch_result.stderr}"
+    branch_sha = branch_result.stdout.strip()
 
-    return True, result.stdout
+    if main_sha == branch_sha:
+        return True, "Already up to date."
 
+    # Fast-forward check: main must be an ancestor of branch tip
+    ancestor_check = _run_git(
+        ["merge-base", "--is-ancestor", main_sha, branch_sha],
+        cwd=repo_dir,
+    )
+    if ancestor_check.returncode != 0:
+        return False, (
+            f"Fast-forward not possible: main ({main_sha[:10]}) is not an "
+            f"ancestor of {branch} ({branch_sha[:10]})"
+        )
+
+    # Atomic CAS: update main to branch_sha, expecting old value main_sha.
+    # If another merge moved main in the meantime, this fails.
+    update_result = _run_git(
+        ["update-ref", "refs/heads/main", branch_sha, main_sha],
+        cwd=repo_dir,
+    )
+    if update_result.returncode != 0:
+        return False, (
+            f"update-ref CAS failed (concurrent merge?): {update_result.stderr}"
+        )
+
+    return True, f"main fast-forwarded {main_sha[:10]} → {branch_sha[:10]}"
+
+
+# Keep the old name as an alias (tests may reference it)
+_ff_merge = _ff_merge_update_ref
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _other_unmerged_tasks_on_branch(
     hc_home: Path,
@@ -219,6 +294,10 @@ def _cleanup_branch(repo_dir: str, branch: str) -> None:
     _run_git(["worktree", "prune"], cwd=repo_dir)
 
 
+# ---------------------------------------------------------------------------
+# Main merge entry point
+# ---------------------------------------------------------------------------
+
 def merge_task(
     hc_home: Path,
     team: str,
@@ -226,6 +305,10 @@ def merge_task(
     skip_tests: bool = False,
 ) -> MergeResult:
     """Execute the full merge sequence for a task.
+
+    All git operations (rebase, test, merge) happen in a **temporary
+    worktree** — the main repo's working tree is never touched, avoiding
+    race conditions with agents or the user.
 
     For multi-repo tasks, each repo is rebased, tested, and merged
     independently.  If any repo fails, the entire task is marked as
@@ -261,7 +344,7 @@ def merge_task(
 
     log_event(hc_home, team, f"{format_task_id(task_id)} merge started ({branch})", task_id=task_id)
 
-    # Step 0: Remove agent worktrees in all repos.
+    # Step 0: Remove agent worktrees so the branch is free to check out.
     dri = task.get("dri", "") or task.get("assignee", "")
     if dri:
         for repo_name in repos:
@@ -277,45 +360,60 @@ def merge_task(
 
     for repo_name in repos:
         repo_str = repo_dirs[repo_name]
+        wt_path: str | None = None
 
-        # Step 1: Rebase onto main
-        base_sha = base_sha_dict.get(repo_name, "")
-        ok, output = _rebase_branch(repo_str, branch, base_sha=base_sha)
-        if not ok:
-            change_status(hc_home, team, task_id, "conflict")
-            notify_conflict(hc_home, team, task, conflict_details=f"[{repo_name}] {output[:500]}")
-            log_event(hc_home, team, f"{format_task_id(task_id)} merge conflict during rebase ({repo_name})", task_id=task_id)
-            return MergeResult(task_id, False, f"Rebase conflict in {repo_name}: {output[:200]}")
+        try:
+            # Step 1: Create temp worktree for the feature branch
+            wt_path, err = _create_merge_worktree(repo_str, branch, task_id, repo_name)
+            if wt_path is None:
+                change_status(hc_home, team, task_id, "conflict")
+                notify_conflict(hc_home, team, task, conflict_details=f"[{repo_name}] {err}")
+                log_event(hc_home, team, f"{format_task_id(task_id)} merge failed — worktree error ({repo_name})", task_id=task_id)
+                return MergeResult(task_id, False, f"Worktree error in {repo_name}: {err[:200]}")
 
-        # Step 2: Run pre-merge script / tests (optional)
-        if not skip_tests:
-            ok, output = _run_pre_merge(repo_str, branch, hc_home=hc_home, team=team, repo_name=repo_name)
+            # Step 2: Rebase onto main (inside the temp worktree)
+            base_sha = base_sha_dict.get(repo_name, "")
+            ok, output = _rebase_branch(wt_path, base_sha=base_sha)
             if not ok:
                 change_status(hc_home, team, task_id, "conflict")
-                notify_conflict(hc_home, team, task, conflict_details=f"[{repo_name}] Pre-merge checks failed:\n{output[:500]}")
-                log_event(hc_home, team, f"{format_task_id(task_id)} merge blocked — pre-merge checks failed ({repo_name})", task_id=task_id)
-                return MergeResult(task_id, False, f"Pre-merge checks failed in {repo_name}: {output[:200]}")
+                notify_conflict(hc_home, team, task, conflict_details=f"[{repo_name}] {output[:500]}")
+                log_event(hc_home, team, f"{format_task_id(task_id)} merge conflict during rebase ({repo_name})", task_id=task_id)
+                return MergeResult(task_id, False, f"Rebase conflict in {repo_name}: {output[:200]}")
 
-        # Step 3: Fast-forward merge
-        pre_merge = _run_git(["rev-parse", "main"], cwd=repo_str)
-        merge_base_dict[repo_name] = pre_merge.stdout.strip() if pre_merge.returncode == 0 else ""
+            # Step 3: Run pre-merge script / tests (in the temp worktree)
+            if not skip_tests:
+                ok, output = _run_pre_merge(wt_path, hc_home=hc_home, team=team, repo_name=repo_name)
+                if not ok:
+                    change_status(hc_home, team, task_id, "conflict")
+                    notify_conflict(hc_home, team, task, conflict_details=f"[{repo_name}] Pre-merge checks failed:\n{output[:500]}")
+                    log_event(hc_home, team, f"{format_task_id(task_id)} merge blocked — pre-merge checks failed ({repo_name})", task_id=task_id)
+                    return MergeResult(task_id, False, f"Pre-merge checks failed in {repo_name}: {output[:200]}")
 
-        ok, output = _ff_merge(repo_str, branch)
-        if not ok:
-            change_status(hc_home, team, task_id, "conflict")
-            notify_conflict(hc_home, team, task, conflict_details=f"[{repo_name}] {output[:500]}")
-            log_event(hc_home, team, f"{format_task_id(task_id)} merge failed ({repo_name})", task_id=task_id)
-            return MergeResult(task_id, False, f"Merge failed in {repo_name}: {output[:200]}")
+            # Step 4: Atomic fast-forward via update-ref CAS
+            pre_merge = _run_git(["rev-parse", "refs/heads/main"], cwd=repo_str)
+            merge_base_dict[repo_name] = pre_merge.stdout.strip() if pre_merge.returncode == 0 else ""
 
-        post_merge = _run_git(["rev-parse", "main"], cwd=repo_str)
-        merge_tip_dict[repo_name] = post_merge.stdout.strip() if post_merge.returncode == 0 else ""
+            ok, output = _ff_merge_update_ref(repo_str, branch)
+            if not ok:
+                change_status(hc_home, team, task_id, "conflict")
+                notify_conflict(hc_home, team, task, conflict_details=f"[{repo_name}] {output[:500]}")
+                log_event(hc_home, team, f"{format_task_id(task_id)} merge failed ({repo_name})", task_id=task_id)
+                return MergeResult(task_id, False, f"Merge failed in {repo_name}: {output[:200]}")
 
-    # Step 4: Record per-repo merge_base and merge_tip, then mark as done
+            post_merge = _run_git(["rev-parse", "refs/heads/main"], cwd=repo_str)
+            merge_tip_dict[repo_name] = post_merge.stdout.strip() if post_merge.returncode == 0 else ""
+
+        finally:
+            # Always clean up the temp worktree
+            if wt_path is not None:
+                _remove_merge_worktree(repo_str, wt_path)
+
+    # Step 5: Record per-repo merge_base and merge_tip, then mark as done
     update_task(hc_home, team, task_id, merge_base=merge_base_dict, merge_tip=merge_tip_dict)
     change_status(hc_home, team, task_id, "done")
     log_event(hc_home, team, f"{format_task_id(task_id)} merged to main ✓", task_id=task_id)
 
-    # Step 5: Clean up branches (best effort).
+    # Step 6: Clean up branches (best effort).
     shared = _other_unmerged_tasks_on_branch(hc_home, team, branch, exclude_task_id=task_id)
     if shared:
         logger.info(
@@ -326,7 +424,7 @@ def merge_task(
         for repo_name in repos:
             _cleanup_branch(repo_dirs[repo_name], branch)
 
-    # Step 6: Clean up worktrees (best effort).
+    # Step 7: Clean up agent worktrees (best effort).
     if dri and not shared:
         for repo_name in repos:
             try:
