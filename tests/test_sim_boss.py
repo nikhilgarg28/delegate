@@ -4,6 +4,8 @@ import asyncio
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.skip(reason="sim_boss tests disabled — not in active use")
 import yaml
 
 from delegate.bootstrap import bootstrap

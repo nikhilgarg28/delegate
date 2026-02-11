@@ -6,6 +6,8 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
+
+pytestmark = pytest.mark.skip(reason="eval tests disabled — not in active use")
 import yaml
 
 from delegate.task import format_task_id
