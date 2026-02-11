@@ -430,10 +430,9 @@ def _ensure_task_branch_metadata(
 ) -> None:
     """Backfill branch and base_sha on a task when already-existing worktree is reused.
 
-    When an agent restarts or a worktree was created before the metadata-saving
-    logic existed, the task may have empty ``branch`` and ``base_sha``
-    fields.  This function detects that and fills them in so downstream diff
-    and merge tooling can work.
+    base_sha is now always recorded at task creation time, so this should
+    rarely need to do anything.  Kept as a defensive safety net for tasks
+    created before eager recording was added.
     """
     task_id = task["id"]
     needs_update = False
@@ -444,12 +443,19 @@ def _ensure_task_branch_metadata(
         branch = _branch_name(team, task_id, task.get("title", ""))
         updates["branch"] = branch
         needs_update = True
-        logger.info("Backfilling branch=%s on task %s", branch, task_id)
+        logger.warning(
+            "Backfilling branch=%s on task %s — branch should have been set earlier",
+            branch, task_id,
+        )
 
     # Backfill base_sha (per-repo dict) from main HEAD in the worktree
     existing_base_sha: dict = task.get("base_sha", {})
     repos: list[str] = task.get("repo", [])
     if not existing_base_sha and repos:
+        logger.warning(
+            "Backfilling base_sha on task %s — base_sha should have been set at creation",
+            task_id,
+        )
         import subprocess as _sp
         base_sha_dict: dict[str, str] = {}
         for repo_name in repos:
@@ -464,7 +470,7 @@ def _ensure_task_branch_metadata(
                 sha = result.stdout.strip()
                 if sha:
                     base_sha_dict[repo_name] = sha
-                    logger.info("Backfilling base_sha[%s]=%s on task %s", repo_name, sha[:8], task_id)
+                    logger.info("Backfilled base_sha[%s]=%s on task %s", repo_name, sha[:8], task_id)
             except Exception as exc:
                 logger.warning("Could not backfill base_sha for task %s repo %s: %s", task_id, repo_name, exc)
         if base_sha_dict:

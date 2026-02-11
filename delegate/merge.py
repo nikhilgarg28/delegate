@@ -104,26 +104,25 @@ def _remove_merge_worktree(repo_dir: str, wt_path: str) -> None:
 
 def _rebase_branch(
     wt_dir: str,
-    base_sha: str | None = None,
+    base_sha: str,
 ) -> tuple[bool, str]:
     """Rebase the current branch onto main inside a worktree.
 
     The worktree must already be checked out to the feature branch.
     No branch argument is needed — git rebases the current HEAD.
 
-    When *base_sha* is provided the rebase uses ``--onto``::
+    Uses ``--onto`` to replay only commits after *base_sha*::
 
         git rebase --onto main <base_sha>
 
-    This ensures only commits *after* base_sha are replayed onto main.
-    When base_sha is empty, uses plain ``git rebase main``.
+    *base_sha* is mandatory — it is always recorded at task creation time.
 
     Returns ``(success, output)``.
     """
-    if base_sha:
-        rebase_cmd = ["rebase", "--onto", "main", base_sha]
-    else:
-        rebase_cmd = ["rebase", "main"]
+    if not base_sha:
+        return False, "base_sha is required but was empty — cannot rebase safely"
+
+    rebase_cmd = ["rebase", "--onto", "main", base_sha]
 
     result = _run_git(rebase_cmd, cwd=wt_dir)
     if result.returncode != 0:
@@ -355,6 +354,16 @@ def merge_task(
                 logger.warning("Could not remove worktree for %s (%s) before merge: %s", format_task_id(task_id), repo_name, exc)
 
     base_sha_dict: dict = task.get("base_sha", {})
+
+    # Validate base_sha is present for all repos (should always be set at creation)
+    for repo_name in repos:
+        if not base_sha_dict.get(repo_name):
+            return MergeResult(
+                task_id, False,
+                f"Missing base_sha for repo {repo_name} — "
+                f"cannot rebase safely (task may predate eager base_sha recording)",
+            )
+
     merge_base_dict: dict[str, str] = {}
     merge_tip_dict: dict[str, str] = {}
 
@@ -372,8 +381,8 @@ def merge_task(
                 return MergeResult(task_id, False, f"Worktree error in {repo_name}: {err[:200]}")
 
             # Step 2: Rebase onto main (inside the temp worktree)
-            base_sha = base_sha_dict.get(repo_name, "")
-            ok, output = _rebase_branch(wt_path, base_sha=base_sha)
+            base_sha = base_sha_dict[repo_name]
+            ok, output = _rebase_branch(wt_path, base_sha)
             if not ok:
                 change_status(hc_home, team, task_id, "conflict")
                 notify_conflict(hc_home, team, task, conflict_details=f"[{repo_name}] {output[:500]}")

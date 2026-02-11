@@ -250,7 +250,8 @@ def create_agent_worktree(
     wt_path = wt_dir / wt_name
 
     if wt_path.exists():
-        # Worktree exists — still backfill base_sha if missing on the task
+        # Worktree exists — backfill base_sha only if somehow missing
+        # (base_sha should always be set at task creation, but be defensive)
         try:
             from delegate.task import get_task as _get_task, update_task as _update_task
             task = _get_task(hc_home, team, task_id)
@@ -259,7 +260,11 @@ def create_agent_worktree(
                 sha = _get_main_head(real_repo)
                 new_base = {**existing_base, repo_name: sha}
                 _update_task(hc_home, team, task_id, base_sha=new_base)
-                logger.info("Backfilled base_sha[%s]=%s for existing worktree %s", repo_name, sha[:8], task_id)
+                logger.warning(
+                    "Backfilled missing base_sha[%s]=%s for task %s — "
+                    "base_sha should have been set at task creation",
+                    repo_name, sha[:8], task_id,
+                )
         except Exception as exc:
             logger.warning("Could not backfill base_sha for %s: %s", task_id, exc)
         logger.info("Worktree already exists at %s", wt_path)
@@ -273,15 +278,20 @@ def create_agent_worktree(
         check=False,  # Don't fail if fetch fails (offline, no remote)
     )
 
-    # Record base SHA (current main HEAD) on the task (per-repo dict)
+    # Backfill base_sha if somehow not set at task creation (defensive)
     try:
-        sha = _get_main_head(real_repo)
         from delegate.task import get_task as _gt, update_task as _ut
         existing_task = _gt(hc_home, team, task_id)
         existing_base: dict = existing_task.get("base_sha", {})
-        new_base = {**existing_base, repo_name: sha}
-        _ut(hc_home, team, task_id, base_sha=new_base)
-        logger.info("Recorded base_sha[%s]=%s for %s", repo_name, sha[:8], task_id)
+        if not existing_base or repo_name not in existing_base:
+            sha = _get_main_head(real_repo)
+            new_base = {**existing_base, repo_name: sha}
+            _ut(hc_home, team, task_id, base_sha=new_base)
+            logger.warning(
+                "Backfilled missing base_sha[%s]=%s for task %s — "
+                "base_sha should have been set at task creation",
+                repo_name, sha[:8], task_id,
+            )
     except Exception as exc:
         logger.warning("Could not record base_sha for %s: %s", task_id, exc)
 

@@ -52,9 +52,12 @@ def hc_home(tmp_path):
 
 
 def _make_in_approval_task(hc_home, title="Task", repo="myrepo", branch="feature/test"):
-    """Helper: create a task and advance it to in_approval status."""
-    task = create_task(hc_home, SAMPLE_TEAM, title=title)
-    update_task(hc_home, SAMPLE_TEAM, task["id"], repo=repo, branch=branch)
+    """Helper: create a task and advance it to in_approval status.
+
+    Creates the task with repo set so that base_sha is recorded eagerly.
+    """
+    task = create_task(hc_home, SAMPLE_TEAM, title=title, repo=repo)
+    update_task(hc_home, SAMPLE_TEAM, task["id"], branch=branch)
     change_status(hc_home, SAMPLE_TEAM, task["id"], "in_progress")
     change_status(hc_home, SAMPLE_TEAM, task["id"], "in_review")
     change_status(hc_home, SAMPLE_TEAM, task["id"], "in_approval")
@@ -272,23 +275,20 @@ class TestMergeTask:
         assert updated["status"] == "done"
         assert _file_in_git_tree(repo, "main", "onto_feature.py")  # Agent's commit landed
 
-    def test_rebase_fallback_without_base_sha(self, hc_home, tmp_path):
-        """When base_sha is empty/None the merge falls back to plain rebase."""
+    def test_fails_without_base_sha(self, hc_home, tmp_path):
+        """When base_sha is empty, merge should fail (base_sha is mandatory)."""
         repo = _setup_git_repo(tmp_path)
         branch = "alice/T0001-nobase"
         _make_feature_branch(repo, branch, filename="nobase.py", content="# no base\n")
         _register_repo_with_symlink(hc_home, "myrepo", repo)
 
         task = _make_in_approval_task(hc_home, repo="myrepo", branch=branch)
-        # Explicitly set base_sha to empty string (simulating a task without it)
+        # Clear base_sha to simulate a legacy task without it
         update_task(hc_home, SAMPLE_TEAM, task["id"], base_sha="")
 
         result = merge_task(hc_home, SAMPLE_TEAM, task["id"], skip_tests=True)
-        assert result.success is True, f"Fallback merge failed: {result.message}"
-
-        updated = get_task(hc_home, SAMPLE_TEAM, task["id"])
-        assert updated["status"] == "done"
-        assert _file_in_git_tree(repo, "main", "nobase.py")
+        assert result.success is False, "Merge should fail when base_sha is missing"
+        assert "base_sha" in result.message.lower()
 
     def test_rebase_onto_excludes_reverted_commits(self, hc_home, tmp_path):
         """--onto correctly excludes commits that were reverted from main.

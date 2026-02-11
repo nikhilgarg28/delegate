@@ -69,6 +69,40 @@ def _now() -> str:
 # CRUD
 # ---------------------------------------------------------------------------
 
+def _snapshot_base_sha(hc_home: Path, team: str, repo_list: list[str]) -> dict[str, str]:
+    """Return ``{repo_name: main_HEAD_sha}`` for each repo in *repo_list*.
+
+    This is called at task creation time so that ``base_sha`` is always set
+    from the start.  If a repo can't be resolved (e.g. not yet registered),
+    it is silently skipped.
+    """
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
+    base: dict[str, str] = {}
+    if not repo_list:
+        return base
+
+    from delegate.repo import get_repo_path
+    for repo_name in repo_list:
+        try:
+            repo_dir = get_repo_path(hc_home, team, repo_name).resolve()
+            if not repo_dir.is_dir():
+                continue
+            result = subprocess.run(
+                ["git", "rev-parse", "refs/heads/main"],
+                cwd=str(repo_dir),
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                base[repo_name] = result.stdout.strip()
+        except Exception as exc:
+            _log.warning("Could not snapshot base_sha for repo %s: %s", repo_name, exc)
+    return base
+
+
 def create_task(
     hc_home: Path,
     team: str,
@@ -87,6 +121,10 @@ def create_task(
 
     *tags* is an optional free-form list of string labels (e.g.
     ``["bugfix", "frontend"]``).
+
+    When repos are provided, ``base_sha`` is recorded immediately as the
+    current ``main`` HEAD of each repo — this is mandatory for the merge
+    flow's ``--onto`` rebase to work correctly.
     """
     if priority not in VALID_PRIORITIES:
         raise ValueError(f"Invalid priority '{priority}'. Must be one of: {VALID_PRIORITIES}")
@@ -96,6 +134,9 @@ def create_task(
         repo_list = [repo] if repo else []
     else:
         repo_list = list(repo)
+
+    # Snapshot base_sha eagerly so it's always set
+    base_sha = _snapshot_base_sha(hc_home, team, repo_list)
 
     now = _now()
     conn = get_connection(hc_home, team)
@@ -112,7 +153,7 @@ def create_task(
                 ?, ?, 'todo', '', '',
                 ?, ?, ?, ?,
                 ?, ?, '',
-                ?, '', '{}', '{}',
+                ?, '', ?, '{}',
                 '{}', '{}'
             )""",
             (
@@ -122,6 +163,7 @@ def create_task(
                 json.dumps([str(t) for t in tags] if tags else []),
                 now, now,
                 json.dumps([int(d) for d in depends_on] if depends_on else []),
+                json.dumps(base_sha),
             ),
         )
         conn.commit()
@@ -234,7 +276,9 @@ def _backfill_branch_metadata(hc_home: Path, team: str, task: dict, updates: dic
     """Try to fill in missing branch and base_sha on a task.
 
     Called as a safety net when a task enters ``in_review`` or ``in_approval``
-    status.  If the task already has both fields populated, this is a no-op.
+    status.  Since ``base_sha`` is now always recorded at task creation time,
+    this should rarely need to do anything.  When it does trigger, it logs a
+    warning so we can track down the gap.
 
     For ``branch``, derives the name from the team and task ID.
     For ``base_sha``, computes ``git merge-base main <branch>`` per repo.
@@ -252,12 +296,21 @@ def _backfill_branch_metadata(hc_home: Path, team: str, task: dict, updates: dic
     if not task.get("branch") and "branch" not in updates:
         branch = f"delegate/{team}/{format_task_id(task_id)}"
         updates["branch"] = branch
-        _log.info("Backfilling branch=%s on task %s during status change", branch, task_id)
+        _log.warning(
+            "Backfilling branch=%s on task %s during status change — "
+            "branch should have been set earlier",
+            branch, task_id,
+        )
 
     # Backfill base_sha (per-repo dict)
     branch = updates.get("branch") or task.get("branch", "")
     existing_base_sha: dict = task.get("base_sha", {})
     if not existing_base_sha and "base_sha" not in updates and branch:
+        _log.warning(
+            "Backfilling base_sha on task %s during status change — "
+            "base_sha should have been set at task creation",
+            task_id,
+        )
         base_sha_dict: dict[str, str] = {}
         for repo_name in repos:
             try:
@@ -273,7 +326,7 @@ def _backfill_branch_metadata(hc_home: Path, team: str, task: dict, updates: dic
                 if result.returncode == 0 and result.stdout.strip():
                     base_sha_dict[repo_name] = result.stdout.strip()
                     _log.info(
-                        "Backfilling base_sha[%s]=%s on task %s",
+                        "Backfilled base_sha[%s]=%s on task %s",
                         repo_name, base_sha_dict[repo_name][:8], task_id,
                     )
             except Exception as exc:
