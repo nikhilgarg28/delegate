@@ -933,6 +933,7 @@ def main():
     p_status.add_argument("team")
     p_status.add_argument("task_id", type=int)
     p_status.add_argument("new_status", choices=VALID_STATUSES)
+    p_status.add_argument("--assignee", help="Also reassign the task (combined single event)")
 
     # show
     p_show = sub.add_parser("show", help="Show a task")
@@ -1015,8 +1016,12 @@ def main():
         print(f"Assigned {format_task_id(task['id'])} to {args.assignee}")
 
     elif args.command == "status":
-        task = change_status(args.home, args.team, args.task_id, args.new_status)
-        print(f"{format_task_id(task['id'])} -> {args.new_status}")
+        if args.assignee:
+            task = transition_task(args.home, args.team, args.task_id, args.new_status, args.assignee)
+            print(f"{format_task_id(task['id'])} -> {args.new_status}, assigned to {args.assignee}")
+        else:
+            task = change_status(args.home, args.team, args.task_id, args.new_status)
+            print(f"{format_task_id(task['id'])} -> {args.new_status}")
 
     elif args.command == "show":
         task = get_task(args.home, args.team, args.task_id)
