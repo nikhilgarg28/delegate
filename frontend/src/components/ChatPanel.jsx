@@ -70,7 +70,6 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
 
   // Merge refs - set internal first, then external if provided
   const setRefs = useCallback((node) => {
-    console.log('[LinkedDiv refCallback] node:', node, 'externalRef:', externalRef);
     internalRef.current = node;
     if (externalRef) {
       if (typeof externalRef === 'function') externalRef(node);
