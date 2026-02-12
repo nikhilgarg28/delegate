@@ -769,6 +769,69 @@ def _diff_for_one_repo(git_cwd: str, branch: str, task: dict, repo_key: str) -> 
     return "(no diff available)"
 
 
+def get_task_merge_preview(hc_home: Path, team: str, task_id: int) -> dict[str, str]:
+    """Return a diff of ``main...branch`` (current main merge-base) per repo.
+
+    Unlike :func:`get_task_diff` which uses the *recorded* ``base_sha``
+    (the main SHA at branch-creation time), this computes the diff
+    relative to the *current* merge-base of ``main`` and ``branch``.
+    The result shows what the merge into current ``main`` would look like.
+    """
+    task = get_task(hc_home, team, task_id)
+    branch = task.get("branch", "")
+    if not branch:
+        return {"_default": "(no branch set)"}
+
+    repos = task.get("repo", [])
+    if not repos:
+        diff = _merge_preview_for_one_repo(str(hc_home), branch)
+        return {"_default": diff}
+
+    from delegate.paths import repo_path as _repo_path
+
+    diffs: dict[str, str] = {}
+    for repo_name in repos:
+        try:
+            git_cwd = str(_repo_path(hc_home, team, repo_name))
+        except FileNotFoundError:
+            diffs[repo_name] = f"(repo '{repo_name}' not found)"
+            continue
+        diffs[repo_name] = _merge_preview_for_one_repo(git_cwd, branch)
+    return diffs
+
+
+def _merge_preview_for_one_repo(git_cwd: str, branch: str) -> str:
+    """Compute ``git diff main...branch`` using the *current* main HEAD."""
+    try:
+        result = subprocess.run(
+            ["git", "diff", "main...%s" % branch],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=git_cwd,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    # If the branch doesn't exist or diff fails, try a two-dot diff
+    try:
+        result = subprocess.run(
+            ["git", "diff", "main..%s" % branch],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=git_cwd,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    return "(no merge preview available)"
+
+
 def get_task_commit_diffs(
     hc_home: Path, team: str, task_id: int,
 ) -> dict[str, list[dict]]:

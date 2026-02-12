@@ -474,6 +474,45 @@ function ChangesTab({ task, diffRaw, currentReview, oldComments, stats }) {
   );
 }
 
+// ── Merge Preview tab ──
+function MergePreviewTab({ task, mergePreviewRaw, stats }) {
+  const files = useMemo(() => mergePreviewRaw ? diff2HtmlParse(mergePreviewRaw) : [], [mergePreviewRaw]);
+  let totalAdd = 0, totalDel = 0;
+  for (const f of files) { totalAdd += f.addedLines; totalDel += f.deletedLines; }
+
+  if (!mergePreviewRaw) return <div class="diff-empty">Loading merge preview...</div>;
+
+  const diffHtml = diff2HtmlRender(mergePreviewRaw, {
+    outputFormat: "line-by-line",
+    drawFileList: false,
+    matching: "words",
+  });
+
+  return (
+    <div>
+      {/* Branch info */}
+      {stats && stats.branch && (
+        <div class="task-panel-vcs-row">
+          <span class="task-branch copyable" title={stats.branch}>{stats.branch}<CopyBtn text={stats.branch} /></span>
+          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>→ main</span>
+        </div>
+      )}
+      {/* File summary */}
+      {files.length > 0 ? (
+        <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>
+          {files.length} file{files.length !== 1 ? "s" : ""} changed{" "}
+          <span style={{ color: "var(--diff-add-text)" }}>+{totalAdd}</span>{" "}
+          <span style={{ color: "var(--diff-del-text)" }}>&minus;{totalDel}</span>
+        </div>
+      ) : (
+        <div class="diff-empty">No differences from main</div>
+      )}
+      {/* Full diff */}
+      {diffHtml && <div dangerouslySetInnerHTML={{ __html: diffHtml }} />}
+    </div>
+  );
+}
+
 // ── Activity tab ──
 function ActivityTab({ taskId, task }) {
   const [timeline, setTimeline] = useState(null);
@@ -597,17 +636,31 @@ export function TaskSidePanel() {
   const [task, setTask] = useState(null);
   const [stats, setStats] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
+  // Track which tabs have been visited — only mount a tab's component
+  // after the user first navigates to it (lazy rendering).
+  const [visitedTabs, setVisitedTabs] = useState({ overview: true });
   const [diffRaw, setDiffRaw] = useState("");
   const [diffLoaded, setDiffLoaded] = useState(false);
+  const [mergePreviewRaw, setMergePreviewRaw] = useState("");
+  const [mergePreviewLoaded, setMergePreviewLoaded] = useState(false);
   const [currentReview, setCurrentReview] = useState(null);
   const [oldComments, setOldComments] = useState([]);
+
+  // Mark tab as visited when selected
+  const switchTab = useCallback((tab) => {
+    setActiveTab(tab);
+    setVisitedTabs(prev => prev[tab] ? prev : { ...prev, [tab]: true });
+  }, []);
 
   // Load task data when panel opens
   useEffect(() => {
     if (id === null || !team) { setTask(null); return; }
     setActiveTab("overview");
+    setVisitedTabs({ overview: true });
     setDiffRaw("");
     setDiffLoaded(false);
+    setMergePreviewRaw("");
+    setMergePreviewLoaded(false);
     setCurrentReview(null);
     setOldComments([]);
 
@@ -629,7 +682,7 @@ export function TaskSidePanel() {
     if (updated) setTask(prev => prev ? { ...prev, ...updated } : updated);
   }, [allTasks, id]);
 
-  // Load review data
+  // Load review data eagerly (needed by approval bar in header)
   useEffect(() => {
     if (id === null || !team) return;
     (async () => {
@@ -655,14 +708,23 @@ export function TaskSidePanel() {
     })();
   }, [id, team, task && task.review_attempt]);
 
-  // Lazy load diff when Changes tab activated
+  // Lazy load diff when Changes tab first visited
   useEffect(() => {
-    if (activeTab !== "changes" || diffLoaded || id === null || !team) return;
+    if (!visitedTabs.changes || diffLoaded || id === null || !team) return;
     setDiffLoaded(true);
     api.fetchTaskDiff(team, id).then(data => {
       setDiffRaw(flattenDiffDict(data.diff));
     }).catch(() => {});
-  }, [activeTab, diffLoaded, id, team]);
+  }, [visitedTabs.changes, diffLoaded, id, team]);
+
+  // Lazy load merge preview when Merge Preview tab first visited
+  useEffect(() => {
+    if (!visitedTabs.merge || mergePreviewLoaded || id === null || !team) return;
+    setMergePreviewLoaded(true);
+    api.fetchTaskMergePreview(team, id).then(data => {
+      setMergePreviewRaw(flattenDiffDict(data.diff));
+    }).catch(() => {});
+  }, [visitedTabs.merge, mergePreviewLoaded, id, team]);
 
   const close = useCallback(() => { taskPanelId.value = null; }, []);
 
@@ -674,8 +736,8 @@ export function TaskSidePanel() {
 
   const isOpen = id !== null;
   const t = task;
-  const TABS = ["overview", "changes", "activity"];
-  const TAB_LABELS = { overview: "Overview", changes: "Changes", activity: "Activity" };
+  const TABS = ["overview", "changes", "merge", "activity"];
+  const TAB_LABELS = { overview: "Overview", changes: "Changes", merge: "Merge Preview", activity: "Activity" };
 
   return (
     <>
@@ -703,27 +765,38 @@ export function TaskSidePanel() {
             <button
               key={tab}
               class={"task-panel-tab" + (activeTab === tab ? " active" : "")}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => switchTab(tab)}
             >
               {TAB_LABELS[tab]}
             </button>
           ))}
         </div>
-        {/* Body */}
+        {/* Body — tabs are only mounted after first visit, then kept alive */}
         <div class="task-panel-body">
           {!t ? (
             <div class="diff-empty">Loading...</div>
           ) : (
             <>
-              <div style={{ display: activeTab === "overview" ? "" : "none" }}>
-                <OverviewTab task={t} stats={stats} />
-              </div>
-              <div style={{ display: activeTab === "changes" ? "" : "none" }}>
-                <ChangesTab task={t} diffRaw={diffRaw} currentReview={currentReview} oldComments={oldComments} stats={stats} />
-              </div>
-              <div style={{ display: activeTab === "activity" ? "" : "none" }}>
-                <ActivityTab taskId={t.id} task={t} />
-              </div>
+              {visitedTabs.overview && (
+                <div style={{ display: activeTab === "overview" ? "" : "none" }}>
+                  <OverviewTab task={t} stats={stats} />
+                </div>
+              )}
+              {visitedTabs.changes && (
+                <div style={{ display: activeTab === "changes" ? "" : "none" }}>
+                  <ChangesTab task={t} diffRaw={diffRaw} currentReview={currentReview} oldComments={oldComments} stats={stats} />
+                </div>
+              )}
+              {visitedTabs.merge && (
+                <div style={{ display: activeTab === "merge" ? "" : "none" }}>
+                  <MergePreviewTab task={t} mergePreviewRaw={mergePreviewRaw} stats={stats} />
+                </div>
+              )}
+              {visitedTabs.activity && (
+                <div style={{ display: activeTab === "activity" ? "" : "none" }}>
+                  <ActivityTab taskId={t.id} task={t} />
+                </div>
+              )}
             </>
           )}
         </div>
