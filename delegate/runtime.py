@@ -123,9 +123,18 @@ def _write_worklog(ad: Path, lines: list[str]) -> None:
 # Message selection — pick ≤K messages with the same task_id
 # ---------------------------------------------------------------------------
 
-def _select_batch(inbox: list[Message], max_size: int = MAX_BATCH_SIZE) -> list[Message]:
+def _select_batch(
+    inbox: list[Message],
+    max_size: int = MAX_BATCH_SIZE,
+    boss_name: str | None = None,
+) -> list[Message]:
     """Select up to *max_size* messages from *inbox* that share the
     same ``task_id`` as the first message.
+
+    If *boss_name* is provided, messages from the boss are prioritised:
+    they appear before non-boss messages so the boss's task_id becomes
+    the grouping anchor.  Non-boss messages for the same task are still
+    included in the batch (up to *max_size*).
 
     The inbox is assumed to be sorted by id (oldest first).
     Both ``task_id = None`` and ``task_id = N`` are valid grouping keys.
@@ -136,14 +145,31 @@ def _select_batch(inbox: list[Message], max_size: int = MAX_BATCH_SIZE) -> list[
     if not inbox:
         return []
 
-    target_task_id = inbox[0].task_id
-    target_sender = inbox[0].sender if target_task_id is None else None
+    # Prioritise boss messages: move them to the front (preserving id
+    # order within each group) so the boss's message determines which
+    # task_id is processed next.
+    if boss_name:
+        ordered = (
+            [m for m in inbox if m.sender == boss_name]
+            + [m for m in inbox if m.sender != boss_name]
+        )
+    else:
+        ordered = inbox
+
+    target_task_id = ordered[0].task_id
+    target_sender = ordered[0].sender if target_task_id is None else None
     batch: list[Message] = []
-    for msg in inbox:
+    for msg in ordered:
         if msg.task_id != target_task_id:
+            # When boss-reordered, matching messages may not be contiguous
+            # (boss block then non-boss block), so skip rather than stop.
+            if boss_name:
+                continue
             break
-        # When task_id is None, also break if sender differs
+        # When task_id is None, also group by sender
         if target_task_id is None and msg.sender != target_sender:
+            if boss_name:
+                continue
             break
         batch.append(msg)
         if len(batch) >= max_size:
@@ -303,9 +329,10 @@ async def run_turn(
     token_budget = state.get("token_budget")
     max_turns = max(1, token_budget // 4000) if token_budget else None
 
-    # --- Message selection: pick ≤5 with same task_id ---
+    # --- Message selection: pick ≤5 with same task_id (boss first) ---
+    from delegate.config import get_boss
     inbox = read_inbox(hc_home, team, agent, unread_only=True)
-    batch = _select_batch(inbox)
+    batch = _select_batch(inbox, boss_name=get_boss(hc_home))
 
     if not batch:
         log_caller.reset(_prev_caller)
