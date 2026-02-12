@@ -24,6 +24,7 @@ export const sidebarCollapsed = signal(localStorage.getItem("delegate-sidebar-co
 export const taskPanelId = signal(null);       // numeric task id or null
 export const diffPanelMode = signal(null);     // "diff" | "agent" | "file" | null
 export const diffPanelTarget = signal(null);   // taskId, agentName, or filePath
+export const helpOverlayOpen = signal(false);  // keyboard shortcuts help overlay
 
 // ── Known agent names (for linkify / agentify references) ──
 export const knownAgentNames = signal([]);

@@ -6,6 +6,7 @@ import {
   activeTab, knownAgentNames,
   taskPanelId, diffPanelMode, diffPanelTarget,
   agentLastActivity, agentActivityLog,
+  helpOverlayOpen, sidebarCollapsed,
 } from "./state.js";
 import * as api from "./api.js";
 import { Sidebar } from "./components/Sidebar.jsx";
@@ -15,6 +16,7 @@ import { AgentsPanel } from "./components/AgentsPanel.jsx";
 import { TaskSidePanel } from "./components/TaskSidePanel.jsx";
 import { DiffPanel } from "./components/DiffPanel.jsx";
 import { ToastContainer } from "./components/Toast.jsx";
+import { HelpOverlay } from "./components/HelpOverlay.jsx";
 import { showToast } from "./toast.js";
 
 // ── Main App ──
@@ -24,9 +26,50 @@ function App() {
   // Keyboard handler
   useEffect(() => {
     const handler = (e) => {
+      // Helper to check if we're in an input
+      const isInputFocused = () => {
+        const el = document.activeElement;
+        if (!el) return false;
+        const tag = el.tagName.toLowerCase();
+        return tag === "input" || tag === "textarea" || tag === "select" || el.contentEditable === "true";
+      };
+
+      // Helper to check if any overlay is open
+      const isOverlayOpen = () => {
+        return taskPanelId.value !== null || diffPanelMode.value !== null || helpOverlayOpen.value;
+      };
+
+      // Escape: close panels/overlays or blur input
       if (e.key === "Escape") {
+        if (helpOverlayOpen.value) { helpOverlayOpen.value = false; return; }
         if (taskPanelId.value !== null) { taskPanelId.value = null; return; }
         if (diffPanelMode.value !== null) { diffPanelMode.value = null; diffPanelTarget.value = null; return; }
+        if (isInputFocused()) { document.activeElement.blur(); return; }
+        return;
+      }
+
+      // All other shortcuts require no input focus
+      if (isInputFocused()) return;
+
+      // / (slash): focus chat input
+      if (e.key === "/" && !isOverlayOpen()) {
+        e.preventDefault();
+        const chatInput = document.querySelector(".chat-input-box textarea");
+        if (chatInput) chatInput.focus();
+        return;
+      }
+
+      // s: toggle sidebar
+      if (e.key === "s" && !isOverlayOpen()) {
+        sidebarCollapsed.value = !sidebarCollapsed.value;
+        localStorage.setItem("delegate-sidebar-collapsed", sidebarCollapsed.value ? "true" : "false");
+        return;
+      }
+
+      // ?: toggle help overlay
+      if (e.key === "?" && !isInputFocused()) {
+        helpOverlayOpen.value = !helpOverlayOpen.value;
+        return;
       }
     };
     document.addEventListener("keydown", handler);
@@ -218,6 +261,7 @@ function App() {
       </div>
       <TaskSidePanel />
       <DiffPanel />
+      <HelpOverlay />
       <ToastContainer />
     </>
   );

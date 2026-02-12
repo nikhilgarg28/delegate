@@ -1631,3 +1631,87 @@ select option:hover {
 .sidebar-agent-dot.dot-stuck { background: var(--dot-stuck); }
 .sidebar-agent-dot.dot-offline { background: var(--dot-offline); }
 .sidebar-task-id { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; font-variant-numeric: tabular-nums; font-size: 11px; color: var(--text-muted); }
+
+/* ================================================================
+   Help Overlay — Keyboard shortcuts modal
+   ================================================================ */
+.help-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--backdrop-bg);
+  z-index: 299;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+.help-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.help-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.95);
+  width: 90%;
+  max-width: 480px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  z-index: 300;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease, transform 200ms ease;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.help-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.help-overlay-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.help-overlay-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-heading);
+  margin: 0;
+}
+
+.help-overlay-body {
+  padding: 20px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.help-shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.help-shortcut-key {
+  display: inline-block;
+  min-width: 48px;
+  padding: 6px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  color: var(--text-heading);
+  text-align: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.help-shortcut-desc {
+  font-size: 14px;
+  color: var(--text-primary);
+}
