@@ -14,6 +14,17 @@ import { ReviewableDiff } from "./ReviewableDiff.jsx";
 import { showToast } from "../toast.js";
 import { CopyBtn } from "./CopyBtn.jsx";
 
+// ── Per-task stale-while-revalidate cache ──
+// Keyed by "team:taskId" → { stats, diffRaw, mergePreviewRaw, currentReview, oldComments }
+// Data is served from cache instantly on panel open, then revalidated in the background.
+const _cache = new Map();
+function _cacheKey(team, id) { return `${team}:${id}`; }
+function _getCache(team, id) { return _cache.get(_cacheKey(team, id)) || {}; }
+function _setCache(team, id, patch) {
+  const key = _cacheKey(team, id);
+  _cache.set(key, { ...(_cache.get(key) || {}), ...patch });
+}
+
 // ── Event delegation for linked content ──
 function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
   const internalRef = useRef();
@@ -652,25 +663,39 @@ export function TaskSidePanel() {
     setVisitedTabs(prev => prev[tab] ? prev : { ...prev, [tab]: true });
   }, []);
 
-  // Load task data when panel opens
+  // Load task data when panel opens — stale-while-revalidate.
+  // If we have cached data for this task, show it immediately;
+  // then always re-fetch in the background to ensure freshness.
   useEffect(() => {
     if (id === null || !team) { setTask(null); return; }
     setActiveTab("overview");
-    setVisitedTabs({ overview: true });
-    setDiffRaw("");
-    setDiffLoaded(false);
-    setMergePreviewRaw("");
-    setMergePreviewLoaded(false);
-    setCurrentReview(null);
-    setOldComments([]);
+
+    // ── Restore from cache (instant) ──
+    const c = _getCache(team, id);
+    setStats(c.stats ?? null);
+    setDiffRaw(c.diffRaw ?? "");
+    setDiffLoaded(!!c.diffRaw);
+    setMergePreviewRaw(c.mergePreviewRaw ?? "");
+    setMergePreviewLoaded(!!c.mergePreviewRaw);
+    setCurrentReview(c.currentReview ?? null);
+    setOldComments(c.oldComments ?? []);
+
+    // If we have cached diff/merge data, mark those tabs as "already visited"
+    // so the lazy-mount keeps them rendered; otherwise start fresh.
+    const restored = { overview: true };
+    if (c.diffRaw) restored.changes = true;
+    if (c.mergePreviewRaw) restored.merge = true;
+    setVisitedTabs(restored);
 
     const cached = allTasks.find(t => t.id === id);
     if (cached) setTask(cached);
 
+    // ── Revalidate in background ──
     (async () => {
       try {
         const s = await api.fetchTaskStats(team, id);
         setStats(s);
+        _setCache(team, id, { stats: s });
       } catch (e) { }
     })();
   }, [id, team]);
@@ -682,13 +707,14 @@ export function TaskSidePanel() {
     if (updated) setTask(prev => prev ? { ...prev, ...updated } : updated);
   }, [allTasks, id]);
 
-  // Load review data eagerly (needed by approval bar in header)
+  // Load review data eagerly (needed by approval bar in header) — also cached
   useEffect(() => {
     if (id === null || !team) return;
     (async () => {
       try {
         const review = await api.fetchCurrentReview(team, id);
         setCurrentReview(review);
+        _setCache(team, id, { currentReview: review });
       } catch (e) { }
       try {
         const reviews = await api.fetchReviews(team, id);
@@ -703,26 +729,51 @@ export function TaskSidePanel() {
             }
           }
           setOldComments(old);
+          _setCache(team, id, { oldComments: old });
         }
       } catch (e) { }
     })();
   }, [id, team, task && task.review_attempt]);
 
-  // Lazy load diff when Changes tab first visited
+  // Lazy load diff when Changes tab first visited — stale-while-revalidate
   useEffect(() => {
-    if (!visitedTabs.changes || diffLoaded || id === null || !team) return;
+    if (!visitedTabs.changes || id === null || !team) return;
+    // If we already have cached data we showed it immediately above.
+    // Always re-fetch to ensure freshness (unless this is the initial
+    // load from a cold cache, which the diffLoaded flag already guards).
+    if (diffLoaded && _getCache(team, id).diffRaw) {
+      // Already showing stale data — revalidate in background
+      api.fetchTaskDiff(team, id).then(data => {
+        const raw = flattenDiffDict(data.diff);
+        setDiffRaw(raw);
+        _setCache(team, id, { diffRaw: raw });
+      }).catch(() => {});
+      return;
+    }
     setDiffLoaded(true);
     api.fetchTaskDiff(team, id).then(data => {
-      setDiffRaw(flattenDiffDict(data.diff));
+      const raw = flattenDiffDict(data.diff);
+      setDiffRaw(raw);
+      _setCache(team, id, { diffRaw: raw });
     }).catch(() => {});
   }, [visitedTabs.changes, diffLoaded, id, team]);
 
-  // Lazy load merge preview when Merge Preview tab first visited
+  // Lazy load merge preview when Merge Preview tab first visited — stale-while-revalidate
   useEffect(() => {
-    if (!visitedTabs.merge || mergePreviewLoaded || id === null || !team) return;
+    if (!visitedTabs.merge || id === null || !team) return;
+    if (mergePreviewLoaded && _getCache(team, id).mergePreviewRaw) {
+      api.fetchTaskMergePreview(team, id).then(data => {
+        const raw = flattenDiffDict(data.diff);
+        setMergePreviewRaw(raw);
+        _setCache(team, id, { mergePreviewRaw: raw });
+      }).catch(() => {});
+      return;
+    }
     setMergePreviewLoaded(true);
     api.fetchTaskMergePreview(team, id).then(data => {
-      setMergePreviewRaw(flattenDiffDict(data.diff));
+      const raw = flattenDiffDict(data.diff);
+      setMergePreviewRaw(raw);
+      _setCache(team, id, { mergePreviewRaw: raw });
     }).catch(() => {});
   }, [visitedTabs.merge, mergePreviewLoaded, id, team]);
 
