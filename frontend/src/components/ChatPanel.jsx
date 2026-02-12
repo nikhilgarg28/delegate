@@ -74,7 +74,7 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
       console.log('[LinkedDiv useEffect cleanup] Removing click handler from:', el);
       if (el) el.removeEventListener("click", handler);
     };
-  }, [html, externalRef]);
+  }, [html]);
 
   // Support both external ref (from parent) and internal ref
   const handleRefCallback = useCallback((node) => {
