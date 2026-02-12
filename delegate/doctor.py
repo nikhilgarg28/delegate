@@ -113,17 +113,24 @@ def print_doctor_report(checks: list[CheckResult]) -> bool:
 
     Returns True if all checks passed.
     """
-    print("Running Delegate doctor checks...")
+    import click
+
+    click.echo("Running Delegate doctor checks...")
     all_passed = True
     for result in checks:
-        status = "PASSED" if result.passed else "FAILED"
-        print(f"  [{status}] {result.name}: {result.message}")
+        if result.passed:
+            status = click.style("[PASS]", fg="green")
+        else:
+            status = click.style("[FAIL]", fg="red")
+        click.echo(f"  {status} {result.name}: {result.message}")
         if not result.passed:
             all_passed = False
+
+    click.echo()  # blank line
     if all_passed:
-        print("\nAll essential checks passed. Delegate is ready!")
+        click.echo(click.style("All essential checks passed. Delegate is ready!", fg="green"))
     else:
-        print("\nSome checks failed. Please address the issues above.")
+        click.echo(click.style("Some checks failed. Please address the issues above.", fg="red"))
     return all_passed
 
 

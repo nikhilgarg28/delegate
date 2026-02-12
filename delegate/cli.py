@@ -82,6 +82,7 @@ def start(
     import time
     from delegate.daemon import start_daemon, is_running
     from delegate.doctor import run_doctor, print_doctor_report
+    from delegate.fmt import success, get_auth_display, get_version
 
     hc_home = _get_home(ctx)
 
@@ -92,19 +93,26 @@ def start(
         print_doctor_report(checks)
         raise SystemExit(1)
 
+    # Show version and auth method
+    click.echo(f"Delegate v{get_version()}")
+    click.echo()
+    auth_display = get_auth_display()
+    success(f"Auth: {auth_display}")
+
     url = f"http://localhost:{port}"
 
     alive, pid = is_running(hc_home)
     if alive:
-        click.echo(f"Daemon already running (PID {pid})")
+        success(f"Daemon already running (PID {pid})")
+        success(f"UI: {url}")
         # Server is up — open browser immediately regardless of --foreground
         try:
             webbrowser.open(url)
         except Exception:
-            click.echo(f"Open {url} in your browser")
+            pass
         return
 
-    click.echo(f"Starting daemon on port {port}...")
+    success(f"Starting daemon on port {port}...")
 
     if foreground:
         # foreground blocks forever; open browser from a background thread
@@ -138,15 +146,17 @@ def start(
             foreground=False,
         )
         if result_pid:
-            click.echo(f"Daemon started (PID {result_pid})")
+            success(f"Daemon started (PID {result_pid})")
         else:
-            click.echo("Daemon started")
+            success("Daemon started")
+
+        success(f"UI: {url}")
 
         time.sleep(1.5)
         try:
             webbrowser.open(url)
         except Exception:
-            click.echo(f"Open {url} in your browser")
+            pass
 
 
 @main.command()
@@ -154,13 +164,14 @@ def start(
 def stop(ctx: click.Context) -> None:
     """Stop the running delegate daemon."""
     from delegate.daemon import stop_daemon
+    from delegate.fmt import success, warn
 
     hc_home = _get_home(ctx)
     stopped = stop_daemon(hc_home)
     if stopped:
-        click.echo("Daemon stopped")
+        success("Daemon stopped")
     else:
-        click.echo("No running daemon found")
+        warn("No running daemon found")
 
 
 @main.command()
@@ -168,13 +179,14 @@ def stop(ctx: click.Context) -> None:
 def status(ctx: click.Context) -> None:
     """Check if the daemon is running."""
     from delegate.daemon import is_running
+    from delegate.fmt import success, info
 
     hc_home = _get_home(ctx)
     alive, pid = is_running(hc_home)
     if alive:
-        click.echo(f"Daemon running (PID {pid})")
+        success(f"Daemon running (PID {pid})")
     else:
-        click.echo("Daemon not running")
+        info("Daemon not running")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -214,6 +226,7 @@ def team_create(
     """Create a new team."""
     from delegate.bootstrap import bootstrap
     from delegate.repo import register_repo
+    from delegate.fmt import success, warn
 
     hc_home = _get_home(ctx)
 
@@ -237,21 +250,23 @@ def team_create(
         interactive=interactive,
     )
 
+    success(f"Created team '{name}'")
+
     # Register repos
     registered: list[str] = []
     for repo_path in repos:
         try:
             repo_name = register_repo(hc_home, name, repo_path)
             registered.append(repo_name)
+            success(f"Registered repo: {repo_name}")
         except (FileNotFoundError, ValueError) as exc:
-            click.echo(f"Warning: could not register repo '{repo_path}': {exc}", err=True)
+            warn(f"Could not register repo '{repo_path}': {exc}")
 
-    labels = [manager + " (manager)"]
+    # Show team members
+    labels = [f"{manager} (manager)"]
     for aname, arole in parsed_agents:
         labels.append(f"{aname} ({arole})" if arole != "engineer" else aname)
-    click.echo(f"Created team '{name}' with members: {', '.join(labels)}")
-    if registered:
-        click.echo(f"Repos: {', '.join(registered)}")
+    success(f"Members: {', '.join(labels)}")
 
 
 @team.command("list")
@@ -271,7 +286,7 @@ def team_list(ctx: click.Context) -> None:
 
     click.echo("Teams:")
     for t in teams:
-        click.echo(f"  - {t}")
+        click.echo(f"  - {click.style(t, bold=True)}")
 
 
 @team.command("remove")
@@ -286,6 +301,7 @@ def team_remove(ctx: click.Context, name: str, yes: bool) -> None:
     symlinks/config that Delegate created.
     """
     import shutil
+    from delegate.fmt import success
 
     hc_home = _get_home(ctx)
     td = _team_dir(hc_home, name)
@@ -300,7 +316,7 @@ def team_remove(ctx: click.Context, name: str, yes: bool) -> None:
         )
 
     shutil.rmtree(td)
-    click.echo(f"Removed team '{name}'")
+    success(f"Removed team '{name}'")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -335,6 +351,7 @@ def agent_add(ctx: click.Context, team: str, name: str, role: str, seniority: st
     TEAM is the team name.  NAME is the new agent's name.
     """
     from delegate.bootstrap import add_agent
+    from delegate.fmt import success
 
     hc_home = _get_home(ctx)
     try:
@@ -342,7 +359,7 @@ def agent_add(ctx: click.Context, team: str, name: str, role: str, seniority: st
     except (FileNotFoundError, ValueError) as exc:
         raise click.ClickException(str(exc))
 
-    click.echo(f"Added agent '{name}' to team '{team}' (role: {role}, seniority: {seniority})")
+    success(f"Added agent '{name}' to team '{team}' (role: {role}, seniority: {seniority})")
 
 
 # ──────────────────────────────────────────────────────────────
