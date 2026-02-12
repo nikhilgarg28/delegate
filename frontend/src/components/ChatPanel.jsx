@@ -319,14 +319,34 @@ export function ChatPanel() {
     setTimeout(() => { cooldownRef.current = false; }, 4000);
     try {
       await api.sendMessage(team, recipient, val);
+
+      // Optimistic insert: add message to signal immediately
+      const now = new Date().toISOString();
+      const optimistic = {
+        id: `optimistic-${Date.now()}`,
+        sender: bossName.value || "boss",
+        recipient: recipient,
+        content: val,
+        created_at: now,
+        timestamp: now,
+        read_at: null,
+        task_id: null,
+        type: "chat",
+      };
+      messages.value = [...messages.value, optimistic];
+
       if (inputRef.current) { inputRef.current.value = ""; inputRef.current.style.height = "auto"; }
       setInputVal("");
       setSendBtnActive(false);
       isAtBottomRef.current = true;
       setShowJumpBtn(false);
+
+      // Double-rAF to ensure scroll runs AFTER Preact flushes the render
       requestAnimationFrame(() => {
-        const el = logRef.current;
-        if (el) el.scrollTop = el.scrollHeight;
+        requestAnimationFrame(() => {
+          const el = logRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        });
       });
     } catch (e) {
       showToast("Failed to send message", "error");
