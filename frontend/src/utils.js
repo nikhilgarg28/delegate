@@ -221,36 +221,57 @@ export function linkifyTaskRefs(html) {
 }
 
 /**
- * Convert an arbitrary file path (absolute or relative) into an API-relative
- * path for the /teams/{team}/files/content endpoint.
+ * Normalise a file path for the /teams/{team}/files/content endpoint.
  *
- * The backend expects:
- *   - "agents/…" or "worktrees/…" → resolved from team root
- *   - anything else              → resolved from team's shared/ dir
+ * The backend accepts:
+ *   - Absolute paths (starting with "/") → served directly
+ *   - "agents/…" or "worktrees/…"       → resolved from team root
+ *   - anything else                      → resolved from team's shared/ dir
+ *
+ * For delegate-internal paths we strip to team-relative form.
+ * Paths outside the delegate tree are passed through as absolute paths.
  */
 export function toApiPath(raw, team) {
   let p = raw;
-  // Strip absolute prefix up to the team directory
+
+  // For absolute paths inside the team directory, strip to team-relative.
   const teamMarker = `/teams/${team}/`;
   const tmIdx = p.indexOf(teamMarker);
   if (tmIdx !== -1) {
     p = p.substring(tmIdx + teamMarker.length);
   }
-  // For paths that start with "shared/", strip the prefix so the backend
-  // resolves relative to its shared_dir.
+
+  // "shared/" prefix → strip so backend resolves from shared_dir.
   if (p.startsWith("shared/")) {
     p = p.substring(7);
   }
-  // agents/ and worktrees/ are sent as-is — the backend handles them.
+
+  // agents/, worktrees/ are sent as-is.
+  // Absolute paths (outside delegate tree) are sent as-is — backend handles them.
   return p;
 }
 
+/**
+ * Shorten a file path for display.
+ * Delegate-internal paths → relative to .delegate/
+ * External paths → shown in full.
+ */
+export function displayFilePath(path) {
+  if (!path) return path;
+  const idx = path.indexOf(".delegate/");
+  if (idx !== -1) return path.substring(idx + ".delegate/".length);
+  return path;
+}
+
 export function linkifyFilePaths(html) {
-  // Match shared/, agents/, and worktrees/ paths in text nodes
+  // Match:
+  //  1. Relative delegate paths: shared/…, agents/…, worktrees/…
+  //  2. Absolute paths: /path/to/file.ext
   return html.replace(/(^[^<]+|>[^<]*)/g, match =>
-    match.replace(/\b(?:shared|agents|worktrees)\/[\w\-\.\/]+\.[\w]+/g, path =>
-      '<span class="file-link copyable" data-file-path="' + esc(path) + '">' + esc(path) + copyBtnHtml(path) + "</span>"
-    )
+    match.replace(/(?:\b(?:shared|agents|worktrees)\/[\w\-\.\/]+\.[\w]+|\/[\w\-\.\/]+\.[\w]+)/g, path => {
+      const display = displayFilePath(path);
+      return '<span class="file-link copyable" data-file-path="' + esc(path) + '">' + esc(display) + copyBtnHtml(path) + "</span>";
+    })
   );
 }
 

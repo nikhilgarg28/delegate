@@ -7,7 +7,7 @@ import * as api from "../api.js";
 import {
   cap, esc, fmtTimestamp, fmtElapsed, fmtTokens, fmtCost,
   flattenDiffDict, flattenCommitsDict, diff2HtmlRender, diff2HtmlParse,
-  renderMarkdown, msgStatusIcon, taskIdStr, toApiPath,
+  renderMarkdown, msgStatusIcon, taskIdStr, toApiPath, displayFilePath,
 } from "../utils.js";
 
 // ── Diff viewer (task diff) ──
@@ -291,20 +291,7 @@ function FileView({ filePath }) {
 
   const ext = filePath ? (filePath.lastIndexOf(".") !== -1 ? filePath.substring(filePath.lastIndexOf(".") + 1).toLowerCase() : "") : "";
 
-  // Truncate file path to show from a meaningful root onwards
-  const truncatePath = (path) => {
-    if (!path) return path;
-    for (const marker of ["shared/", "agents/", "worktrees/"]) {
-      const idx = path.indexOf(marker);
-      if (idx !== -1) return path.substring(idx);
-    }
-    // Absolute path: show last few segments
-    const parts = path.split("/");
-    if (parts.length > 3 && path.startsWith("/")) {
-      return parts.slice(-3).join("/");
-    }
-    return path;
-  };
+  const truncatePath = displayFilePath;
 
   const displayPath = truncatePath(filePath);
   const breadcrumb = displayPath ? displayPath.split("/").map((p, i, arr) => (

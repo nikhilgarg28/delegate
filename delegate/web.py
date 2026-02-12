@@ -1232,35 +1232,39 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         entries.sort(key=lambda e: (not e["is_dir"], e["name"].lower()))
         return {"files": entries}
 
-    @app.get("/teams/{team}/files/content")
-    def read_shared_file(team: str, path: str):
-        """Read a file from the team directory.
+    def _resolve_file_path(team: str, path: str) -> Path:
+        """Resolve a file path from an API ``path`` parameter.
 
-        Paths starting with ``agents/`` or ``worktrees/`` are resolved
-        relative to the team root.  All other paths are resolved relative
-        to the team's ``shared/`` directory (backward-compatible).
+        * Absolute paths (starting with ``/``) are used directly.
+        * ``agents/`` or ``worktrees/`` prefixes resolve from the team root.
+        * Everything else resolves from the team's ``shared/`` directory.
 
-        For text files, returns content as string.
-        For images and binary files, returns base64-encoded data with content_type.
+        Returns the resolved ``Path``, or raises 404.
         """
-        # Determine base directory (mirrors /files/raw logic)
-        if path.startswith("agents/") or path.startswith("worktrees/"):
-            base = _team_dir(hc_home, team)
+        if path.startswith("/"):
+            target = Path(path).resolve()
+        elif path.startswith("agents/") or path.startswith("worktrees/"):
+            target = (_team_dir(hc_home, team) / path).resolve()
         else:
-            base = _shared_dir(hc_home, team)
-        target = (base / path).resolve()
-
-        try:
-            target.relative_to(base.resolve())
-        except ValueError:
-            raise HTTPException(
-                status_code=403, detail="Path traversal not allowed"
-            )
+            target = (_shared_dir(hc_home, team) / path).resolve()
 
         if not target.is_file():
             raise HTTPException(
                 status_code=404, detail=f"File not found: {path}"
             )
+        return target
+
+    @app.get("/teams/{team}/files/content")
+    def read_file_content(team: str, path: str):
+        """Read any file and return its content as JSON.
+
+        Supports absolute paths, team-relative paths (``agents/``,
+        ``worktrees/``), and shared-relative paths.
+
+        For text files, returns content as string.
+        For images and binary files, returns base64-encoded data with content_type.
+        """
+        target = _resolve_file_path(team, path)
 
         stat = target.stat()
         ext = target.suffix.lower()
@@ -1278,13 +1282,15 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         # Common binary extensions (non-image)
         binary_exts = {".pdf", ".zip", ".tar", ".gz", ".exe", ".bin", ".ico"}
 
+        display_path = str(target)
+
         if ext in image_types:
             # Read as binary and encode as base64
             data = target.read_bytes()
             if len(data) > MAX_FILE_SIZE:
                 data = data[:MAX_FILE_SIZE]
             return {
-                "path": str(target.relative_to(base)),
+                "path": display_path,
                 "name": target.name,
                 "size": stat.st_size,
                 "content": base64.b64encode(data).decode("utf-8"),
@@ -1297,7 +1303,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         elif ext in binary_exts:
             # Binary file - return metadata only
             return {
-                "path": str(target.relative_to(base)),
+                "path": display_path,
                 "name": target.name,
                 "size": stat.st_size,
                 "content": "",
@@ -1313,7 +1319,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
             if len(content) > MAX_FILE_SIZE:
                 content = content[:MAX_FILE_SIZE]
             return {
-                "path": str(target.relative_to(base)),
+                "path": display_path,
                 "name": target.name,
                 "size": stat.st_size,
                 "content": content,
@@ -1331,26 +1337,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         Returns the file with its native content type so browsers can render it directly.
         Used for opening HTML attachments in new tabs.
         """
-        # Determine base directory: agents/ or worktrees/ → team root, else shared/
-        if path.startswith("agents/") or path.startswith("worktrees/"):
-            base = _team_dir(hc_home, team)
-        else:
-            base = _shared_dir(hc_home, team)
-
-        target = (base / path).resolve()
-
-        # Path traversal check
-        try:
-            target.relative_to(base.resolve())
-        except ValueError:
-            raise HTTPException(
-                status_code=403, detail="Path traversal not allowed"
-            )
-
-        if not target.is_file():
-            raise HTTPException(
-                status_code=404, detail=f"File not found: {path}"
-            )
+        target = _resolve_file_path(team, path)
 
         # Read file content
         file_bytes = target.read_bytes()
