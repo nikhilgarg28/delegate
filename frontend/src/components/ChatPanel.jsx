@@ -63,9 +63,7 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
       }
     };
     el.addEventListener("click", handler);
-    return () => {
-      internalRef.current && internalRef.current.removeEventListener("click", handler);
-    };
+    return () => el.removeEventListener("click", handler);
   }, [html]);
 
   // Merge refs - set internal first, then external if provided

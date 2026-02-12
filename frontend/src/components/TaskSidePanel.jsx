@@ -32,6 +32,7 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
 
   useEffect(() => {
     if (!internalRef.current) return;
+    const el = internalRef.current;
     const handler = (e) => {
       // Copy button click
       const copyBtn = e.target.closest(".copy-btn");
@@ -43,8 +44,8 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
       const fileLink = e.target.closest("[data-file-path]");
       if (fileLink) { e.stopPropagation(); diffPanelMode.value = "file"; diffPanelTarget.value = fileLink.dataset.filePath; return; }
     };
-    internalRef.current.addEventListener("click", handler);
-    return () => internalRef.current && internalRef.current.removeEventListener("click", handler);
+    el.addEventListener("click", handler);
+    return () => el.removeEventListener("click", handler);
   }, [html]);
   return <div ref={setRefs} class={cls} style={style} dangerouslySetInnerHTML={{ __html: html }} />;
 }
