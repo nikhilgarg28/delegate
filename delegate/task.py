@@ -29,11 +29,11 @@ from delegate.db import get_connection, task_row_to_dict, _JSON_COLUMNS
 _log = logging.getLogger(__name__)
 
 
-def _broadcast_update(task_id: int, changes: dict) -> None:
+def _broadcast_update(task_id: int, team: str, changes: dict) -> None:
     """Best-effort SSE broadcast of a task mutation."""
     try:
         from delegate.activity import broadcast_task_update
-        broadcast_task_update(task_id, changes)
+        broadcast_task_update(task_id, team, changes)
     except Exception:
         pass
 
@@ -270,7 +270,7 @@ def assign_task(hc_home: Path, team: str, task_id: int, assignee: str, suppress_
     if not suppress_log:
         from delegate.chat import log_event
         log_event(hc_home, team, f"{format_task_id(task_id)} assigned to {assignee.capitalize()}", task_id=task_id)
-        _broadcast_update(task_id, {"assignee": assignee})
+        _broadcast_update(task_id, team, {"assignee": assignee})
 
     return task
 
@@ -487,7 +487,7 @@ def change_status(hc_home: Path, team: str, task_id: int, status: str, suppress_
         new_status = status.replace("_", " ").title()
         from delegate.chat import log_event
         log_event(hc_home, team, f"{format_task_id(task_id)} {old_status} \u2192 {new_status}", task_id=task_id)
-        _broadcast_update(task_id, {"status": status})
+        _broadcast_update(task_id, team, {"status": status})
 
     return task
 
@@ -525,7 +525,7 @@ def transition_task(hc_home: Path, team: str, task_id: int, new_status: str, new
         f"{format_task_id(task_id)}: {old_status} \u2192 {new_status_title}, assigned to {new_assignee.capitalize()}",
         task_id=task_id,
     )
-    _broadcast_update(task_id, {"status": new_status, "assignee": new_assignee})
+    _broadcast_update(task_id, team, {"status": new_status, "assignee": new_assignee})
 
     return task
 

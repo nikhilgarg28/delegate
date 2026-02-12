@@ -202,6 +202,10 @@ function App() {
       agents.value = [];
       agentStatsMap.value = {};
       messages.value = [];
+      // Clear ephemeral activity state from the previous team
+      managerTurnContext.value = null;
+      agentLastActivity.value = {};
+      agentActivityLog.value = [];
     });
     (async () => {
       try {

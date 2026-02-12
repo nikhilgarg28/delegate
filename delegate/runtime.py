@@ -392,7 +392,7 @@ async def run_turn(
 
     # --- Broadcast turn_started event ---
     primary_sender = batch[0].sender
-    broadcast_turn_event('turn_started', agent, task_id=current_task_id, sender=primary_sender)
+    broadcast_turn_event('turn_started', agent, team=team, task_id=current_task_id, sender=primary_sender)
 
     # --- Start session ---
     session_id = start_session(hc_home, team, agent, task_id=current_task_id)
@@ -462,7 +462,7 @@ async def run_turn(
                     for block in msg.content:
                         tool_name, detail = _extract_tool_summary(block)
                         if tool_name:
-                            broadcast_activity(agent, tool_name, detail, task_id=current_task_id)
+                            broadcast_activity(agent, team, tool_name, detail, task_id=current_task_id)
 
         except Exception as exc:
             alog.session_error(exc)
@@ -489,7 +489,7 @@ async def run_turn(
     if error_occurred:
         _write_worklog(ad, worklog_lines)
         # Broadcast turn_ended even on error
-        broadcast_turn_event('turn_ended', agent, task_id=current_task_id, sender=primary_sender)
+        broadcast_turn_event('turn_ended', agent, team=team, task_id=current_task_id, sender=primary_sender)
         log_caller.reset(_prev_caller)
         return result
 
@@ -625,7 +625,7 @@ async def run_turn(
         )
 
         # --- Broadcast turn_ended event ---
-        broadcast_turn_event('turn_ended', agent, task_id=current_task_id, sender=primary_sender)
+        broadcast_turn_event('turn_ended', agent, team=team, task_id=current_task_id, sender=primary_sender)
 
         # Restore logging caller context
         log_caller.reset(_prev_caller)

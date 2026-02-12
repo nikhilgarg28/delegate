@@ -11,6 +11,10 @@ Provides:
 
 The ring buffer and subscriber list are plain module-level state.  This is
 safe because Delegate runs as a single process with a single event loop.
+
+**Team scoping**: Every broadcast includes a ``team`` field.  SSE
+subscribers are registered with a team filter so they only receive events
+for the team they are watching.
 """
 
 import asyncio
@@ -31,6 +35,7 @@ class ActivityEntry:
     """Single tool-usage observation."""
 
     agent: str
+    team: str
     tool: str
     detail: str
     task_id: int | None = None
@@ -78,21 +83,25 @@ def get_all_recent(n: int = 100) -> list[dict[str, str]]:
 # SSE subscriber management
 # ---------------------------------------------------------------------------
 
-# Each subscriber is an asyncio.Queue that receives ActivityEntry dicts
-_subscribers: set[asyncio.Queue] = set()
+# Maps subscriber queue → team filter (None = receive everything).
+_subscribers: dict[asyncio.Queue, str | None] = {}
 
 
-def subscribe() -> asyncio.Queue:
-    """Register a new SSE client. Returns a queue to await on."""
+def subscribe(team: str | None = None) -> asyncio.Queue:
+    """Register a new SSE client, optionally filtered to *team*.
+
+    Returns a queue to await on.  Only events whose ``team`` field matches
+    (or events with no team, like keepalives) will be forwarded.
+    """
     q: asyncio.Queue = asyncio.Queue(maxsize=256)
-    _subscribers.add(q)
-    logger.debug("SSE subscriber added (total=%d)", len(_subscribers))
+    _subscribers[q] = team
+    logger.debug("SSE subscriber added (team=%s, total=%d)", team, len(_subscribers))
     return q
 
 
 def unsubscribe(q: asyncio.Queue) -> None:
     """Remove an SSE client queue."""
-    _subscribers.discard(q)
+    _subscribers.pop(q, None)
     logger.debug("SSE subscriber removed (total=%d)", len(_subscribers))
 
 
@@ -101,9 +110,17 @@ def unsubscribe(q: asyncio.Queue) -> None:
 # ---------------------------------------------------------------------------
 
 def _push_to_subscribers(payload: dict) -> None:
-    """Push a payload dict to all SSE subscriber queues (non-blocking)."""
+    """Push a payload dict to matching SSE subscriber queues (non-blocking).
+
+    If the payload contains a ``team`` key, it is only sent to subscribers
+    whose team filter matches (or to unfiltered subscribers).
+    """
+    payload_team = payload.get("team")
     dead: list[asyncio.Queue] = []
-    for q in _subscribers:
+    for q, sub_team in _subscribers.items():
+        # Skip if subscriber is team-filtered and payload has a different team
+        if sub_team is not None and payload_team is not None and sub_team != payload_team:
+            continue
         try:
             q.put_nowait(payload)
         except asyncio.QueueFull:
@@ -115,10 +132,17 @@ def _push_to_subscribers(payload: dict) -> None:
                 dead.append(q)
 
     for q in dead:
-        _subscribers.discard(q)
+        _subscribers.pop(q, None)
 
 
-def broadcast(agent: str, tool: str, detail: str, *, task_id: int | None = None) -> None:
+def broadcast(
+    agent: str,
+    team: str,
+    tool: str,
+    detail: str,
+    *,
+    task_id: int | None = None,
+) -> None:
     """Push an activity entry to the ring buffer and notify all SSE clients.
 
     This is called from the turn execution loop in ``runtime.py`` for
@@ -127,12 +151,12 @@ def broadcast(agent: str, tool: str, detail: str, *, task_id: int | None = None)
     Safe to call from any coroutine — the queue puts are non-blocking
     (entries are silently dropped for slow subscribers).
     """
-    entry = ActivityEntry(agent=agent, tool=tool, detail=detail, task_id=task_id)
+    entry = ActivityEntry(agent=agent, team=team, tool=tool, detail=detail, task_id=task_id)
     _get_ring(agent).append(entry)
     _push_to_subscribers(entry.to_dict())
 
 
-def broadcast_task_update(task_id: int, changes: dict[str, Any]) -> None:
+def broadcast_task_update(task_id: int, team: str, changes: dict[str, Any]) -> None:
     """Broadcast a task mutation to all SSE clients.
 
     ``changes`` should be a dict of the fields that changed, e.g.
@@ -144,13 +168,21 @@ def broadcast_task_update(task_id: int, changes: dict[str, Any]) -> None:
     payload = {
         "type": "task_update",
         "task_id": task_id,
+        "team": team,
         **changes,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     _push_to_subscribers(payload)
 
 
-def broadcast_turn_event(event_type: str, agent: str, *, task_id: int | None = None, sender: str = '') -> None:
+def broadcast_turn_event(
+    event_type: str,
+    agent: str,
+    *,
+    team: str = "",
+    task_id: int | None = None,
+    sender: str = "",
+) -> None:
     """Broadcast a turn lifecycle event (turn_started or turn_ended) to all SSE clients.
 
     These are ephemeral signals (not stored in the ring buffer) that indicate when
@@ -159,12 +191,14 @@ def broadcast_turn_event(event_type: str, agent: str, *, task_id: int | None = N
     Args:
         event_type: 'turn_started' or 'turn_ended'
         agent: The agent name
+        team: The team this turn belongs to
         task_id: Optional task ID the turn is associated with
         sender: Optional sender name (relevant when task_id is None)
     """
     payload = {
         'type': event_type,
         'agent': agent,
+        'team': team,
         'task_id': task_id,
         'sender': sender,
         'timestamp': datetime.now(timezone.utc).isoformat(),

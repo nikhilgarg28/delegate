@@ -249,7 +249,6 @@ async def _daemon_loop(
     has unread mail.  A semaphore enforces *max_concurrent* across all
     teams.
     """
-    from delegate.router import route_once
     from delegate.runtime import run_turn, list_ai_agents
     from delegate.merge import merge_once
     from delegate.bootstrap import get_member_by_role
@@ -356,10 +355,6 @@ async def _daemon_loop(
                 # Check shutdown flag before dispatching new tasks
                 if _shutdown_flag:
                     break
-
-                routed = route_once(hc_home, team, boss_name=boss_name)
-                if routed > 0:
-                    logger.info("Routed %d message(s) for team %s", routed, team)
 
                 # Find agents with unread messages and dispatch turns
                 ai_agents = set(list_ai_agents(hc_home, team))
@@ -1169,11 +1164,11 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
         The client opens an ``EventSource`` to this URL and receives
         ``data: {...}`` events for every tool invocation across all
-        agents on this team.
+        agents on this team.  Events from other teams are filtered out.
         """
         from delegate.activity import subscribe, unsubscribe
 
-        queue = subscribe()
+        queue = subscribe(team=team)
 
         async def _generate():
             try:
