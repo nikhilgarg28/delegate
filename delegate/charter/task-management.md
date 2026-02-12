@@ -11,7 +11,7 @@ python -m delegate.task create <home> --title "..." [--description "..."] [--rep
 python -m delegate.task list <home> [--status todo] [--assignee <name>]
 python -m delegate.task show <home> <task_id>
 python -m delegate.task assign <home> <task_id> <assignee>
-python -m delegate.task status <home> <task_id> <new_status>
+python -m delegate.task status <home> <task_id> <new_status> [--assignee <name>]
 python -m delegate.task attach <home> <task_id> <file_path>
 python -m delegate.task detach <home> <task_id> <file_path>
 python -m delegate.task comment <home> <team> <task_id> <your_name> "<body>"
@@ -21,6 +21,12 @@ python -m delegate.task cancel <home> <team> <task_id>
 Statuses: `todo` → `in_progress` → `in_review` → `in_approval` → `merging` → `done`. Also: `rejected` (→ `in_progress`), `merge_failed` (→ `in_progress` or retry → `in_approval`), `cancelled` (terminal — boss can cancel from any non-terminal state).
 
 Tasks are stored per-team in SQLite. Associate with one or more repos using `--repo` (repeatable for multi-repo tasks).
+
+**Combined status + assignee changes**: When changing both status and assignee together (e.g., moving to `in_review` and reassigning to a reviewer), use the `--assignee` flag on `task status` to generate a single combined event instead of two separate events:
+```
+python -m delegate.task status <home> <team> <task_id> in_review --assignee john
+```
+This produces one event like "T0001: In Progress -> In Review, assigned to john" rather than two separate status and assignment events.
 
 ## DRI and Assignee
 
