@@ -499,13 +499,8 @@ export function TaskSidePanel() {
     const cached = allTasks.find(t => t.id === id);
     if (cached) setTask(cached);
 
-    // Also fetch fresh (in case cached is stale)
+    // Fetch task stats
     (async () => {
-      try {
-        const taskList = await api.fetchTasks(team);
-        const found = taskList.find(t => t.id === id);
-        if (found) setTask(found);
-      } catch (e) { }
       try {
         const s = await api.fetchTaskStats(team, id);
         setStats(s);
