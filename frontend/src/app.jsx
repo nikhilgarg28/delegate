@@ -272,9 +272,24 @@ function App() {
 
           // Keep manager activity bar alive: bump timestamp on every activity event
           // from the active manager so the safety timeout keeps resetting.
+          // If managerTurnContext is null (we missed the turn_started event due to
+          // page load, team switch, or SSE reconnect mid-turn), reconstruct it
+          // from the activity event so the bar appears.
           const mtc = managerTurnContext.value;
           if (mtc && mtc.agent === entry.agent) {
             managerTurnContext.value = { ...mtc, timestamp: entry.timestamp };
+          } else if (!mtc) {
+            const managerAgent = agents.value?.find(a => a.role === "manager");
+            if (managerAgent && entry.agent === managerAgent.name) {
+              managerTurnContext.value = {
+                type: "turn_started",
+                agent: entry.agent,
+                team: entry.team || "",
+                task_id: entry.task_id ?? null,
+                sender: "",
+                timestamp: entry.timestamp,
+              };
+            }
           }
 
           const log = agentActivityLog.value;
