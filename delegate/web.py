@@ -309,9 +309,9 @@ async def _daemon_loop(
             # Check if manager sent *any* message to boss recently
             conn = get_connection(hc_home, team)
             row = conn.execute(
-                """SELECT COUNT(*) FROM mailbox
-                   WHERE sender = ? AND recipient = ?
-                     AND created_at > ?""",
+                """SELECT COUNT(*) FROM messages
+                   WHERE type = 'chat' AND sender = ? AND recipient = ?
+                     AND timestamp > ?""",
                 (manager_name, boss_name, cutoff),
             ).fetchone()
             recent_count = row[0] if row else 0

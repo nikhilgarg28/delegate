@@ -51,7 +51,7 @@ def notify_rejection(
     team: str,
     task: dict,
     reason: str = "",
-) -> str | None:
+) -> int | None:
     """Send a rejection notification to the manager.
 
     Called when a task is rejected via POST /tasks/{id}/reject.
@@ -64,7 +64,7 @@ def notify_rejection(
         reason: Human-provided rejection reason.
 
     Returns:
-        The delivered message filename, or None if delivery failed.
+        The delivered message id, or None if delivery failed.
     """
     manager = _get_manager_name(hc_home, team)
     sender = _get_sender_name(hc_home)
@@ -114,14 +114,15 @@ def notify_rejection(
         recipient=manager,
         time=_now_iso(),
         body=body,
+        task_id=task_id,
     )
 
     try:
-        filename = deliver(hc_home, team, msg)
+        msg_id = deliver(hc_home, team, msg)
         logger.info(
             "Rejection notification sent for %s to %s", task_id, manager
         )
-        return filename
+        return msg_id
     except ValueError as e:
         logger.warning(
             "Invalid data when sending rejection notification for %s: %s", task_id, e
@@ -140,7 +141,7 @@ def notify_conflict(
     team: str,
     task: dict,
     conflict_details: str = "",
-) -> str | None:
+) -> int | None:
     """Send a merge conflict notification to the manager.
 
     Called when the daemon merge worker detects a merge failure and sets
@@ -153,7 +154,7 @@ def notify_conflict(
         conflict_details: Details about the conflict (files, error output, etc.).
 
     Returns:
-        The delivered message filename, or None if delivery failed.
+        The delivered message id, or None if delivery failed.
     """
     manager = _get_manager_name(hc_home, team)
     sender = _get_sender_name(hc_home)
@@ -180,14 +181,15 @@ def notify_conflict(
         recipient=manager,
         time=_now_iso(),
         body=body,
+        task_id=task_id,
     )
 
     try:
-        filename = deliver(hc_home, team, msg)
+        msg_id = deliver(hc_home, team, msg)
         logger.info(
             "Conflict notification sent for %s to %s", task_id, manager
         )
-        return filename
+        return msg_id
     except ValueError as e:
         logger.warning(
             "Invalid data when sending conflict notification for %s: %s", task_id, e

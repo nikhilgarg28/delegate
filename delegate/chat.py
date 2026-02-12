@@ -12,27 +12,6 @@ from pathlib import Path
 from delegate.db import get_connection
 
 
-def log_message(
-    hc_home: Path,
-    team: str,
-    sender: str,
-    recipient: str,
-    content: str,
-    *,
-    task_id: int | None = None,
-) -> int:
-    """Log a chat message. Returns the message ID."""
-    conn = get_connection(hc_home, team)
-    cursor = conn.execute(
-        "INSERT INTO messages (sender, recipient, content, type, task_id) VALUES (?, ?, ?, 'chat', ?)",
-        (sender, recipient, content, task_id),
-    )
-    conn.commit()
-    msg_id = cursor.lastrowid
-    conn.close()
-    return msg_id
-
-
 def log_event(hc_home: Path, team: str, description: str, *, task_id: int | None = None) -> int:
     """Log a system event. Returns the event ID."""
     conn = get_connection(hc_home, team)
@@ -54,39 +33,35 @@ def get_messages(
     msg_type: str | None = None,
     limit: int | None = None,
 ) -> list[dict]:
-    """Query messages with optional filters, including mailbox status fields."""
+    """Query messages with optional filters.
+
+    Returns messages with lifecycle fields (delivered_at, seen_at, processed_at).
+    For type='event' rows, lifecycle fields will be NULL.
+    """
     conn = get_connection(hc_home, team)
-    # LEFT JOIN with mailbox to get status fields (delivered_at, seen_at, processed_at)
-    # Match on sender, recipient, and content (timestamp could have slight differences)
     query = """
         SELECT
-            m.id, m.timestamp, m.sender, m.recipient, m.content, m.type,
-            m.task_id,
-            mb.delivered_at, mb.seen_at, mb.processed_at
-        FROM messages m
-        LEFT JOIN mailbox mb ON (
-            m.sender = mb.sender
-            AND m.recipient = mb.recipient
-            AND m.content = mb.body
-        )
+            id, timestamp, sender, recipient, content, type, task_id,
+            delivered_at, seen_at, processed_at
+        FROM messages
         WHERE 1=1
     """
     params: list = []
 
     if since:
-        query += " AND m.timestamp > ?"
+        query += " AND timestamp > ?"
         params.append(since)
 
     if between:
         a, b = between
-        query += " AND ((m.sender = ? AND m.recipient = ?) OR (m.sender = ? AND m.recipient = ?))"
+        query += " AND ((sender = ? AND recipient = ?) OR (sender = ? AND recipient = ?))"
         params.extend([a, b, b, a])
 
     if msg_type:
-        query += " AND m.type = ?"
+        query += " AND type = ?"
         params.append(msg_type)
 
-    query += " ORDER BY m.id ASC"
+    query += " ORDER BY id ASC"
 
     if limit:
         query += " LIMIT ?"

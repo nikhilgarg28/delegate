@@ -1,14 +1,13 @@
 """SQLite-backed mailbox system for agent communication.
 
-Each message is a row in the team's ``mailbox`` table with lifecycle columns:
-    created_at   — when the sender wrote the message
+Each message is a row in the team's ``messages`` table (type='chat') with lifecycle columns:
+    timestamp    — when the sender wrote the message
     delivered_at — when it was made available to the recipient
     seen_at      — when the agent's control loop picked it up (turn start)
     processed_at — when the agent finished the turn (message is "done")
 
 ``send()`` inserts with ``delivered_at = NOW`` (immediate delivery).
-The router is no longer required for delivery — it only handles
-supplementary tasks like logging to the chat table.
+Messages are both stored in and retrieved from the unified messages table.
 
 Usage:
     python -m delegate.mailbox send <home> <team> <sender> <recipient> <message>
@@ -64,16 +63,16 @@ def _now() -> str:
 
 
 def _row_to_message(row) -> Message:
-    """Convert a mailbox DB row to a Message dataclass."""
+    """Convert a messages DB row to a Message dataclass."""
     return Message(
         sender=row["sender"],
         recipient=row["recipient"],
-        time=row["created_at"],
-        body=row["body"],
+        time=row["timestamp"],
+        body=row["content"],
         id=row["id"],
-        delivered_at=row["delivered_at"],
-        seen_at=row["seen_at"],
-        processed_at=row["processed_at"],
+        delivered_at=row["delivered_at"] if "delivered_at" in row.keys() else None,
+        seen_at=row["seen_at"] if "seen_at" in row.keys() else None,
+        processed_at=row["processed_at"] if "processed_at" in row.keys() else None,
         task_id=row["task_id"] if "task_id" in row.keys() else None,
     )
 
@@ -91,10 +90,10 @@ def send(
     *,
     task_id: int | None = None,
 ) -> int:
-    """Send a message by inserting into the team's mailbox table.
+    """Send a message by inserting into the team's messages table.
 
     Messages are delivered immediately (``delivered_at`` set on insert).
-    Also logs the message to the chat event stream.
+    Single write to the unified messages table.
 
     Returns the message id.
     """
@@ -116,18 +115,14 @@ def send(
     try:
         cursor = conn.execute(
             """\
-            INSERT INTO mailbox (sender, recipient, body, created_at, delivered_at, task_id)
-            VALUES (?, ?, ?, ?, ?, ?)""",
-            (sender, recipient, message, now, now, task_id),
+            INSERT INTO messages (sender, recipient, content, type, task_id, delivered_at)
+            VALUES (?, ?, ?, 'chat', ?, ?)""",
+            (sender, recipient, message, task_id, now),
         )
         conn.commit()
         msg_id = cursor.lastrowid
     finally:
         conn.close()
-
-    # Log to the chat event stream
-    from delegate.chat import log_message
-    log_message(hc_home, team, sender, recipient, message, task_id=task_id)
 
     return msg_id
 
@@ -144,12 +139,12 @@ def read_inbox(
     try:
         if unread_only:
             rows = conn.execute(
-                "SELECT * FROM mailbox WHERE recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL ORDER BY id ASC",
+                "SELECT * FROM messages WHERE type = 'chat' AND recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL ORDER BY id ASC",
                 (agent,),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM mailbox WHERE recipient = ? AND delivered_at IS NOT NULL ORDER BY id ASC",
+                "SELECT * FROM messages WHERE type = 'chat' AND recipient = ? AND delivered_at IS NOT NULL ORDER BY id ASC",
                 (agent,),
             ).fetchall()
     finally:
@@ -169,12 +164,12 @@ def read_outbox(
     try:
         if pending_only:
             rows = conn.execute(
-                "SELECT * FROM mailbox WHERE sender = ? AND delivered_at IS NULL ORDER BY id ASC",
+                "SELECT * FROM messages WHERE type = 'chat' AND sender = ? AND delivered_at IS NULL ORDER BY id ASC",
                 (agent,),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM mailbox WHERE sender = ? ORDER BY id ASC",
+                "SELECT * FROM messages WHERE type = 'chat' AND sender = ? ORDER BY id ASC",
                 (agent,),
             ).fetchall()
     finally:
@@ -187,7 +182,7 @@ def mark_seen(hc_home: Path, team: str, msg_id: int) -> None:
     conn = get_connection(hc_home, team)
     try:
         conn.execute(
-            "UPDATE mailbox SET seen_at = ? WHERE id = ? AND seen_at IS NULL",
+            "UPDATE messages SET seen_at = ? WHERE id = ? AND type = 'chat' AND seen_at IS NULL",
             (_now(), msg_id),
         )
         conn.commit()
@@ -203,7 +198,7 @@ def mark_seen_batch(hc_home: Path, team: str, msg_ids: list[int]) -> None:
     conn = get_connection(hc_home, team)
     try:
         conn.executemany(
-            "UPDATE mailbox SET seen_at = ? WHERE id = ? AND seen_at IS NULL",
+            "UPDATE messages SET seen_at = ? WHERE id = ? AND type = 'chat' AND seen_at IS NULL",
             [(now, mid) for mid in msg_ids],
         )
         conn.commit()
@@ -216,7 +211,7 @@ def mark_processed(hc_home: Path, team: str, msg_id: int) -> None:
     conn = get_connection(hc_home, team)
     try:
         conn.execute(
-            "UPDATE mailbox SET processed_at = ? WHERE id = ? AND processed_at IS NULL",
+            "UPDATE messages SET processed_at = ? WHERE id = ? AND type = 'chat' AND processed_at IS NULL",
             (_now(), msg_id),
         )
         conn.commit()
@@ -232,7 +227,7 @@ def mark_processed_batch(hc_home: Path, team: str, msg_ids: list[int]) -> None:
     conn = get_connection(hc_home, team)
     try:
         conn.executemany(
-            "UPDATE mailbox SET processed_at = ? WHERE id = ? AND processed_at IS NULL",
+            "UPDATE messages SET processed_at = ? WHERE id = ? AND type = 'chat' AND processed_at IS NULL",
             [(now, mid) for mid in msg_ids],
         )
         conn.commit()
@@ -251,7 +246,7 @@ def mark_outbox_routed(
     conn = get_connection(hc_home, team)
     try:
         conn.execute(
-            "UPDATE mailbox SET delivered_at = ? WHERE id = ? AND delivered_at IS NULL",
+            "UPDATE messages SET delivered_at = ? WHERE id = ? AND type = 'chat' AND delivered_at IS NULL",
             (_now(), msg_id),
         )
         conn.commit()
@@ -273,9 +268,9 @@ def deliver(hc_home: Path, team: str, message: Message) -> int:
     try:
         cursor = conn.execute(
             """\
-            INSERT INTO mailbox (sender, recipient, body, created_at, delivered_at, task_id)
-            VALUES (?, ?, ?, ?, ?, ?)""",
-            (message.sender, message.recipient, message.body, message.time or now, now, message.task_id),
+            INSERT INTO messages (sender, recipient, content, type, task_id, delivered_at)
+            VALUES (?, ?, ?, 'chat', ?, ?)""",
+            (message.sender, message.recipient, message.body, message.task_id, now),
         )
         conn.commit()
         msg_id = cursor.lastrowid
@@ -300,14 +295,14 @@ def recent_processed(
     try:
         if from_sender:
             rows = conn.execute(
-                "SELECT * FROM mailbox WHERE recipient = ? AND sender = ? "
+                "SELECT * FROM messages WHERE type = 'chat' AND recipient = ? AND sender = ? "
                 "AND processed_at IS NOT NULL "
                 "ORDER BY id DESC LIMIT ?",
                 (agent, from_sender, limit),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM mailbox WHERE recipient = ? "
+                "SELECT * FROM messages WHERE type = 'chat' AND recipient = ? "
                 "AND processed_at IS NOT NULL "
                 "ORDER BY id DESC LIMIT ?",
                 (agent, limit),
@@ -340,7 +335,7 @@ def recent_conversation(
     try:
         if peer:
             rows = conn.execute(
-                "SELECT * FROM mailbox WHERE "
+                "SELECT * FROM messages WHERE type = 'chat' AND "
                 "((recipient = ? AND sender = ? AND processed_at IS NOT NULL) "
                 " OR (sender = ? AND recipient = ?)) "
                 "ORDER BY id DESC LIMIT ?",
@@ -348,9 +343,9 @@ def recent_conversation(
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM mailbox WHERE "
-                "(recipient = ? AND processed_at IS NOT NULL) "
-                "OR sender = ? "
+                "SELECT * FROM messages WHERE type = 'chat' AND "
+                "((recipient = ? AND processed_at IS NOT NULL) "
+                "OR sender = ?) "
                 "ORDER BY id DESC LIMIT ?",
                 (agent, agent, limit),
             ).fetchall()
@@ -367,7 +362,7 @@ def has_unread(hc_home: Path, team: str, agent: str) -> bool:
     conn = get_connection(hc_home, team)
     try:
         row = conn.execute(
-            "SELECT 1 FROM mailbox WHERE recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL LIMIT 1",
+            "SELECT 1 FROM messages WHERE type = 'chat' AND recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL LIMIT 1",
             (agent,),
         ).fetchone()
     finally:
@@ -383,8 +378,8 @@ def agents_with_unread(hc_home: Path, team: str) -> list[str]:
     conn = get_connection(hc_home, team)
     try:
         rows = conn.execute(
-            "SELECT DISTINCT recipient FROM mailbox "
-            "WHERE delivered_at IS NOT NULL AND processed_at IS NULL",
+            "SELECT DISTINCT recipient FROM messages "
+            "WHERE type = 'chat' AND delivered_at IS NOT NULL AND processed_at IS NULL",
         ).fetchall()
     finally:
         conn.close()
@@ -396,7 +391,7 @@ def count_unread(hc_home: Path, team: str, agent: str) -> int:
     conn = get_connection(hc_home, team)
     try:
         row = conn.execute(
-            "SELECT COUNT(*) FROM mailbox WHERE recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL",
+            "SELECT COUNT(*) FROM messages WHERE type = 'chat' AND recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL",
             (agent,),
         ).fetchone()
     finally:
