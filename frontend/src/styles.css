@@ -814,7 +814,7 @@ body {
 .mgr-sender { color: var(--text-secondary); }
 .mgr-status { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
 .mgr-tool { font-weight: 600; color: var(--text-secondary); }
-.mgr-thinking { font-style: italic; }
+.mgr-thinking { }
 
 /* ================================================================
    Chat input — Cursor-style
