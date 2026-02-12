@@ -211,30 +211,35 @@ async def _daemon_loop(
 
     # --- One-time startup: greeting from managers ---
     # Guard against duplicates when uvicorn reloads the process.
+    # We check the *mailbox* table (where send_message writes) — NOT
+    # the messages table — so the dedup actually finds prior greetings.
     try:
-        from delegate.chat import get_messages as _get_recent_msgs
+        from delegate.db import get_connection
         from datetime import datetime, timedelta, timezone
 
         teams = _list_teams(hc_home)
         boss_name = get_boss(hc_home) or "boss"
         cutoff = (datetime.now(timezone.utc) - timedelta(minutes=5)).strftime(
-            "%Y-%m-%dT%H:%M:%S"
+            "%Y-%m-%dT%H:%M:%fZ"
         )
 
         for team in teams:
             manager_name = get_member_by_role(hc_home, team, "manager")
             if not manager_name:
                 continue
-            # Check if a greeting was already sent in the last 5 minutes
-            recent = _get_recent_msgs(
-                hc_home, team, since=cutoff,
-                between=(manager_name, boss_name), limit=5,
-            )
-            already_greeted = any(
-                "Delegate is online" in (r.get("content") or "")
-                for r in recent
-            )
-            if already_greeted:
+            # Check mailbox for a recent greeting
+            conn = get_connection(hc_home, team)
+            row = conn.execute(
+                """SELECT COUNT(*) FROM mailbox
+                   WHERE sender = ? AND recipient = ?
+                     AND body LIKE 'Delegate is online%'
+                     AND created_at > ?""",
+                (manager_name, boss_name, cutoff),
+            ).fetchone()
+            recent_count = row[0] if row else 0
+            conn.close()
+
+            if recent_count > 0:
                 logger.info(
                     "Skipping duplicate startup greeting | team=%s", team,
                 )
