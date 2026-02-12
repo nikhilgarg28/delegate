@@ -212,17 +212,12 @@ export function flattenCommitsDict(commits) {
 
 // ── Linkify helpers (produce HTML strings for dangerouslySetInnerHTML) ──
 export function linkifyTaskRefs(html) {
-  const result = html.replace(/(^[^<]+|>[^<]*)/g, match =>
+  return html.replace(/(^[^<]+|>[^<]*)/g, match =>
     match.replace(/(?<!\/)T(\d{4})\b/g, (full, digits) => {
       const id = parseInt(digits, 10);
-      console.log('[linkifyTaskRefs] Matched task ref:', full, 'id:', id);
       return '<span class="task-link copyable" data-task-id="' + id + '">' + full + copyBtnHtml(full) + "</span>";
     })
   );
-  if (result !== html) {
-    console.log('[linkifyTaskRefs] HTML changed, before:', html.substring(0, 200), 'after:', result.substring(0, 200));
-  }
-  return result;
 }
 
 export function linkifyFilePaths(html) {

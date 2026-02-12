@@ -21,26 +21,20 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
   const internalRef = useRef();
 
   useEffect(() => {
-    console.log('[LinkedDiv useEffect] internalRef:', internalRef.current, 'externalRef:', externalRef?.current);
     if (!internalRef.current) {
-      console.log('[LinkedDiv useEffect] No element, returning early');
       return;
     }
     const el = internalRef.current;
     const handler = (e) => {
-      console.log('[LinkedDiv] Click event:', e.target, 'classList:', e.target.classList);
       // Copy button click
       const copyBtn = e.target.closest(".copy-btn");
       if (copyBtn) {
-        console.log('[LinkedDiv] Copy button clicked');
         e.stopPropagation(); e.preventDefault(); handleCopyClick(copyBtn); return;
       }
       const taskLink = e.target.closest("[data-task-id]");
       if (taskLink) {
-        console.log('[LinkedDiv] Task link clicked, id:', taskLink.dataset.taskId);
         e.stopPropagation();
         taskPanelId.value = parseInt(taskLink.dataset.taskId, 10);
-        console.log('[LinkedDiv] Set taskPanelId to:', taskPanelId.value);
         return;
       }
       const agentLink = e.target.closest("[data-agent-name]");
@@ -68,10 +62,8 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
         return;
       }
     };
-    console.log('[LinkedDiv useEffect] Attaching click handler to:', el);
     el.addEventListener("click", handler);
     return () => {
-      console.log('[LinkedDiv useEffect cleanup] Removing click handler');
       internalRef.current && internalRef.current.removeEventListener("click", handler);
     };
   }, [html]);
