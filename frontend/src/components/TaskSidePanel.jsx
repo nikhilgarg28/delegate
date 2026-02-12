@@ -8,7 +8,7 @@ import {
   cap, esc, fmtStatus, fmtTimestamp, fmtElapsed, fmtTokens, fmtCost,
   fmtRelativeTime, taskIdStr, renderMarkdown, linkifyTaskRefs, linkifyFilePaths,
   flattenDiffDict, flattenCommitsDict, diff2HtmlRender, diff2HtmlParse, stripEmojis,
-  handleCopyClick,
+  handleCopyClick, toApiPath,
 } from "../utils.js";
 import { ReviewableDiff } from "./ReviewableDiff.jsx";
 import { showToast } from "../toast.js";
@@ -747,16 +747,7 @@ function DetailsTab({ task, stats, currentReview }) {
                       e.stopPropagation();
                       const isHtmlFile = /\.html?$/i.test(fname);
                       if (isHtmlFile) {
-                        // Extract relative path (same logic as DiffPanel FileView)
-                        let apiPath = fpath;
-                        const sharedMarker = "/shared/";
-                        const agentsMarker = "/agents/";
-                        const sharedIdx = apiPath.indexOf(sharedMarker);
-                        const agentsIdx = apiPath.indexOf(agentsMarker);
-                        if (sharedIdx !== -1) apiPath = apiPath.substring(sharedIdx + sharedMarker.length);
-                        else if (agentsIdx !== -1) apiPath = apiPath.substring(agentsIdx + 1); // +1 to skip leading /
-                        else if (apiPath.startsWith("shared/")) apiPath = apiPath.substring(7);
-                        window.open(`/teams/${currentTeam.value}/files/raw?path=${encodeURIComponent(apiPath)}`, "_blank");
+                        window.open(`/teams/${currentTeam.value}/files/raw?path=${encodeURIComponent(toApiPath(fpath, currentTeam.value))}`, "_blank");
                       } else {
                         diffPanelMode.value = "file"; diffPanelTarget.value = fpath;
                       }

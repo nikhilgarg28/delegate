@@ -8,7 +8,7 @@ import * as api from "../api.js";
 import {
   cap, esc, fmtTimestamp, renderMarkdown,
   linkifyTaskRefs, linkifyFilePaths, agentifyRefs, msgStatusIcon, taskIdStr,
-  handleCopyClick,
+  handleCopyClick, toApiPath,
 } from "../utils.js";
 import { playMsgSound } from "../audio.js";
 import { showToast } from "../toast.js";
@@ -39,16 +39,7 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
       const fname = fpath.split("/").pop();
       const isHtmlFile = /\.html?$/i.test(fname);
       if (isHtmlFile) {
-        // Extract relative path (same logic as TaskSidePanel)
-        let apiPath = fpath;
-        const sharedMarker = "/shared/";
-        const agentsMarker = "/agents/";
-        const sharedIdx = apiPath.indexOf(sharedMarker);
-        const agentsIdx = apiPath.indexOf(agentsMarker);
-        if (sharedIdx !== -1) apiPath = apiPath.substring(sharedIdx + sharedMarker.length);
-        else if (agentsIdx !== -1) apiPath = apiPath.substring(agentsIdx + 1); // +1 to skip leading /
-        else if (apiPath.startsWith("shared/")) apiPath = apiPath.substring(7);
-        window.open(`/teams/${currentTeam.value}/files/raw?path=${encodeURIComponent(apiPath)}`, "_blank");
+        window.open(`/teams/${currentTeam.value}/files/raw?path=${encodeURIComponent(toApiPath(fpath, currentTeam.value))}`, "_blank");
       } else {
         diffPanelMode.value = "file"; diffPanelTarget.value = fpath;
       }

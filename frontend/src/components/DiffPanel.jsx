@@ -7,7 +7,7 @@ import * as api from "../api.js";
 import {
   cap, esc, fmtTimestamp, fmtElapsed, fmtTokens, fmtCost,
   flattenDiffDict, flattenCommitsDict, diff2HtmlRender, diff2HtmlParse,
-  renderMarkdown, msgStatusIcon, taskIdStr,
+  renderMarkdown, msgStatusIcon, taskIdStr, toApiPath,
 } from "../utils.js";
 
 // ── Diff viewer (task diff) ──
@@ -264,42 +264,41 @@ function FileView({ filePath }) {
     if (!filePath || !team) return;
     setFileData(null); setError(null);
     const abortCtrl = new AbortController();
-    let apiPath = filePath;
-    // Handle absolute paths containing shared/ or agents/
-    const sharedMarker = '/shared/';
-    const agentsMarker = '/agents/';
-    const sharedIdx = apiPath.indexOf(sharedMarker);
-    const agentsIdx = apiPath.indexOf(agentsMarker);
-    if (sharedIdx !== -1) {
-      apiPath = apiPath.substring(sharedIdx + sharedMarker.length);
-    } else if (agentsIdx !== -1) {
-      apiPath = apiPath.substring(agentsIdx + 1); // +1 to skip leading /
-    } else if (apiPath.startsWith("shared/")) {
-      apiPath = apiPath.substring(7);
-    }
+    let settled = false;
+    // Normalise the file path to a team-relative API path.
+    // Absolute paths are stripped to their team-relative form.
+    // The backend resolves agents/ and worktrees/ from the team root,
+    // and everything else from the team's shared/ directory.
+    const apiPath = toApiPath(filePath, team);
     api.fetchFileContent(team, apiPath, { signal: abortCtrl.signal }).then(data => {
+      settled = true;
       if (!abortCtrl.signal.aborted) setFileData(data);
     }).catch(e => {
+      settled = true;
       if (!abortCtrl.signal.aborted) {
         console.error('FileView fetch failed:', e);
         setError((e && e.message) || String(e) || 'Failed to load file');
       }
     });
-    return () => abortCtrl.abort();
+    // Safety: if the fetch hasn't settled after 8s, show an error
+    const timeout = setTimeout(() => {
+      if (!settled && !abortCtrl.signal.aborted) {
+        setError("Request timed out — the file may not exist or the server is unreachable.");
+      }
+    }, 8000);
+    return () => { abortCtrl.abort(); clearTimeout(timeout); };
   }, [filePath, team]);
 
   const ext = filePath ? (filePath.lastIndexOf(".") !== -1 ? filePath.substring(filePath.lastIndexOf(".") + 1).toLowerCase() : "") : "";
 
-  // Truncate file path to show from 'shared/' onwards (or from any meaningful root)
+  // Truncate file path to show from a meaningful root onwards
   const truncatePath = (path) => {
     if (!path) return path;
-    // If path contains 'shared/', show from there onwards
-    const sharedIdx = path.indexOf("shared/");
-    if (sharedIdx !== -1) return path.substring(sharedIdx);
-    // If path contains 'agents/', show from there onwards
-    const agentsIdx = path.indexOf("agents/");
-    if (agentsIdx !== -1) return path.substring(agentsIdx);
-    // Otherwise, if it's an absolute path, show just the last few segments
+    for (const marker of ["shared/", "agents/", "worktrees/"]) {
+      const idx = path.indexOf(marker);
+      if (idx !== -1) return path.substring(idx);
+    }
+    // Absolute path: show last few segments
     const parts = path.split("/");
     if (parts.length > 3 && path.startsWith("/")) {
       return parts.slice(-3).join("/");
@@ -349,16 +348,7 @@ function FileView({ filePath }) {
                   class="diff-panel-close-btn"
                   style={{ padding: "8px 16px" }}
                   onClick={() => {
-                    // Extract relative path (same logic as TaskSidePanel)
-                    let apiPath = filePath;
-                    const sharedMarker = "/shared/";
-                    const agentsMarker = "/agents/";
-                    const sharedIdx = apiPath.indexOf(sharedMarker);
-                    const agentsIdx = apiPath.indexOf(agentsMarker);
-                    if (sharedIdx !== -1) apiPath = apiPath.substring(sharedIdx + sharedMarker.length);
-                    else if (agentsIdx !== -1) apiPath = apiPath.substring(agentsIdx + 1); // +1 to skip leading /
-                    else if (apiPath.startsWith("shared/")) apiPath = apiPath.substring(7);
-                    window.open(`/teams/${currentTeam.value}/files/raw?path=${encodeURIComponent(apiPath)}`, "_blank");
+                    window.open(`/teams/${currentTeam.value}/files/raw?path=${encodeURIComponent(toApiPath(filePath, currentTeam.value))}`, "_blank");
                   }}
                 >
                   Open in New Tab

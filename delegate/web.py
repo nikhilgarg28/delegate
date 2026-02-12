@@ -1234,12 +1234,20 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
     @app.get("/teams/{team}/files/content")
     def read_shared_file(team: str, path: str):
-        """Read a specific file from the team's shared/ directory.
+        """Read a file from the team directory.
+
+        Paths starting with ``agents/`` or ``worktrees/`` are resolved
+        relative to the team root.  All other paths are resolved relative
+        to the team's ``shared/`` directory (backward-compatible).
 
         For text files, returns content as string.
         For images and binary files, returns base64-encoded data with content_type.
         """
-        base = _shared_dir(hc_home, team)
+        # Determine base directory (mirrors /files/raw logic)
+        if path.startswith("agents/") or path.startswith("worktrees/"):
+            base = _team_dir(hc_home, team)
+        else:
+            base = _shared_dir(hc_home, team)
         target = (base / path).resolve()
 
         try:
@@ -1323,8 +1331,8 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         Returns the file with its native content type so browsers can render it directly.
         Used for opening HTML attachments in new tabs.
         """
-        # Determine base directory: agents/ or shared/
-        if path.startswith("agents/"):
+        # Determine base directory: agents/ or worktrees/ → team root, else shared/
+        if path.startswith("agents/") or path.startswith("worktrees/"):
             base = _team_dir(hc_home, team)
         else:
             base = _shared_dir(hc_home, team)

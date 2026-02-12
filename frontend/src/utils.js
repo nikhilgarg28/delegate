@@ -220,9 +220,35 @@ export function linkifyTaskRefs(html) {
   );
 }
 
+/**
+ * Convert an arbitrary file path (absolute or relative) into an API-relative
+ * path for the /teams/{team}/files/content endpoint.
+ *
+ * The backend expects:
+ *   - "agents/…" or "worktrees/…" → resolved from team root
+ *   - anything else              → resolved from team's shared/ dir
+ */
+export function toApiPath(raw, team) {
+  let p = raw;
+  // Strip absolute prefix up to the team directory
+  const teamMarker = `/teams/${team}/`;
+  const tmIdx = p.indexOf(teamMarker);
+  if (tmIdx !== -1) {
+    p = p.substring(tmIdx + teamMarker.length);
+  }
+  // For paths that start with "shared/", strip the prefix so the backend
+  // resolves relative to its shared_dir.
+  if (p.startsWith("shared/")) {
+    p = p.substring(7);
+  }
+  // agents/ and worktrees/ are sent as-is — the backend handles them.
+  return p;
+}
+
 export function linkifyFilePaths(html) {
+  // Match shared/, agents/, and worktrees/ paths in text nodes
   return html.replace(/(^[^<]+|>[^<]*)/g, match =>
-    match.replace(/\bshared\/[\w\-\.\/]+\.[\w]+/g, path =>
+    match.replace(/\b(?:shared|agents|worktrees)\/[\w\-\.\/]+\.[\w]+/g, path =>
       '<span class="file-link copyable" data-file-path="' + esc(path) + '">' + esc(path) + copyBtnHtml(path) + "</span>"
     )
   );
