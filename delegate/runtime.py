@@ -418,7 +418,6 @@ async def run_turn(
             error_occurred = True
             # Still mark messages as processed so they don't replay forever
             _mark_batch_processed(hc_home, team, batch)
-            _write_worklog(ad, worklog_lines)
             # Don't raise - let the finally block run and then return
     finally:
         # Always end the session, even if cancelled or errored

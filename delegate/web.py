@@ -448,6 +448,10 @@ async def _lifespan(app: FastAPI):
     hc_home = app.state.hc_home
     enable = os.environ.get("DELEGATE_DAEMON", "").lower() in ("1", "true", "yes")
 
+    # Reset shutdown flag (for server restart/reload scenarios)
+    global _shutdown_flag
+    _shutdown_flag = False
+
     task = None
     esbuild_proc: subprocess.Popen | None = None
 
@@ -479,7 +483,6 @@ async def _lifespan(app: FastAPI):
 
     if task is not None:
         # Set shutdown flag before cancelling the daemon loop
-        global _shutdown_flag
         _shutdown_flag = True
         logger.info("Setting shutdown flag and cancelling daemon loop")
 
@@ -493,12 +496,13 @@ async def _lifespan(app: FastAPI):
         if _active_merge_tasks:
             logger.info("Cancelling %d merge task(s)...", len(_active_merge_tasks))
             # Snapshot the set before iteration to avoid mutation during iteration
-            for merge_task in list(_active_merge_tasks):
+            merge_tasks_snapshot = list(_active_merge_tasks)
+            for merge_task in merge_tasks_snapshot:
                 merge_task.cancel()
 
             try:
                 await asyncio.wait_for(
-                    asyncio.gather(*_active_merge_tasks, return_exceptions=True),
+                    asyncio.gather(*merge_tasks_snapshot, return_exceptions=True),
                     timeout=5.0
                 )
                 logger.info("All merge tasks cancelled")
