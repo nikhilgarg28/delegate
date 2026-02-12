@@ -570,7 +570,62 @@ body {
 /* ================================================================
    Task approval
    ================================================================ */
-.task-approval-status { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; margin-top: 8px; border-top: 1px solid var(--border-subtle); }
+/* Approval bar (sticky between header and tabs) */
+.task-approval-bar {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+.task-approval-bar-resolved {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+}
+.task-approval-bar-resolved .approval-badge {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.task-approval-bar-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-approval-bar-input {
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 10px;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+}
+.task-approval-bar-input:focus { border-color: var(--text-muted); }
+.task-approval-bar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.task-approval-bar-actions .btn-approve,
+.task-approval-bar-actions .btn-reject {
+  padding: 5px 14px;
+  font-size: 12px;
+}
+.task-approval-bar-comment-count {
+  font-size: 11px;
+  color: var(--accent);
+  margin-left: 4px;
+}
+/* Legacy review box (still used by ReviewableDiff) */
 .task-review-box { margin-top: 20px; padding: 16px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-elevated); }
 .task-review-box-approved { border-color: rgba(115,201,145,0.3); background: rgba(115,201,145,0.04); }
 .task-review-box-rejected { border-color: rgba(241,76,76,0.3); background: rgba(241,76,76,0.04); }
@@ -1357,12 +1412,69 @@ select option:hover {
 .task-attachment-name { color: var(--text-secondary); cursor: pointer; word-break: break-all; font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
 .task-attachment-name:hover { text-decoration: underline; }
 .task-panel-dates { display: flex; gap: 24px; font-size: 11px; color: var(--text-muted); align-items: center; margin-bottom: 20px; }
-.task-panel-vcs-row { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-.task-panel-diff-section { margin-top: 20px; }
-.task-panel-diff-tabs { display: flex; gap: 0; margin-bottom: 10px; position: sticky; top: 0; z-index: 1; background: var(--bg-primary); padding: 4px 0; }
-.task-panel-diff-tabs .diff-tab { padding: 6px 12px; cursor: pointer; background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); font-family: inherit; font-size: 12px; font-weight: 500; transition: color 100ms; }
-.task-panel-diff-tabs .diff-tab:hover { color: var(--text-secondary); }
-.task-panel-diff-tabs .diff-tab.active { color: var(--text-heading); border-bottom-color: var(--text-heading); }
+.task-panel-vcs-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+
+/* File summary bar in Changes tab */
+.changes-file-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-bottom: 14px;
+  transition: background 100ms;
+}
+.changes-file-summary:hover { background: var(--bg-hover); }
+.changes-file-toggle {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.changes-file-stats {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Commits section in Changes tab */
+.changes-commits-section {
+  margin-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+.changes-commits-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+.changes-commits-header:hover { color: var(--text-primary); }
+.changes-commits-toggle {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Activity tab */
+.task-activity-tab {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.task-activity-timeline {
+  display: flex;
+  flex-direction: column;
+}
 @media (max-width: 900px) { .task-panel { width: 100vw; max-width: none; } }
 @media (max-width: 600px) { .task-panel-meta-grid { grid-template-columns: repeat(2, 1fr); } }
 

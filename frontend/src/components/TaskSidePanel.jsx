@@ -18,15 +18,11 @@ import { CopyBtn } from "./CopyBtn.jsx";
 function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
   const internalRef = useRef();
 
-  // Merge refs
   const setRefs = useCallback((el) => {
     internalRef.current = el;
     if (externalRef) {
-      if (typeof externalRef === 'function') {
-        externalRef(el);
-      } else {
-        externalRef.current = el;
-      }
+      if (typeof externalRef === 'function') externalRef(el);
+      else externalRef.current = el;
     }
   }, [externalRef]);
 
@@ -34,7 +30,6 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
     if (!internalRef.current) return;
     const el = internalRef.current;
     const handler = (e) => {
-      // Copy button click
       const copyBtn = e.target.closest(".copy-btn");
       if (copyBtn) { e.stopPropagation(); e.preventDefault(); handleCopyClick(copyBtn); return; }
       const taskLink = e.target.closest("[data-task-id]");
@@ -47,55 +42,11 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
     el.addEventListener("click", handler);
     return () => el.removeEventListener("click", handler);
   }, [html]);
+
   return <div ref={setRefs} class={cls} style={style} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-// ── Approval Badge (Details tab) ──
-function ApprovalBadge({ task, currentReview }) {
-  const { status, approval_status, rejection_reason } = task;
-  const reviewSummary = currentReview && currentReview.summary;
-
-  if (status === "done" || approval_status === "approved") {
-    return (
-      <div class="task-approval-status">
-        <div class="approval-badge approval-badge-approved">&#10004; Approved</div>
-        {reviewSummary && <div class="approval-rejection-reason" style={{ color: "var(--text-secondary)" }}>{reviewSummary}</div>}
-      </div>
-    );
-  }
-  if (status === "rejected" || approval_status === "rejected") {
-    const reason = reviewSummary || rejection_reason;
-    return (
-      <div class="task-approval-status">
-        <div class="approval-badge approval-badge-rejected">&#10006; Rejected</div>
-        {reason && <div class="approval-rejection-reason">{reason}</div>}
-      </div>
-    );
-  }
-  if (status === "in_approval") {
-    return (
-      <div class="task-approval-status">
-        <div class="approval-badge approval-badge-pending">&#9203; Awaiting Approval</div>
-        <span style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
-          Review changes in the <a href="#" onClick={(e) => { e.preventDefault(); setTabFromBadge && setTabFromBadge("changes"); }} style={{ color: "var(--accent-blue)" }}>Changes</a> tab
-        </span>
-      </div>
-    );
-  }
-  if (status === "merging") {
-    return (
-      <div class="task-approval-status">
-        <div class="approval-badge approval-badge-merging">&#8635; Merging...</div>
-      </div>
-    );
-  }
-  if (status === "merge_failed") {
-    return <div class="task-approval-status"><div class="approval-badge" style={{ background: "rgba(204,167,0,0.08)", color: "var(--semantic-orange)" }}>&#9888; Merge Failed</div></div>;
-  }
-  return null;
-}
-
-// ── Retry Merge Button ──
+// ── Retry merge button (compact, inline) ──
 function RetryMergeButton({ task }) {
   const [loading, setLoading] = useState(false);
   const team = currentTeam.value;
@@ -105,7 +56,6 @@ function RetryMergeButton({ task }) {
     setLoading(true);
     try {
       await api.retryMerge(team, task.id);
-      // Refresh task list
       const refreshed = await api.fetchTasks(team);
       tasks.value = refreshed;
     } catch (err) {
@@ -116,50 +66,66 @@ function RetryMergeButton({ task }) {
   };
 
   return (
-    <div style={{ marginTop: "8px" }}>
-      <button
-        class="approve-btn"
-        onClick={handleRetry}
-        disabled={loading}
-        style={{ width: "100%" }}
-      >
-        {loading ? "Retrying..." : "Retry Merge"}
-      </button>
-    </div>
+    <button
+      class="btn-approve"
+      onClick={handleRetry}
+      disabled={loading}
+      style={{ marginLeft: "8px" }}
+    >
+      {loading ? "Retrying..." : "\u21BB Retry Merge"}
+    </button>
   );
 }
 
-// Module-level variable for badge→tab communication
-let setTabFromBadge = null;
-
-// ── Approval Actions (Changes tab) ──
-function ApprovalActions({ task, currentReview, onApproved, onRejected }) {
+// ── Approval bar (fixed between header and tabs) ──
+function ApprovalBar({ task, currentReview, onAction }) {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState("");
-  const [result, setResult] = useState(null); // "approved" | "rejected" | null
+  const [result, setResult] = useState(null);
 
   const { status, approval_status, rejection_reason } = task;
   const reviewSummary = currentReview && currentReview.summary;
   const commentCount = currentReview && currentReview.comments ? currentReview.comments.length : 0;
 
+  // Already approved
   if (status === "done" || approval_status === "approved" || result === "approved") {
     return (
-      <div class="task-review-box task-review-box-approved">
-        <div class="approval-badge approval-badge-approved">&#10004; Approved</div>
-        {(summary || reviewSummary) && <div class="approval-rejection-reason" style={{ color: "var(--text-secondary)" }}>{summary || reviewSummary}</div>}
+      <div class="task-approval-bar task-approval-bar-resolved">
+        <span class="approval-badge approval-badge-approved">&#10004; Approved</span>
+        {(summary || reviewSummary) && (
+          <span class="task-approval-bar-summary">{summary || reviewSummary}</span>
+        )}
       </div>
     );
   }
+  // Rejected
   if (status === "rejected" || approval_status === "rejected" || result === "rejected") {
     const reason = result === "rejected" ? summary : (reviewSummary || rejection_reason);
     return (
-      <div class="task-review-box task-review-box-rejected">
-        <div class="approval-badge approval-badge-rejected">&#10006; Changes Rejected</div>
-        {reason && <div class="approval-rejection-reason">{reason}</div>}
-        {commentCount > 0 && <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>{commentCount} inline comment{commentCount !== 1 ? "s" : ""}</div>}
+      <div class="task-approval-bar task-approval-bar-resolved">
+        <span class="approval-badge approval-badge-rejected">&#10006; Rejected</span>
+        {reason && <span class="task-approval-bar-summary">{reason}</span>}
       </div>
     );
   }
+  // Merging
+  if (status === "merging") {
+    return (
+      <div class="task-approval-bar task-approval-bar-resolved">
+        <span class="approval-badge approval-badge-merging">&#8635; Merging...</span>
+      </div>
+    );
+  }
+  // Merge failed
+  if (status === "merge_failed") {
+    return (
+      <div class="task-approval-bar task-approval-bar-resolved">
+        <span class="approval-badge" style={{ background: "rgba(204,167,0,0.08)", color: "var(--semantic-orange)" }}>&#9888; Merge Failed</span>
+        <RetryMergeButton task={task} />
+      </div>
+    );
+  }
+  // Not reviewable
   if (status !== "in_approval") return null;
 
   const handleApprove = async () => {
@@ -167,7 +133,7 @@ function ApprovalActions({ task, currentReview, onApproved, onRejected }) {
     try {
       await api.approveTask(currentTeam.value, task.id, summary);
       setResult("approved");
-      if (onApproved) onApproved();
+      if (onAction) onAction();
     } catch (e) {
       showToast("Failed to approve: " + e.message, "error");
     } finally {
@@ -180,7 +146,7 @@ function ApprovalActions({ task, currentReview, onApproved, onRejected }) {
     try {
       await api.rejectTask(currentTeam.value, task.id, summary || "(no reason)", summary);
       setResult("rejected");
-      if (onRejected) onRejected();
+      if (onAction) onAction();
     } catch (e) {
       showToast("Failed to reject: " + e.message, "error");
     } finally {
@@ -189,29 +155,19 @@ function ApprovalActions({ task, currentReview, onApproved, onRejected }) {
   };
 
   return (
-    <div class="task-review-box">
-      <div class="task-review-box-header">
-        Review changes
-        {commentCount > 0 && (
-          <span style={{ marginLeft: "8px", fontSize: "11px", color: "var(--accent)" }}>
-            {commentCount} comment{commentCount !== 1 ? "s" : ""}
-          </span>
-        )}
-      </div>
-      {/* Overall comment textarea */}
+    <div class="task-approval-bar">
       <textarea
-        class="rc-comment-textarea"
-        style={{ marginBottom: "8px" }}
-        placeholder="Overall comment (optional)..."
+        class="task-approval-bar-input"
+        placeholder="Review comment (optional)..."
         value={summary}
         onInput={(e) => setSummary(e.target.value)}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
-        rows="2"
+        rows="1"
       />
-      <div class="task-review-box-actions">
+      <div class="task-approval-bar-actions">
         <button
-          class={"btn-approve" + (loading ? " loading" : "")}
+          class="btn-approve"
           disabled={loading}
           onClick={(e) => { e.stopPropagation(); handleApprove(); }}
         >
@@ -224,229 +180,62 @@ function ApprovalActions({ task, currentReview, onApproved, onRejected }) {
         >
           {loading ? "Rejecting..." : "\u2716 Request Changes"}
         </button>
+        {commentCount > 0 && (
+          <span class="task-approval-bar-comment-count">
+            {commentCount} comment{commentCount !== 1 ? "s" : ""}
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Activity section (interleaved events + comments) ──
-function ActivitySection({ taskId, task }) {
-  const [timeline, setTimeline] = useState(null);
-  const [expanded, setExpanded] = useState(true);
-  const [commentText, setCommentText] = useState("");
-  const [posting, setPosting] = useState(false);
-  const team = currentTeam.value;
-  const boss = bossName.value || "boss";
+// ── Collapsible description ──
+const TASK_DESC_COLLAPSE_THRESHOLD = 110;
 
-  const loadTimeline = useCallback(async () => {
-    try {
-      const activity = await api.fetchTaskActivity(team, taskId);
-      // Only show events (status/assignee changes) and task comments — skip chat messages
-      const items = activity
-        .filter((m) => m.type === "comment" || m.type === "event" || m.type === "task_comment")
-        .map((m) => {
-          if (m.type === "comment" || m.type === "task_comment") {
-            return {
-              type: "comment",
-              time: m.timestamp,
-              author: m.sender || "unknown",
-              body: m.content || "",
-              icon: "\u270E",
-            };
-          }
-          // event
-          const text = m.content || "Event";
-          let icon = "\u21BB";
-          if (/created/i.test(text)) icon = "+";
-          else if (/assign/i.test(text)) icon = "\u2192";
-          else if (/approved|merged/i.test(text)) icon = "\u2713";
-          else if (/rejected/i.test(text)) icon = "\u2717";
-          else if (/review/i.test(text)) icon = "\u2299";
-          else if (/commented/i.test(text)) icon = "\u270E";
-          return { type: "event", time: m.timestamp, text, icon };
-        });
-      setTimeline(items);
-    } catch (e) {
-      setTimeline([]);
-    }
-  }, [team, taskId]);
+function CollapsibleDescription({ html }) {
+  const contentRef = useRef();
+  const [isLong, setIsLong] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    loadTimeline().then(() => { if (cancelled) return; });
-    return () => { cancelled = true; };
-  }, [taskId, team, loadTimeline]);
+    if (!contentRef.current) return;
+    const checkOverflow = () => {
+      const el = contentRef.current;
+      if (el && el.scrollHeight > TASK_DESC_COLLAPSE_THRESHOLD) {
+        setIsLong(true);
+      } else {
+        setIsLong(false);
+      }
+    };
+    checkOverflow();
+    const observer = new ResizeObserver(checkOverflow);
+    if (contentRef.current) observer.observe(contentRef.current);
+    return () => observer.disconnect();
+  }, [html]);
 
-  const handlePostComment = async () => {
-    const body = commentText.trim();
-    if (!body || posting) return;
-    setPosting(true);
-    try {
-      await api.postTaskComment(team, taskId, boss, body);
-      setCommentText("");
-      await loadTimeline();
-    } catch (e) {
-      showToast("Failed to post comment: " + e.message, "error");
-    } finally {
-      setPosting(false);
-    }
-  };
+  const toggle = useCallback(() => { setIsExpanded(prev => !prev); }, []);
+  const wrapperClass = "task-desc-wrapper" + (isLong && !isExpanded ? " collapsed" : "");
 
   return (
-    <div class="task-activity-section">
-      <div class="task-activity-header" onClick={() => setExpanded(!expanded)}>
-        <span class={"task-activity-arrow" + (expanded ? " expanded" : "")}>&#9654;</span>
-        <span class="task-panel-section-label" style={{ marginBottom: 0 }}>Activity</span>
+    <>
+      <div class={wrapperClass}>
+        <LinkedDiv class="task-panel-desc md-content" html={html} ref={contentRef} />
+        {isLong && !isExpanded && <div class="task-desc-fade-overlay" />}
       </div>
-      <div class={"task-activity-list" + (expanded ? " expanded" : "")}>
-        {timeline === null ? (
-          <div class="diff-empty">Loading activity...</div>
-        ) : timeline.length === 0 ? (
-          <div class="diff-empty">No activity yet</div>
-        ) : (
-          timeline.map((e, i) =>
-            e.type === "comment" ? (
-              <div key={i} class="task-activity-event task-comment-entry">
-                <span class="task-activity-icon">{e.icon}</span>
-                <div class="task-comment-body">
-                  <div class="task-comment-meta">
-                    <span class="task-comment-author">{cap(e.author)}</span>
-                    <span class="task-activity-time">{fmtRelativeTime(e.time)}</span>
-                  </div>
-                  <div class="task-comment-text">{stripEmojis(e.body)}</div>
-                </div>
-              </div>
-            ) : (
-              <div key={i} class="task-activity-event">
-                <span class="task-activity-icon">{e.icon}</span>
-                <span class="task-activity-text">{stripEmojis(e.text)}</span>
-                <span class="task-activity-time">{fmtRelativeTime(e.time)}</span>
-              </div>
-            )
-          )
-        )}
-        {/* Comment input for the boss */}
-        <div class="task-comment-input-row">
-          <input
-            type="text"
-            class="task-comment-input"
-            placeholder="Add a comment..."
-            value={commentText}
-            onInput={(e) => setCommentText(e.target.value)}
-            onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") handlePostComment(); }}
-            onClick={(e) => e.stopPropagation()}
-            disabled={posting}
-          />
-          <button
-            class="task-comment-submit"
-            onClick={(e) => { e.stopPropagation(); handlePostComment(); }}
-            disabled={posting || !commentText.trim()}
-          >
-            {posting ? "..." : "\u2192"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Diff tabs content ──
-function DiffContent({ diffRaw, taskId, diffTab, setDiffTab, task, currentReview, oldComments }) {
-  const [commitsData, setCommitsData] = useState(null);
-  const team = currentTeam.value;
-  const isReviewable = task && task.status === "in_approval";
-
-  const renderFiles = () => {
-    const files = diff2HtmlParse(diffRaw);
-    if (!files.length) return <div class="diff-empty">No files changed</div>;
-    let totalAdd = 0, totalDel = 0;
-    for (const f of files) { totalAdd += f.addedLines; totalDel += f.deletedLines; }
-    return (
-      <div>
-        <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "8px" }}>
-          {files.length} file{files.length !== 1 ? "s" : ""} changed,{" "}
-          <span style={{ color: "var(--diff-add-text)" }}>+{totalAdd}</span>{" "}
-          <span style={{ color: "var(--diff-del-text)" }}>&minus;{totalDel}</span>
-        </div>
-        <div class="diff-file-list">
-          {files.map((f, i) => {
-            const name = (f.newName === "/dev/null" ? f.oldName : f.newName) || f.oldName || "unknown";
-            return (
-              <div key={i} class="diff-file-list-item" onClick={() => setDiffTab("diff")}>
-                <span class="diff-file-list-name">{name}</span>
-                <span class="diff-file-stats">
-                  <span class="diff-file-add">+{f.addedLines}</span>
-                  <span class="diff-file-del">-{f.deletedLines}</span>
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  const renderReviewableDiff = () => {
-    if (!diffRaw) return <div class="diff-empty">No changes</div>;
-    return (
-      <ReviewableDiff
-        diffRaw={diffRaw}
-        taskId={taskId}
-        currentComments={currentReview ? (currentReview.comments || []) : []}
-        oldComments={oldComments || []}
-        isReviewable={isReviewable}
-      />
-    );
-  };
-
-  const renderCommits = () => {
-    if (commitsData === null) {
-      // Fetch on first view
-      api.fetchTaskCommits(team, taskId).then(data => {
-        setCommitsData(data);
-      }).catch(() => {
-        setCommitsData({ commit_diffs: {} });
-      });
-      return <div class="diff-empty">Loading commits...</div>;
-    }
-    const allCommits = [];
-    const cd = commitsData.commit_diffs || {};
-    Object.keys(cd).forEach(repo => {
-      (cd[repo] || []).forEach(c => allCommits.push({ ...c, repo }));
-    });
-    if (!allCommits.length) return <div class="diff-empty">No commits recorded</div>;
-    return <CommitList commits={allCommits} multiRepo={Object.keys(cd).length > 1} />;
-  };
-
-  return (
-    <div class="task-panel-diff-section">
-      <div class="task-panel-diff-tabs">
-        {["files", "diff", "commits"].map(tab => (
-          <button
-            key={tab}
-            class={"diff-tab" + (diffTab === tab ? " active" : "")}
-            onClick={() => setDiffTab(tab)}
-          >
-            {tab === "files" ? "Files Changed" : tab === "diff" ? "Review Diff" : "Commits"}
-          </button>
-        ))}
-      </div>
-      <div>
-        {diffTab === "files" && renderFiles()}
-        {diffTab === "diff" && renderReviewableDiff()}
-        {diffTab === "commits" && renderCommits()}
-      </div>
-    </div>
+      {isLong && (
+        <button class="task-desc-expand-btn" onClick={toggle}>
+          {isExpanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </>
   );
 }
 
 // ── Commit list ──
 function CommitList({ commits, multiRepo }) {
   const [expandedIdx, setExpandedIdx] = useState({});
-
-  const toggle = (idx) => {
-    setExpandedIdx(prev => ({ ...prev, [idx]: !prev[idx] }));
-  };
+  const toggle = (idx) => { setExpandedIdx(prev => ({ ...prev, [idx]: !prev[idx] })); };
 
   return (
     <div class="commit-list">
@@ -478,206 +267,8 @@ function CommitList({ commits, multiRepo }) {
   );
 }
 
-// ── Main TaskSidePanel ──
-export function TaskSidePanel() {
-  const id = taskPanelId.value;
-  const team = currentTeam.value;
-  const allTasks = tasks.value;
-
-  const [task, setTask] = useState(null);
-  const [stats, setStats] = useState(null);
-  const [activeTabLocal, setActiveTabLocal] = useState("details");
-  const [diffRaw, setDiffRaw] = useState("");
-  const [diffLoaded, setDiffLoaded] = useState(false);
-  const [diffTab, setDiffTab] = useState("files");
-  const [currentReview, setCurrentReview] = useState(null);
-  const [oldComments, setOldComments] = useState([]);
-
-  // Set the tab switcher for badge → changes tab link
-  useEffect(() => {
-    setTabFromBadge = setActiveTabLocal;
-    return () => { setTabFromBadge = null; };
-  }, []);
-
-  // Load task data when panel opens
-  useEffect(() => {
-    if (id === null || !team) { setTask(null); return; }
-    setActiveTabLocal("details");
-    setDiffRaw("");
-    setDiffLoaded(false);
-    setDiffTab("files");
-    setCurrentReview(null);
-    setOldComments([]);
-
-    // Find task from cached list first
-    const cached = allTasks.find(t => t.id === id);
-    if (cached) setTask(cached);
-
-    // Fetch task stats
-    (async () => {
-      try {
-        const s = await api.fetchTaskStats(team, id);
-        setStats(s);
-      } catch (e) { }
-    })();
-  }, [id, team]);
-
-  // Sync task from signal when SSE pushes updates
-  useEffect(() => {
-    if (id === null) return;
-    const updated = allTasks.find(t => t.id === id);
-    if (updated) setTask(prev => prev ? { ...prev, ...updated } : updated);
-  }, [allTasks, id]);
-
-  // Load review data when panel opens or task changes
-  useEffect(() => {
-    if (id === null || !team) return;
-    (async () => {
-      try {
-        const review = await api.fetchCurrentReview(team, id);
-        setCurrentReview(review);
-      } catch (e) { }
-      try {
-        const reviews = await api.fetchReviews(team, id);
-        if (reviews.length > 1) {
-          // Collect comments from all previous attempts (not the latest)
-          const latest = reviews[reviews.length - 1];
-          const old = [];
-          for (const r of reviews) {
-            if (r.attempt !== latest.attempt && r.comments) {
-              for (const c of r.comments) {
-                old.push({ ...c, attempt: r.attempt });
-              }
-            }
-          }
-          setOldComments(old);
-        }
-      } catch (e) { }
-    })();
-  }, [id, team, task && task.review_attempt]);
-
-  // Lazy load diff when Changes tab activated
-  useEffect(() => {
-    if (activeTabLocal !== "changes" || diffLoaded || id === null || !team) return;
-    setDiffLoaded(true);
-    api.fetchTaskDiff(team, id).then(data => {
-      setDiffRaw(flattenDiffDict(data.diff));
-    }).catch(() => {});
-  }, [activeTabLocal, diffLoaded, id, team]);
-
-  const close = useCallback(() => { taskPanelId.value = null; }, []);
-
-  const handleApproved = useCallback(() => {
-    // Refresh tasks in background
-    if (team) api.fetchTasks(team).then(list => { tasks.value = list; });
-  }, [team]);
-
-  if (id === null) return null;
-
-  const isOpen = id !== null;
-  const t = task;
-
-  return (
-    <>
-      <div class={"task-panel" + (isOpen ? " open" : "")}>
-        <div class="task-panel-header">
-          <div class="task-panel-title-row">
-            <span class="task-panel-id copyable">{taskIdStr(id)}<CopyBtn text={taskIdStr(id)} /></span>
-            <span class="task-panel-title">{t ? t.title : "Loading..."}</span>
-          </div>
-          <div class="task-panel-meta-row">
-            <span class="task-panel-status">
-              {t && <span class={"badge badge-" + t.status}>{fmtStatus(t.status)}</span>}
-            </span>
-            <span class="task-panel-assignee copyable">{t && t.assignee ? cap(t.assignee) : ""}{t && t.assignee && <CopyBtn text={t.assignee} />}</span>
-            <span class="task-panel-priority">{t && t.priority ? cap(t.priority) : ""}</span>
-          </div>
-          <button class="task-panel-close" onClick={close}>&times;</button>
-        </div>
-        <div class="task-panel-tabs">
-          {["details", "changes"].map(tab => (
-            <button
-              key={tab}
-              class={"task-panel-tab" + (activeTabLocal === tab ? " active" : "")}
-              onClick={() => setActiveTabLocal(tab)}
-            >
-              {tab === "details" ? "Details" : "Changes"}
-            </button>
-          ))}
-        </div>
-        <div class="task-panel-body">
-          {!t ? (
-            <div class="diff-empty">Loading...</div>
-          ) : (
-            <>
-              {/* Details tab */}
-              <div style={{ display: activeTabLocal === "details" ? "" : "none" }}>
-                <DetailsTab task={t} stats={stats} currentReview={currentReview} />
-              </div>
-              {/* Changes tab */}
-              <div style={{ display: activeTabLocal === "changes" ? "" : "none" }}>
-                <ChangesTab task={t} stats={stats} diffRaw={diffRaw} diffTab={diffTab} setDiffTab={setDiffTab} onApproved={handleApproved} currentReview={currentReview} oldComments={oldComments} />
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-      <div class={"task-backdrop" + (isOpen ? " open" : "")} onClick={close}></div>
-    </>
-  );
-}
-
-// ── Collapsible description ──
-const TASK_DESC_COLLAPSE_THRESHOLD = 110; // ~5 lines at 14px * 1.6 line-height
-
-function CollapsibleDescription({ html }) {
-  const contentRef = useRef();
-  const [isLong, setIsLong] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  useEffect(() => {
-    if (!contentRef.current) return;
-    const checkOverflow = () => {
-      const el = contentRef.current;
-      if (el && el.scrollHeight > TASK_DESC_COLLAPSE_THRESHOLD) {
-        setIsLong(true);
-      } else {
-        setIsLong(false);
-      }
-    };
-    checkOverflow();
-
-    // Re-check on resize
-    const observer = new ResizeObserver(checkOverflow);
-    if (contentRef.current) observer.observe(contentRef.current);
-    return () => observer.disconnect();
-  }, [html]);
-
-  const toggle = useCallback(() => {
-    setIsExpanded(prev => !prev);
-  }, []);
-
-  const wrapperClass = "task-desc-wrapper" + (isLong && !isExpanded ? " collapsed" : "");
-
-  return (
-    <>
-      <div class={wrapperClass}>
-        <LinkedDiv class="task-panel-desc md-content" html={html} ref={contentRef} />
-        {isLong && !isExpanded && (
-          <div class="task-desc-fade-overlay" />
-        )}
-      </div>
-      {isLong && (
-        <button class="task-desc-expand-btn" onClick={toggle}>
-          {isExpanded ? 'Show less' : 'Show more'}
-        </button>
-      )}
-    </>
-  );
-}
-
-// ── Details tab content ──
-function DetailsTab({ task, stats, currentReview }) {
+// ── Overview tab ──
+function OverviewTab({ task, stats }) {
   const t = task;
   const descHtml = t.description ? linkifyFilePaths(linkifyTaskRefs(renderMarkdown(t.description))) : "";
 
@@ -690,7 +281,6 @@ function DetailsTab({ task, stats, currentReview }) {
         <div class="task-panel-meta-item"><div class="task-detail-label">Priority</div><div class="task-detail-value">{cap(t.priority)}</div></div>
         <div class="task-panel-meta-item"><div class="task-detail-label">Time</div><div class="task-detail-value">{stats ? fmtElapsed(stats.elapsed_seconds) : "\u2014"}</div></div>
       </div>
-      {/* Stats */}
       {stats && (
         <div class="task-panel-meta-grid">
           <div class="task-panel-meta-item"><div class="task-detail-label">Tokens (in/out)</div><div class="task-detail-value">{fmtTokens(stats.total_tokens_in, stats.total_tokens_out)}</div></div>
@@ -761,29 +351,54 @@ function DetailsTab({ task, stats, currentReview }) {
           </div>
         </div>
       )}
-      {/* Activity */}
-      <ActivitySection taskId={t.id} task={t} />
       {/* Status detail (merge failure reason etc.) */}
       {t.status_detail && (
         <div style={{ fontSize: "12px", color: "var(--text-muted)", padding: "8px 12px", background: "rgba(204,167,0,0.06)", borderRadius: "6px", marginBottom: "8px", border: "1px solid rgba(204,167,0,0.12)" }}>
           {t.status_detail}
         </div>
       )}
-      {/* Approval badge */}
-      <ApprovalBadge task={t} currentReview={currentReview} />
-      {/* Retry merge button */}
-      {t.status === "merge_failed" && <RetryMergeButton task={t} />}
     </div>
   );
 }
 
-// ── Changes tab content ──
-function ChangesTab({ task, stats, diffRaw, diffTab, setDiffTab, onApproved, currentReview, oldComments }) {
+// ── Changes tab ──
+function ChangesTab({ task, diffRaw, currentReview, oldComments, stats }) {
+  const [showFileList, setShowFileList] = useState(false);
+  const [commitsData, setCommitsData] = useState(null);
+  const [commitsExpanded, setCommitsExpanded] = useState(false);
+  const team = currentTeam.value;
   const t = task;
+  const isReviewable = t && t.status === "in_approval";
+
+  const files = useMemo(() => diffRaw ? diff2HtmlParse(diffRaw) : [], [diffRaw]);
+  let totalAdd = 0, totalDel = 0;
+  for (const f of files) { totalAdd += f.addedLines; totalDel += f.deletedLines; }
+
+  // Lazy-load commits when expanded
+  useEffect(() => {
+    if (!commitsExpanded || commitsData !== null) return;
+    api.fetchTaskCommits(team, t.id).then(data => {
+      setCommitsData(data);
+    }).catch(() => {
+      setCommitsData({ commit_diffs: {} });
+    });
+  }, [commitsExpanded, commitsData, team, t.id]);
+
+  const allCommits = useMemo(() => {
+    if (!commitsData) return [];
+    const cd = commitsData.commit_diffs || {};
+    const commits = [];
+    Object.keys(cd).forEach(repo => {
+      (cd[repo] || []).forEach(c => commits.push({ ...c, repo }));
+    });
+    return commits;
+  }, [commitsData]);
+
+  const multiRepo = commitsData ? Object.keys(commitsData.commit_diffs || {}).length > 1 : false;
 
   return (
     <div>
-      {/* VCS info */}
+      {/* Branch info */}
       {stats && stats.branch && (
         <div class="task-panel-vcs-row">
           <span class="task-branch copyable" title={stats.branch}>{stats.branch}<CopyBtn text={stats.branch} /></span>
@@ -792,7 +407,7 @@ function ChangesTab({ task, stats, diffRaw, diffTab, setDiffTab, onApproved, cur
       {/* Base SHA */}
       {t.base_sha && typeof t.base_sha === "object" && Object.keys(t.base_sha).length > 0 && (
         <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "12px" }}>
-          Base SHA:{" "}
+          Base:{" "}
           {Object.entries(t.base_sha).map(([repo, sha], i) => (
             <code key={i} style={{ fontFamily: "SF Mono,Fira Code,monospace", background: "var(--bg-active)", padding: "2px 6px", borderRadius: "3px", marginRight: "6px" }}>
               {Object.keys(t.base_sha).length > 1 ? repo + ": " : ""}{String(sha).substring(0, 10)}
@@ -800,10 +415,320 @@ function ChangesTab({ task, stats, diffRaw, diffTab, setDiffTab, onApproved, cur
           ))}
         </div>
       )}
-      {/* Diff */}
-      <DiffContent diffRaw={diffRaw} taskId={t.id} diffTab={diffTab} setDiffTab={setDiffTab} task={t} currentReview={currentReview} oldComments={oldComments} />
-      {/* Approval actions */}
-      <ApprovalActions task={t} currentReview={currentReview} onApproved={onApproved} onRejected={onApproved} />
+      {/* File summary bar */}
+      {files.length > 0 ? (
+        <div class="changes-file-summary" onClick={() => setShowFileList(!showFileList)}>
+          <span class="changes-file-toggle">{showFileList ? "\u25BC" : "\u25B6"}</span>
+          <span>{files.length} file{files.length !== 1 ? "s" : ""} changed</span>
+          <span class="changes-file-stats">
+            <span style={{ color: "var(--diff-add-text)" }}>+{totalAdd}</span>
+            {" "}
+            <span style={{ color: "var(--diff-del-text)" }}>&minus;{totalDel}</span>
+          </span>
+        </div>
+      ) : !diffRaw ? (
+        <div class="diff-empty">No changes yet</div>
+      ) : null}
+      {/* Expandable file list */}
+      {showFileList && files.length > 0 && (
+        <div class="diff-file-list" style={{ marginBottom: "12px" }}>
+          {files.map((f, i) => {
+            const name = (f.newName === "/dev/null" ? f.oldName : f.newName) || f.oldName || "unknown";
+            return (
+              <div key={i} class="diff-file-list-item">
+                <span class="diff-file-list-name">{name}</span>
+                <span class="diff-file-stats">
+                  <span class="diff-file-add">+{f.addedLines}</span>
+                  <span class="diff-file-del">-{f.deletedLines}</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {/* Reviewable diff */}
+      {diffRaw ? (
+        <ReviewableDiff
+          diffRaw={diffRaw}
+          taskId={t.id}
+          currentComments={currentReview ? (currentReview.comments || []) : []}
+          oldComments={oldComments || []}
+          isReviewable={isReviewable}
+        />
+      ) : null}
+      {/* Commits (collapsible) */}
+      <div class="changes-commits-section">
+        <div class="changes-commits-header" onClick={() => setCommitsExpanded(!commitsExpanded)}>
+          <span class="changes-commits-toggle">{commitsExpanded ? "\u25BC" : "\u25B6"}</span>
+          <span>Commits</span>
+        </div>
+        {commitsExpanded && (
+          commitsData === null
+            ? <div class="diff-empty">Loading commits...</div>
+            : !allCommits.length
+              ? <div class="diff-empty">No commits recorded</div>
+              : <CommitList commits={allCommits} multiRepo={multiRepo} />
+        )}
+      </div>
     </div>
+  );
+}
+
+// ── Activity tab ──
+function ActivityTab({ taskId, task }) {
+  const [timeline, setTimeline] = useState(null);
+  const [commentText, setCommentText] = useState("");
+  const [posting, setPosting] = useState(false);
+  const team = currentTeam.value;
+  const boss = bossName.value || "boss";
+
+  const loadTimeline = useCallback(async () => {
+    try {
+      const activity = await api.fetchTaskActivity(team, taskId);
+      const items = activity
+        .filter((m) => m.type === "comment" || m.type === "event" || m.type === "task_comment")
+        .map((m) => {
+          if (m.type === "comment" || m.type === "task_comment") {
+            return {
+              type: "comment",
+              time: m.timestamp,
+              author: m.sender || "unknown",
+              body: m.content || "",
+              icon: "\u270E",
+            };
+          }
+          const text = m.content || "Event";
+          let icon = "\u21BB";
+          if (/created/i.test(text)) icon = "+";
+          else if (/assign/i.test(text)) icon = "\u2192";
+          else if (/approved|merged/i.test(text)) icon = "\u2713";
+          else if (/rejected/i.test(text)) icon = "\u2717";
+          else if (/review/i.test(text)) icon = "\u2299";
+          else if (/commented/i.test(text)) icon = "\u270E";
+          return { type: "event", time: m.timestamp, text, icon };
+        });
+      setTimeline(items);
+    } catch (e) {
+      setTimeline([]);
+    }
+  }, [team, taskId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadTimeline().then(() => { if (cancelled) return; });
+    return () => { cancelled = true; };
+  }, [taskId, team, loadTimeline]);
+
+  const handlePostComment = async () => {
+    const body = commentText.trim();
+    if (!body || posting) return;
+    setPosting(true);
+    try {
+      await api.postTaskComment(team, taskId, boss, body);
+      setCommentText("");
+      await loadTimeline();
+    } catch (e) {
+      showToast("Failed to post comment: " + e.message, "error");
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  return (
+    <div class="task-activity-tab">
+      {timeline === null ? (
+        <div class="diff-empty">Loading activity...</div>
+      ) : timeline.length === 0 ? (
+        <div class="diff-empty">No activity yet</div>
+      ) : (
+        <div class="task-activity-timeline">
+          {timeline.map((e, i) =>
+            e.type === "comment" ? (
+              <div key={i} class="task-activity-event task-comment-entry">
+                <span class="task-activity-icon">{e.icon}</span>
+                <div class="task-comment-body">
+                  <div class="task-comment-meta">
+                    <span class="task-comment-author">{cap(e.author)}</span>
+                    <span class="task-activity-time">{fmtRelativeTime(e.time)}</span>
+                  </div>
+                  <div class="task-comment-text">{stripEmojis(e.body)}</div>
+                </div>
+              </div>
+            ) : (
+              <div key={i} class="task-activity-event">
+                <span class="task-activity-icon">{e.icon}</span>
+                <span class="task-activity-text">{stripEmojis(e.text)}</span>
+                <span class="task-activity-time">{fmtRelativeTime(e.time)}</span>
+              </div>
+            )
+          )}
+        </div>
+      )}
+      {/* Comment input */}
+      <div class="task-comment-input-row">
+        <input
+          type="text"
+          class="task-comment-input"
+          placeholder="Add a comment..."
+          value={commentText}
+          onInput={(e) => setCommentText(e.target.value)}
+          onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") handlePostComment(); }}
+          onClick={(e) => e.stopPropagation()}
+          disabled={posting}
+        />
+        <button
+          class="task-comment-submit"
+          onClick={(e) => { e.stopPropagation(); handlePostComment(); }}
+          disabled={posting || !commentText.trim()}
+        >
+          {posting ? "..." : "\u2192"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main TaskSidePanel ──
+export function TaskSidePanel() {
+  const id = taskPanelId.value;
+  const team = currentTeam.value;
+  const allTasks = tasks.value;
+
+  const [task, setTask] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [diffRaw, setDiffRaw] = useState("");
+  const [diffLoaded, setDiffLoaded] = useState(false);
+  const [currentReview, setCurrentReview] = useState(null);
+  const [oldComments, setOldComments] = useState([]);
+
+  // Load task data when panel opens
+  useEffect(() => {
+    if (id === null || !team) { setTask(null); return; }
+    setActiveTab("overview");
+    setDiffRaw("");
+    setDiffLoaded(false);
+    setCurrentReview(null);
+    setOldComments([]);
+
+    const cached = allTasks.find(t => t.id === id);
+    if (cached) setTask(cached);
+
+    (async () => {
+      try {
+        const s = await api.fetchTaskStats(team, id);
+        setStats(s);
+      } catch (e) { }
+    })();
+  }, [id, team]);
+
+  // Sync task from signal when SSE pushes updates
+  useEffect(() => {
+    if (id === null) return;
+    const updated = allTasks.find(t => t.id === id);
+    if (updated) setTask(prev => prev ? { ...prev, ...updated } : updated);
+  }, [allTasks, id]);
+
+  // Load review data
+  useEffect(() => {
+    if (id === null || !team) return;
+    (async () => {
+      try {
+        const review = await api.fetchCurrentReview(team, id);
+        setCurrentReview(review);
+      } catch (e) { }
+      try {
+        const reviews = await api.fetchReviews(team, id);
+        if (reviews.length > 1) {
+          const latest = reviews[reviews.length - 1];
+          const old = [];
+          for (const r of reviews) {
+            if (r.attempt !== latest.attempt && r.comments) {
+              for (const c of r.comments) {
+                old.push({ ...c, attempt: r.attempt });
+              }
+            }
+          }
+          setOldComments(old);
+        }
+      } catch (e) { }
+    })();
+  }, [id, team, task && task.review_attempt]);
+
+  // Lazy load diff when Changes tab activated
+  useEffect(() => {
+    if (activeTab !== "changes" || diffLoaded || id === null || !team) return;
+    setDiffLoaded(true);
+    api.fetchTaskDiff(team, id).then(data => {
+      setDiffRaw(flattenDiffDict(data.diff));
+    }).catch(() => {});
+  }, [activeTab, diffLoaded, id, team]);
+
+  const close = useCallback(() => { taskPanelId.value = null; }, []);
+
+  const handleAction = useCallback(() => {
+    if (team) api.fetchTasks(team).then(list => { tasks.value = list; });
+  }, [team]);
+
+  if (id === null) return null;
+
+  const isOpen = id !== null;
+  const t = task;
+  const TABS = ["overview", "changes", "activity"];
+  const TAB_LABELS = { overview: "Overview", changes: "Changes", activity: "Activity" };
+
+  return (
+    <>
+      <div class={"task-panel" + (isOpen ? " open" : "")}>
+        {/* Header */}
+        <div class="task-panel-header">
+          <div class="task-panel-title-row">
+            <span class="task-panel-id copyable">{taskIdStr(id)}<CopyBtn text={taskIdStr(id)} /></span>
+            <span class="task-panel-title">{t ? t.title : "Loading..."}</span>
+          </div>
+          <div class="task-panel-meta-row">
+            <span class="task-panel-status">
+              {t && <span class={"badge badge-" + t.status}>{fmtStatus(t.status)}</span>}
+            </span>
+            <span class="task-panel-assignee copyable">{t && t.assignee ? cap(t.assignee) : ""}{t && t.assignee && <CopyBtn text={t.assignee} />}</span>
+            <span class="task-panel-priority">{t && t.priority ? cap(t.priority) : ""}</span>
+          </div>
+          <button class="task-panel-close" onClick={close}>&times;</button>
+        </div>
+        {/* Approval bar (sticky, between header and tabs) */}
+        {t && <ApprovalBar task={t} currentReview={currentReview} onAction={handleAction} />}
+        {/* Tabs */}
+        <div class="task-panel-tabs">
+          {TABS.map(tab => (
+            <button
+              key={tab}
+              class={"task-panel-tab" + (activeTab === tab ? " active" : "")}
+              onClick={() => setActiveTab(tab)}
+            >
+              {TAB_LABELS[tab]}
+            </button>
+          ))}
+        </div>
+        {/* Body */}
+        <div class="task-panel-body">
+          {!t ? (
+            <div class="diff-empty">Loading...</div>
+          ) : (
+            <>
+              <div style={{ display: activeTab === "overview" ? "" : "none" }}>
+                <OverviewTab task={t} stats={stats} />
+              </div>
+              <div style={{ display: activeTab === "changes" ? "" : "none" }}>
+                <ChangesTab task={t} diffRaw={diffRaw} currentReview={currentReview} oldComments={oldComments} stats={stats} />
+              </div>
+              <div style={{ display: activeTab === "activity" ? "" : "none" }}>
+                <ActivityTab taskId={t.id} task={t} />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+      <div class={"task-backdrop" + (isOpen ? " open" : "")} onClick={close}></div>
+    </>
   );
 }
