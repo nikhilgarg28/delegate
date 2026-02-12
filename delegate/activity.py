@@ -48,24 +48,25 @@ class ActivityEntry:
 
 
 # ---------------------------------------------------------------------------
-# Ring buffer (per-agent, in-memory)
+# Ring buffer (per team+agent, in-memory)
 # ---------------------------------------------------------------------------
 
 RING_SIZE = 1024
 
-# agent_name -> deque of ActivityEntry
-_rings: dict[str, deque[ActivityEntry]] = {}
+# (team, agent) -> deque of ActivityEntry
+_rings: dict[tuple[str, str], deque[ActivityEntry]] = {}
 
 
-def _get_ring(agent: str) -> deque[ActivityEntry]:
-    if agent not in _rings:
-        _rings[agent] = deque(maxlen=RING_SIZE)
-    return _rings[agent]
+def _get_ring(team: str, agent: str) -> deque[ActivityEntry]:
+    key = (team, agent)
+    if key not in _rings:
+        _rings[key] = deque(maxlen=RING_SIZE)
+    return _rings[key]
 
 
-def get_recent(agent: str, n: int = 50) -> list[dict[str, str]]:
-    """Return the last *n* activity entries for an agent (newest last)."""
-    ring = _get_ring(agent)
+def get_recent(team: str, agent: str, n: int = 50) -> list[dict[str, str]]:
+    """Return the last *n* activity entries for an agent on a team (newest last)."""
+    ring = _get_ring(team, agent)
     items = list(ring)[-n:]
     return [e.to_dict() for e in items]
 
@@ -152,7 +153,7 @@ def broadcast(
     (entries are silently dropped for slow subscribers).
     """
     entry = ActivityEntry(agent=agent, team=team, tool=tool, detail=detail, task_id=task_id)
-    _get_ring(agent).append(entry)
+    _get_ring(team, agent).append(entry)
     _push_to_subscribers(entry.to_dict())
 
 

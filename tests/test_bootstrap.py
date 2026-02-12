@@ -302,12 +302,13 @@ def test_add_agent_rejects_boss_name(tmp_team):
         add_agent(tmp_team, TEAM, "nikhil")
 
 
-def test_add_agent_rejects_cross_team_collision(hc):
-    """add_agent errors if the name is used in another team."""
+def test_add_agent_allows_cross_team_same_name(hc):
+    """add_agent allows the same name on a different team."""
     bootstrap(hc, "team1", manager="mgr1", agents=["alice"])
     bootstrap(hc, "team2", manager="mgr2", agents=["bob"])
-    with pytest.raises(ValueError, match="already used"):
-        add_agent(hc, "team2", "alice")
+    # "alice" is already on team1 — should be fine on team2
+    add_agent(hc, "team2", "alice")
+    assert (agents_dir(hc, "team2") / "alice").is_dir()
 
 
 def test_add_agent_team_not_found(hc):

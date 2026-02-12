@@ -77,8 +77,8 @@ DISALLOWED_TOOLS = [
 # Reflection: 1-in-10 coin flip per turn
 REFLECTION_PROBABILITY = 0.1
 
-# In-memory turn counter per agent (module-level; single-process safe)
-_turn_counts: dict[str, int] = {}
+# In-memory turn counter per (team, agent) (module-level; single-process safe)
+_turn_counts: dict[tuple[str, str], int] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -540,8 +540,9 @@ async def run_turn(
     )
     turn_num = 1
 
-    # Increment in-memory turn counter
-    _turn_counts[agent] = _turn_counts.get(agent, 0) + 1
+    # Increment in-memory turn counter (keyed by team+agent)
+    _tc_key = (team, agent)
+    _turn_counts[_tc_key] = _turn_counts.get(_tc_key, 0) + 1
 
     try:
         if random.random() < REFLECTION_PROBABILITY:

@@ -118,31 +118,6 @@ def _prompt_extra_charter() -> str | None:
     return body if body else None
 
 
-def _get_all_agent_names(hc_home: Path, exclude_team: str | None = None) -> set[str]:
-    """Get all agent names across all existing teams.
-
-    Args:
-        hc_home: Delegate home directory.
-        exclude_team: Team to exclude (e.g. the team being created/updated).
-
-    Returns:
-        Set of agent name strings.
-    """
-    names: set[str] = set()
-    td = _teams_dir(hc_home)
-    if not td.is_dir():
-        return names
-    for team_d in td.iterdir():
-        if not team_d.is_dir():
-            continue
-        if exclude_team and team_d.name == exclude_team:
-            continue
-        agents_d = team_d / "agents"
-        if agents_d.is_dir():
-            names.update(d.name for d in agents_d.iterdir() if d.is_dir())
-    return names
-
-
 def bootstrap(
     hc_home: Path,
     team_name: str,
@@ -156,7 +131,7 @@ def bootstrap(
     The boss's mailbox lives at ``hc_home/boss/`` (outside any team).
     Base charter files are NOT copied — they are read from the installed package.
 
-    Agent names must be globally unique across all teams.
+    Agent names must be unique within a team but may be reused across teams.
 
     Args:
         hc_home: Delegate home directory (~/.delegate).
@@ -190,14 +165,6 @@ def bootstrap(
     if boss_name and boss_name in names:
         raise ValueError(
             f"Agent name '{boss_name}' conflicts with the org-wide boss name"
-        )
-
-    # Enforce globally unique names across all teams
-    existing = _get_all_agent_names(hc_home, exclude_team=team_name)
-    overlap = set(names) & existing
-    if overlap:
-        raise ValueError(
-            f"Agent names already used in other teams: {overlap}"
         )
 
     # Ensure top-level directories exist
@@ -327,12 +294,6 @@ def add_agent(
     if boss_name and agent_name == boss_name:
         raise ValueError(
             f"Agent name '{agent_name}' conflicts with the org-wide boss name"
-        )
-
-    existing = _get_all_agent_names(hc_home, exclude_team=team_name)
-    if agent_name in existing:
-        raise ValueError(
-            f"Agent name '{agent_name}' already used in another team"
         )
 
     # --- create directory structure ---

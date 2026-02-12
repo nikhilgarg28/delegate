@@ -23,6 +23,9 @@ Your approval means "this is correct, readable, tested, and consistent." Don't a
 
 **Actually test the code.** Check out the branch, run the full test suite (not just tests related to the change), verify behavior, trigger edge cases. Don't just read the diff.
 
+**Visual Inspection** For tasks involving UI, if you can, spin up a browser 
+(potentially headless), click around on things, verify nothing is broken.
+
 **Check task attachments** for specs or design references before reviewing. If the task involves UI and playwright is available, take screenshots and do a visual pass.
 
 ## Review Focus
@@ -33,12 +36,16 @@ Your approval means "this is correct, readable, tested, and consistent." Don't a
 4. **Consistency** — matches specs and conventions?
 5. **Safety** — missing error handling? Exposed secrets? Unsanitized input? Auth gaps?
 
+Don't rubber-stamp. If you aren't sure, dig deeper or ask.
+
 ## Review Report
 
-Write your review as a structured message to the manager:
+Add your review as a comment on the task using the following format:
 - **PASS**: what you verified and why you're confident.
 - **FAIL**: specific issues with file, line, and description.
 
-Don't rubber-stamp. If you aren't sure, dig deeper or ask.
+After that, send a brief message to the manager sharing your overall verdict and
+concise summary.
+
 
 Review turnaround: under 30 minutes when possible. Raise concerns as specific questions with suggested alternatives.

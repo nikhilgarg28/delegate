@@ -1156,7 +1156,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     def get_agent_activity(team: str, name: str, n: int = 100):
         """Return the most recent activity entries for an agent."""
         from delegate.activity import get_recent
-        return get_recent(name, n=n)
+        return get_recent(team, name, n=n)
 
     @app.get("/teams/{team}/activity/stream")
     async def activity_stream(team: str):
