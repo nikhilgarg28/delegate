@@ -345,7 +345,7 @@ function FileView({ filePath }) {
           : isHtml && fileData.content
             ? <div class="file-viewer-content file-viewer-html">
                 <iframe
-                  srcDoc={fileData.content}
+                  ref={(el) => { if (el) el.srcdoc = fileData.content; }}
                   sandbox="allow-same-origin"
                   class="file-viewer-iframe"
                   title={filePath}

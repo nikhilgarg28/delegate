@@ -8,11 +8,12 @@ const watch = process.argv.includes("--watch");
 async function build() {
   fs.mkdirSync(outdir, { recursive: true });
 
-  // Copy index.html to output
-  fs.copyFileSync(
-    path.join(__dirname, "index.html"),
-    path.join(outdir, "index.html")
-  );
+  // Copy index.html to output with cache-busting query params
+  const cacheBust = Date.now();
+  let html = fs.readFileSync(path.join(__dirname, "index.html"), "utf-8");
+  html = html.replace('/static/app.js"', `/static/app.js?v=${cacheBust}"`);
+  html = html.replace('/static/styles.css"', `/static/styles.css?v=${cacheBust}"`);
+  fs.writeFileSync(path.join(outdir, "index.html"), html);
 
   // Copy public/ assets (favicon, icons, etc.)
   const publicDir = path.join(__dirname, "public");
@@ -49,7 +50,11 @@ async function build() {
     // Also watch index.html and public/ — copy on change
     const htmlPath = path.join(__dirname, "index.html");
     fs.watchFile(htmlPath, { interval: 300 }, () => {
-      fs.copyFileSync(htmlPath, path.join(outdir, "index.html"));
+      const bust = Date.now();
+      let h = fs.readFileSync(htmlPath, "utf-8");
+      h = h.replace('/static/app.js"', `/static/app.js?v=${bust}"`);
+      h = h.replace('/static/styles.css"', `/static/styles.css?v=${bust}"`);
+      fs.writeFileSync(path.join(outdir, "index.html"), h);
       console.log("Copied index.html");
     });
     if (fs.existsSync(publicDir)) {
