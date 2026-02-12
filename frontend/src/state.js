@@ -32,6 +32,9 @@ export const knownAgentNames = signal([]);
 // ── Chat filter direction ──
 export const chatFilterDirection = signal("one-way"); // "one-way" | "bidi"
 
+// ── Expanded messages (for collapsible long messages) ──
+export const expandedMessages = signal(new Set());
+
 // ── Agent activity (live tool usage from SSE) ──
 // { agentName: { tool, detail, timestamp } } — last activity per agent
 export const agentLastActivity = signal({});

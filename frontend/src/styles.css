@@ -686,6 +686,46 @@ body {
 .msg-checkmark { flex-shrink: 0; margin-left: 4px; min-width: 16px; display: inline-block; text-align: left; }
 .msg-content { color: var(--text-primary); font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 
+/* Collapsible long messages */
+.msg-content-wrapper {
+  position: relative;
+}
+
+.msg-content-wrapper.collapsed .msg-content {
+  max-height: 90px;
+  overflow: hidden;
+}
+
+.msg-fade-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(transparent, #1e1e1e);
+  pointer-events: none;
+}
+
+.msg-fade-overlay-boss {
+  background: linear-gradient(transparent, rgba(255, 255, 255, 0.015));
+}
+
+.msg-expand-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 2px 0;
+  cursor: pointer;
+  font-family: inherit;
+  margin-top: 4px;
+}
+
+.msg-expand-btn:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
 /* Event messages */
 .msg-event { display: flex; align-items: flex-start; gap: 12px; padding: 4px 12px; margin: 2px 0; }
 .msg-event-icon { width: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--text-faint); padding-top: 1px; }

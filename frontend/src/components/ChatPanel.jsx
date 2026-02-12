@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "preact/hooks"
 import {
   currentTeam, messages, agents, activeTab,
   chatFilterDirection, diffPanelMode, diffPanelTarget, taskPanelId,
-  knownAgentNames, isMuted, bossName,
+  knownAgentNames, isMuted, bossName, expandedMessages,
 } from "../state.js";
 import * as api from "../api.js";
 import {
@@ -37,6 +37,61 @@ function LinkedDiv({ html, class: cls, style }) {
   }, [html]);
 
   return <div ref={ref} class={cls} style={style} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+// ── Collapsible long message ──
+const COLLAPSE_THRESHOLD = 90; // ~4 lines at 14px * 1.6 line-height = 89.6px
+
+function CollapsibleMessage({ html, messageId, isBoss }) {
+  const contentRef = useRef();
+  const [isLong, setIsLong] = useState(false);
+  const isExpanded = expandedMessages.value.has(messageId);
+
+  useEffect(() => {
+    if (!contentRef.current) return;
+    const checkOverflow = () => {
+      const el = contentRef.current;
+      if (el && el.scrollHeight > COLLAPSE_THRESHOLD) {
+        setIsLong(true);
+      } else {
+        setIsLong(false);
+      }
+    };
+    checkOverflow();
+
+    // Re-check on resize
+    const observer = new ResizeObserver(checkOverflow);
+    observer.observe(contentRef.current);
+    return () => observer.disconnect();
+  }, [html]);
+
+  const toggle = useCallback(() => {
+    const next = new Set(expandedMessages.value);
+    if (next.has(messageId)) {
+      next.delete(messageId);
+    } else {
+      next.add(messageId);
+    }
+    expandedMessages.value = next;
+  }, [messageId]);
+
+  const wrapperClass = "msg-content-wrapper" + (isLong && !isExpanded ? " collapsed" : "");
+
+  return (
+    <>
+      <div class={wrapperClass}>
+        <LinkedDiv class="msg-content md-content" html={html} ref={contentRef} />
+        {isLong && !isExpanded && (
+          <div class={`msg-fade-overlay ${isBoss ? 'msg-fade-overlay-boss' : ''}`} />
+        )}
+      </div>
+      {isLong && (
+        <button class="msg-expand-btn" onClick={toggle}>
+          {isExpanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </>
+  );
 }
 
 // ── Voice-to-text hook ──
@@ -396,7 +451,7 @@ export function ChatPanel() {
                   <span class="msg-time" dangerouslySetInnerHTML={{ __html: fmtTimestamp(m.timestamp) }} />
                   <span class="msg-checkmark" dangerouslySetInnerHTML={{ __html: msgStatusIcon(m) }} />
                 </div>
-                <LinkedDiv class="msg-content md-content" html={contentHtml} />
+                <CollapsibleMessage html={contentHtml} messageId={m.id} isBoss={isBoss} />
               </div>
             </div>
           );
