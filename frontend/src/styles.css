@@ -1272,7 +1272,43 @@ select option:hover {
 .task-panel-meta-item { background: var(--bg-surface); border-radius: 6px; padding: 10px 14px; }
 .task-panel-meta-item .task-detail-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 4px; }
 .task-panel-meta-item .task-detail-value { font-size: 13px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-.task-panel-desc { color: var(--text-primary); font-size: 13px; line-height: 1.6; word-break: break-word; padding: 10px 14px 10px 0; border-top: 1px solid var(--border-subtle); }
+.task-panel-desc { color: var(--text-primary); font-size: 14px; line-height: 1.6; word-break: break-word; padding: 10px 14px 10px 0; border-top: 1px solid var(--border-subtle); white-space: pre-wrap; }
+
+.task-desc-wrapper {
+  position: relative;
+}
+
+.task-desc-wrapper.collapsed .task-panel-desc {
+  max-height: 110px;
+  overflow: hidden;
+}
+
+.task-desc-fade-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(transparent, var(--bg-primary));
+  pointer-events: none;
+}
+
+.task-desc-expand-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 2px 0;
+  cursor: pointer;
+  font-family: inherit;
+  margin-top: 4px;
+}
+
+.task-desc-expand-btn:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
 .task-attachments { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; }
 .task-attachment { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 10px; background: var(--bg-active); border-radius: 6px; }
 .task-attachment-icon { font-size: 15px; flex-shrink: 0; }

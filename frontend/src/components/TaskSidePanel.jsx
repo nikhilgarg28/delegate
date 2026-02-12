@@ -15,10 +15,23 @@ import { showToast } from "../toast.js";
 import { CopyBtn } from "./CopyBtn.jsx";
 
 // ── Event delegation for linked content ──
-function LinkedDiv({ html, class: cls, style }) {
-  const ref = useRef();
+function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
+  const internalRef = useRef();
+
+  // Merge refs
+  const setRefs = useCallback((el) => {
+    internalRef.current = el;
+    if (externalRef) {
+      if (typeof externalRef === 'function') {
+        externalRef(el);
+      } else {
+        externalRef.current = el;
+      }
+    }
+  }, [externalRef]);
+
   useEffect(() => {
-    if (!ref.current) return;
+    if (!internalRef.current) return;
     const handler = (e) => {
       // Copy button click
       const copyBtn = e.target.closest(".copy-btn");
@@ -30,10 +43,10 @@ function LinkedDiv({ html, class: cls, style }) {
       const fileLink = e.target.closest("[data-file-path]");
       if (fileLink) { e.stopPropagation(); diffPanelMode.value = "file"; diffPanelTarget.value = fileLink.dataset.filePath; return; }
     };
-    ref.current.addEventListener("click", handler);
-    return () => ref.current && ref.current.removeEventListener("click", handler);
+    internalRef.current.addEventListener("click", handler);
+    return () => internalRef.current && internalRef.current.removeEventListener("click", handler);
   }, [html]);
-  return <div ref={ref} class={cls} style={style} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div ref={setRefs} class={cls} style={style} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 // ── Approval Badge (Details tab) ──
@@ -613,6 +626,55 @@ export function TaskSidePanel() {
   );
 }
 
+// ── Collapsible description ──
+const TASK_DESC_COLLAPSE_THRESHOLD = 110; // ~5 lines at 14px * 1.6 line-height
+
+function CollapsibleDescription({ html }) {
+  const contentRef = useRef();
+  const [isLong, setIsLong] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!contentRef.current) return;
+    const checkOverflow = () => {
+      const el = contentRef.current;
+      if (el && el.scrollHeight > TASK_DESC_COLLAPSE_THRESHOLD) {
+        setIsLong(true);
+      } else {
+        setIsLong(false);
+      }
+    };
+    checkOverflow();
+
+    // Re-check on resize
+    const observer = new ResizeObserver(checkOverflow);
+    observer.observe(contentRef.current);
+    return () => observer.disconnect();
+  }, [html]);
+
+  const toggle = useCallback(() => {
+    setIsExpanded(prev => !prev);
+  }, []);
+
+  const wrapperClass = "task-desc-wrapper" + (isLong && !isExpanded ? " collapsed" : "");
+
+  return (
+    <>
+      <div class={wrapperClass}>
+        <LinkedDiv class="task-panel-desc md-content" html={html} ref={contentRef} />
+        {isLong && !isExpanded && (
+          <div class="task-desc-fade-overlay" />
+        )}
+      </div>
+      {isLong && (
+        <button class="task-desc-expand-btn" onClick={toggle}>
+          {isExpanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </>
+  );
+}
+
 // ── Details tab content ──
 function DetailsTab({ task, stats, currentReview }) {
   const t = task;
@@ -664,7 +726,7 @@ function DetailsTab({ task, stats, currentReview }) {
       {t.description && (
         <div class="task-panel-section">
           <div class="task-panel-section-label">Description</div>
-          <LinkedDiv class="task-panel-desc md-content" html={descHtml} />
+          <CollapsibleDescription html={descHtml} />
         </div>
       )}
       {/* Attachments */}
