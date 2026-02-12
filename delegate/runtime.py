@@ -131,46 +131,61 @@ def _select_batch(
     """Select up to *max_size* messages from *inbox* that share the
     same ``task_id`` as the first message.
 
-    If *boss_name* is provided, messages from the boss are prioritised:
-    they appear before non-boss messages so the boss's task_id becomes
-    the grouping anchor.  Non-boss messages for the same task are still
-    included in the batch (up to *max_size*).
+    If *boss_name* is provided, the first boss message (if any)
+    determines the grouping anchor instead of the oldest message.
 
     The inbox is assumed to be sorted by id (oldest first).
     Both ``task_id = None`` and ``task_id = N`` are valid grouping keys.
 
     When task_id is None, messages are also grouped by sender to avoid
     mixing messages from different senders in the same batch.
+
+    **Per-sender ordering invariant**: a sender is only eligible for
+    the batch if their *earliest* unprocessed message matches the
+    target.  This guarantees we never skip an earlier message from a
+    sender to include a later one.
     """
     if not inbox:
         return []
 
-    # Prioritise boss messages: move them to the front (preserving id
-    # order within each group) so the boss's message determines which
-    # task_id is processed next.
+    # --- Determine the anchor (which task_id to batch for) ---
+    # Boss messages get priority: use the boss's first message as anchor.
+    anchor = inbox[0]
     if boss_name:
-        ordered = (
-            [m for m in inbox if m.sender == boss_name]
-            + [m for m in inbox if m.sender != boss_name]
-        )
-    else:
-        ordered = inbox
+        for msg in inbox:
+            if msg.sender == boss_name:
+                anchor = msg
+                break
 
-    target_task_id = ordered[0].task_id
-    target_sender = ordered[0].sender if target_task_id is None else None
+    target_task_id = anchor.task_id
+    target_sender = anchor.sender if target_task_id is None else None
+
+    # --- Per-sender eligibility ---
+    # A sender is eligible only if their earliest inbox message matches
+    # the target.  If sender A's first message is for a different task,
+    # including any later message from A would violate arrival order.
+    earliest_by_sender: dict[str, Message] = {}
+    for msg in inbox:
+        if msg.sender not in earliest_by_sender:
+            earliest_by_sender[msg.sender] = msg
+
+    eligible: set[str] = set()
+    for sender, first_msg in earliest_by_sender.items():
+        if first_msg.task_id != target_task_id:
+            continue
+        if target_task_id is None and first_msg.sender != target_sender:
+            continue
+        eligible.add(sender)
+
+    # --- Collect matching messages from eligible senders ---
     batch: list[Message] = []
-    for msg in ordered:
+    for msg in inbox:
+        if msg.sender not in eligible:
+            continue
         if msg.task_id != target_task_id:
-            # When boss-reordered, matching messages may not be contiguous
-            # (boss block then non-boss block), so skip rather than stop.
-            if boss_name:
-                continue
-            break
-        # When task_id is None, also group by sender
+            continue
         if target_task_id is None and msg.sender != target_sender:
-            if boss_name:
-                continue
-            break
+            continue
         batch.append(msg)
         if len(batch) >= max_size:
             break
