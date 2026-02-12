@@ -12,11 +12,15 @@ const STATUS_OPTIONS = [
 const PRIORITY_OPTIONS = ["low", "medium", "high", "critical"];
 const APPROVAL_OPTIONS = ["approved", "rejected", "(none)"];
 
+const DEFAULT_FILTERS = [
+  { field: "status", operator: "noneOf", values: ["done", "cancelled"] }
+];
+
 export function TasksPanel() {
   const team = currentTeam.value;
   const allTasks = tasks.value;
 
-  const [filters, setFilters] = useState([]);
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [searchQuery, setSearchQuery] = useState("");
   const searchTimerRef = useRef(null);
   const prevStatusRef = useRef({});
