@@ -39,14 +39,12 @@ function LinkedDiv({ html, class: cls, style }) {
 // ── Approval Badge (Details tab) ──
 function ApprovalBadge({ task, currentReview }) {
   const { status, approval_status, rejection_reason } = task;
-  const attempt = task.review_attempt || 0;
-  const attemptLabel = attempt > 1 ? ` (attempt ${attempt})` : "";
   const reviewSummary = currentReview && currentReview.summary;
 
   if (status === "done" || approval_status === "approved") {
     return (
       <div class="task-approval-status">
-        <div class="approval-badge approval-badge-approved">&#10004; Approved{attemptLabel}</div>
+        <div class="approval-badge approval-badge-approved">&#10004; Approved</div>
         {reviewSummary && <div class="approval-rejection-reason" style={{ color: "var(--text-secondary)" }}>{reviewSummary}</div>}
       </div>
     );
@@ -55,7 +53,7 @@ function ApprovalBadge({ task, currentReview }) {
     const reason = reviewSummary || rejection_reason;
     return (
       <div class="task-approval-status">
-        <div class="approval-badge approval-badge-rejected">&#10006; Rejected{attemptLabel}</div>
+        <div class="approval-badge approval-badge-rejected">&#10006; Rejected</div>
         {reason && <div class="approval-rejection-reason">{reason}</div>}
       </div>
     );
@@ -63,7 +61,7 @@ function ApprovalBadge({ task, currentReview }) {
   if (status === "in_approval") {
     return (
       <div class="task-approval-status">
-        <div class="approval-badge approval-badge-pending">&#9203; Awaiting Approval{attemptLabel}</div>
+        <div class="approval-badge approval-badge-pending">&#9203; Awaiting Approval</div>
         <span style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
           Review changes in the <a href="#" onClick={(e) => { e.preventDefault(); setTabFromBadge && setTabFromBadge("changes"); }} style={{ color: "var(--accent-blue)" }}>Changes</a> tab
         </span>
