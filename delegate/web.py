@@ -160,6 +160,72 @@ def _list_team_agents(hc_home: Path, team: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Startup greeting — dynamic, time-aware message from manager
+# ---------------------------------------------------------------------------
+
+def _build_greeting(
+    hc_home: Path,
+    team: str,
+    manager: str,
+    boss: str,
+    now_utc: "datetime",
+) -> str:
+    """Build a context-aware startup greeting from the manager.
+
+    Takes into account:
+    - Time of day (in the user's local timezone via the system clock)
+    - Active in-progress tasks (brief status summary)
+    """
+    from datetime import datetime, timezone
+    from delegate.task import list_tasks
+
+    # Time-of-day awareness (use local time, not UTC)
+    local_hour = datetime.now().hour
+    if local_hour < 5:
+        time_greeting = "Burning the midnight oil"
+    elif local_hour < 12:
+        time_greeting = "Good morning"
+    elif local_hour < 17:
+        time_greeting = "Good afternoon"
+    elif local_hour < 21:
+        time_greeting = "Good evening"
+    else:
+        time_greeting = "Working late"
+
+    # Gather task context
+    try:
+        active = list_tasks(hc_home, team, status="in_progress")
+        review = list_tasks(hc_home, team, status="in_review")
+        approval = list_tasks(hc_home, team, status="in_approval")
+        failed = list_tasks(hc_home, team, status="merge_failed")
+    except Exception:
+        active = review = approval = failed = []
+
+    # Build status line
+    status_parts: list[str] = []
+    if active:
+        status_parts.append(f"{len(active)} task{'s' if len(active) != 1 else ''} in progress")
+    if review:
+        status_parts.append(f"{len(review)} awaiting review")
+    if approval:
+        status_parts.append(f"{len(approval)} ready for approval")
+    if failed:
+        status_parts.append(f"{len(failed)} with merge issues")
+
+    # Assemble
+    lines = [f"{time_greeting} — {manager.capitalize()} here, your team manager."]
+
+    if status_parts:
+        lines.append("Current board: " + ", ".join(status_parts) + ".")
+    else:
+        lines.append("The board is clear — ready for new work.")
+
+    lines.append("Send me tasks, questions, or anything you need the team on.")
+
+    return " ".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Daemon loop — runs as a background asyncio task inside the lifespan
 # ---------------------------------------------------------------------------
 
@@ -210,16 +276,18 @@ async def _daemon_loop(
                 in_flight.discard((team, agent))
 
     # --- One-time startup: greeting from managers ---
-    # Guard against duplicates when uvicorn reloads the process.
-    # We check the *mailbox* table (where send_message writes) — NOT
-    # the messages table — so the dedup actually finds prior greetings.
+    # Only send if no message from manager→boss in the last 30 minutes.
+    # Content-agnostic: the greeting text can change freely without
+    # breaking dedup.  Handles frequent uvicorn reloads gracefully.
     try:
         from delegate.db import get_connection
+        from delegate.task import list_tasks
         from datetime import datetime, timedelta, timezone
 
         teams = _list_teams(hc_home)
         boss_name = get_boss(hc_home) or "boss"
-        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=5)).strftime(
+        now_utc = datetime.now(timezone.utc)
+        cutoff = (now_utc - timedelta(minutes=30)).strftime(
             "%Y-%m-%dT%H:%M:%fZ"
         )
 
@@ -227,12 +295,12 @@ async def _daemon_loop(
             manager_name = get_member_by_role(hc_home, team, "manager")
             if not manager_name:
                 continue
-            # Check mailbox for a recent greeting
+
+            # Check if manager sent *any* message to boss recently
             conn = get_connection(hc_home, team)
             row = conn.execute(
                 """SELECT COUNT(*) FROM mailbox
                    WHERE sender = ? AND recipient = ?
-                     AND body LIKE 'Delegate is online%'
                      AND created_at > ?""",
                 (manager_name, boss_name, cutoff),
             ).fetchone()
@@ -241,18 +309,19 @@ async def _daemon_loop(
 
             if recent_count > 0:
                 logger.info(
-                    "Skipping duplicate startup greeting | team=%s", team,
+                    "Skipping startup greeting (recent activity) | team=%s",
+                    team,
                 )
                 continue
+
+            greeting = _build_greeting(
+                hc_home, team, manager_name, boss_name, now_utc,
+            )
             send_message(
                 hc_home, team,
                 sender=manager_name,
                 recipient=boss_name,
-                message=(
-                    f"Delegate is online. I'm {manager_name}, your team manager. "
-                    "Standing by for instructions — send me tasks, questions, "
-                    "or anything you need the team to work on."
-                ),
+                message=greeting,
             )
             logger.info(
                 "Manager %s sent startup greeting to %s | team=%s",
