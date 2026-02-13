@@ -1840,6 +1840,40 @@ select option:hover {
 }
 .toast-close:hover { color: var(--text-primary); }
 
+/* Action toast layout */
+.toast-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.toast-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.toast-body {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.toast-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.toast-action {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  transition: color 100ms;
+}
+.toast-action:hover {
+  color: var(--accent-hover);
+}
+
 /* ================================================================
    Legacy compat — old sidebar class names (kept for safety)
    ================================================================ */

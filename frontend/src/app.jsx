@@ -18,7 +18,7 @@ import { TaskSidePanel } from "./components/TaskSidePanel.jsx";
 import { DiffPanel } from "./components/DiffPanel.jsx";
 import { ToastContainer } from "./components/Toast.jsx";
 import { HelpOverlay } from "./components/HelpOverlay.jsx";
-import { showToast } from "./toast.js";
+import { showToast, showActionToast } from "./toast.js";
 
 // ── Per-team backing stores (plain objects, not signals) ──
 // SSE events for ALL teams are buffered here.  Only the current-team
@@ -308,12 +308,33 @@ function App() {
               const cur = tasks.value;
               const idx = cur.findIndex(t => t.id === tid);
               if (idx !== -1) {
-                const updated = { ...cur[idx] };
+                const task = cur[idx];
+                const updated = { ...task };
                 if (entry.status !== undefined) updated.status = entry.status;
                 if (entry.assignee !== undefined) updated.assignee = entry.assignee;
                 const next = [...cur];
                 next[idx] = updated;
                 tasks.value = next;
+
+                // Fire toasts for task status changes
+                const boss = bossName.value;
+
+                // Task assigned to boss (in_approval or merge_failed)
+                if (entry.assignee && entry.assignee.toLowerCase() === boss.toLowerCase() &&
+                    (entry.status === "in_approval" || entry.status === "merge_failed")) {
+                  const title = `T${String(tid).padStart(4, "0")} "${task.title}"`;
+                  const body = entry.status === "in_approval"
+                    ? "needs your approval"
+                    : "merge failed -- needs resolution";
+                  showActionToast({ title, body, taskId: tid, type: "info" });
+                }
+
+                // Task completed
+                if (entry.status === "done") {
+                  const title = `T${String(tid).padStart(4, "0")} "${task.title}"`;
+                  const body = "merged successfully";
+                  showActionToast({ title, body, taskId: tid, type: "success" });
+                }
               }
             }
             return;
