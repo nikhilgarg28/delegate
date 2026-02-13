@@ -46,13 +46,13 @@ def create_review(hc_home: Path, team: str, task_id: int, attempt: int, reviewer
     conn = get_connection(hc_home, team)
     try:
         conn.execute(
-            "INSERT INTO reviews (task_id, attempt, reviewer) VALUES (?, ?, ?)",
-            (task_id, attempt, reviewer),
+            "INSERT INTO reviews (task_id, attempt, reviewer, team) VALUES (?, ?, ?, ?)",
+            (task_id, attempt, reviewer, team),
         )
         conn.commit()
         row = conn.execute(
-            "SELECT * FROM reviews WHERE task_id = ? AND attempt = ?",
-            (task_id, attempt),
+            "SELECT * FROM reviews WHERE task_id = ? AND attempt = ? AND team = ?",
+            (task_id, attempt, team),
         ).fetchone()
         return dict(row)
     finally:
@@ -64,8 +64,8 @@ def get_reviews(hc_home: Path, team: str, task_id: int) -> list[dict]:
     conn = get_connection(hc_home, team)
     try:
         rows = conn.execute(
-            "SELECT * FROM reviews WHERE task_id = ? ORDER BY attempt ASC",
-            (task_id,),
+            "SELECT * FROM reviews WHERE task_id = ? AND team = ? ORDER BY attempt ASC",
+            (task_id, team),
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -77,8 +77,8 @@ def get_current_review(hc_home: Path, team: str, task_id: int) -> dict | None:
     conn = get_connection(hc_home, team)
     try:
         row = conn.execute(
-            "SELECT * FROM reviews WHERE task_id = ? ORDER BY attempt DESC LIMIT 1",
-            (task_id,),
+            "SELECT * FROM reviews WHERE task_id = ? AND team = ? ORDER BY attempt DESC LIMIT 1",
+            (task_id, team),
         ).fetchone()
         if row is None:
             return None
@@ -118,13 +118,13 @@ def set_verdict(
             """\
             UPDATE reviews
                SET verdict = ?, summary = ?, reviewer = ?, decided_at = ?
-             WHERE task_id = ? AND attempt = ?""",
-            (verdict, summary, reviewer, now, task_id, attempt),
+             WHERE task_id = ? AND attempt = ? AND team = ?""",
+            (verdict, summary, reviewer, now, task_id, attempt, team),
         )
         conn.commit()
         row = conn.execute(
-            "SELECT * FROM reviews WHERE task_id = ? AND attempt = ?",
-            (task_id, attempt),
+            "SELECT * FROM reviews WHERE task_id = ? AND attempt = ? AND team = ?",
+            (task_id, attempt, team),
         ).fetchone()
         if row is None:
             raise ValueError(f"No review found for task {task_id} attempt {attempt}")
@@ -161,9 +161,9 @@ def add_comment(
     try:
         cursor = conn.execute(
             """\
-            INSERT INTO review_comments (task_id, attempt, file, line, body, author)
-            VALUES (?, ?, ?, ?, ?, ?)""",
-            (task_id, attempt, file, line, body, author),
+            INSERT INTO review_comments (task_id, attempt, file, line, body, author, team)
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (task_id, attempt, file, line, body, author, team),
         )
         conn.commit()
         row = conn.execute(
@@ -190,13 +190,13 @@ def get_comments(
     try:
         if attempt is not None:
             rows = conn.execute(
-                "SELECT * FROM review_comments WHERE task_id = ? AND attempt = ? ORDER BY id ASC",
-                (task_id, attempt),
+                "SELECT * FROM review_comments WHERE task_id = ? AND attempt = ? AND team = ? ORDER BY id ASC",
+                (task_id, attempt, team),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM review_comments WHERE task_id = ? ORDER BY attempt ASC, id ASC",
-                (task_id,),
+                "SELECT * FROM review_comments WHERE task_id = ? AND team = ? ORDER BY attempt ASC, id ASC",
+                (task_id, team),
             ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -216,13 +216,13 @@ def update_comment(
     conn = get_connection(hc_home, team)
     try:
         conn.execute(
-            "UPDATE review_comments SET body = ? WHERE id = ?",
-            (body, comment_id),
+            "UPDATE review_comments SET body = ? WHERE id = ? AND team = ?",
+            (body, comment_id, team),
         )
         conn.commit()
         row = conn.execute(
-            "SELECT * FROM review_comments WHERE id = ?",
-            (comment_id,),
+            "SELECT * FROM review_comments WHERE id = ? AND team = ?",
+            (comment_id, team),
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -241,8 +241,8 @@ def delete_comment(
     conn = get_connection(hc_home, team)
     try:
         cursor = conn.execute(
-            "DELETE FROM review_comments WHERE id = ?",
-            (comment_id,),
+            "DELETE FROM review_comments WHERE id = ? AND team = ?",
+            (comment_id, team),
         )
         conn.commit()
         return cursor.rowcount > 0

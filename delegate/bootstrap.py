@@ -203,9 +203,18 @@ def bootstrap(
 
     # Read the team_id and register the team in the global teams table
     team_id = tid_path.read_text().strip()
-    from delegate.db import get_connection
-    conn = get_connection(hc_home, team_name)
+    import sqlite3
+    global_db = hc_home / "db.sqlite"
+    conn = sqlite3.connect(str(global_db))
     try:
+        # Ensure teams table exists (idempotent)
+        conn.execute("""\
+            CREATE TABLE IF NOT EXISTS teams (
+                name        TEXT PRIMARY KEY,
+                team_id     TEXT NOT NULL UNIQUE,
+                created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            )
+        """)
         # Insert or ignore (idempotent — safe to call multiple times)
         conn.execute(
             "INSERT OR IGNORE INTO teams (name, team_id) VALUES (?, ?)",

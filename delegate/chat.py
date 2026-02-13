@@ -106,10 +106,10 @@ def get_task_activity(
     query = """
         SELECT id, timestamp, sender, recipient, content, type, task_id
         FROM messages
-        WHERE task_id = ?
+        WHERE task_id = ? AND team = ?
         ORDER BY id ASC
     """
-    params: list = [task_id]
+    params: list = [task_id, team]
     if limit:
         query = query.rstrip() + " LIMIT ?"
         params.append(limit)
@@ -201,8 +201,8 @@ def end_session(
             cost_usd = ?,
             cache_read_tokens = ?,
             cache_write_tokens = ?
-        WHERE id = ?""",
-        (tokens_in, tokens_out, cost_usd, cache_read_tokens, cache_write_tokens, session_id),
+        WHERE id = ? AND team = ?""",
+        (tokens_in, tokens_out, cost_usd, cache_read_tokens, cache_write_tokens, session_id, team),
     )
     conn.commit()
     conn.close()
@@ -212,8 +212,8 @@ def update_session_task(hc_home: Path, team: str, session_id: int, task_id: int)
     """Update the task_id on a running session."""
     conn = get_connection(hc_home, team)
     conn.execute(
-        "UPDATE sessions SET task_id = ? WHERE id = ? AND task_id IS NULL",
-        (task_id, session_id),
+        "UPDATE sessions SET task_id = ? WHERE id = ? AND task_id IS NULL AND team = ?",
+        (task_id, session_id, team),
     )
     conn.commit()
     conn.close()
@@ -242,8 +242,8 @@ def update_session_tokens(
             cost_usd = ?,
             cache_read_tokens = ?,
             cache_write_tokens = ?
-        WHERE id = ?""",
-        (tokens_in, tokens_out, cost_usd, cache_read_tokens, cache_write_tokens, session_id),
+        WHERE id = ? AND team = ?""",
+        (tokens_in, tokens_out, cost_usd, cache_read_tokens, cache_write_tokens, session_id, team),
     )
     conn.commit()
     conn.close()
@@ -261,8 +261,8 @@ def get_task_stats(hc_home: Path, team: str, task_id: int) -> dict:
             COALESCE(SUM(cost_usd), 0.0) as total_cost_usd,
             COALESCE(SUM(cache_read_tokens), 0) as total_cache_read,
             COALESCE(SUM(cache_write_tokens), 0) as total_cache_write
-        FROM sessions WHERE task_id = ?""",
-        (task_id,),
+        FROM sessions WHERE task_id = ? AND team = ?""",
+        (task_id, team),
     ).fetchone()
     conn.close()
     return dict(row) if row else {}
@@ -282,8 +282,8 @@ def get_agent_stats(hc_home: Path, team: str, agent: str) -> dict:
             COALESCE(SUM(cost_usd), 0.0) as total_cost_usd,
             COALESCE(SUM(cache_read_tokens), 0) as total_cache_read,
             COALESCE(SUM(cache_write_tokens), 0) as total_cache_write
-        FROM sessions WHERE agent = ?""",
-        (agent,),
+        FROM sessions WHERE agent = ? AND team = ?""",
+        (agent, team),
     ).fetchone()
     conn.close()
 
@@ -339,8 +339,8 @@ def get_project_stats(hc_home: Path, team: str, project: str) -> dict:
             COALESCE(SUM(cost_usd), 0.0) as total_cost_usd,
             COALESCE(SUM(cache_read_tokens), 0) as total_cache_read,
             COALESCE(SUM(cache_write_tokens), 0) as total_cache_write
-        FROM sessions WHERE task_id IN ({placeholders})""",
-        task_ids,
+        FROM sessions WHERE task_id IN ({placeholders}) AND team = ?""",
+        task_ids + [team],
     ).fetchone()
     conn.close()
     return dict(row) if row else {}
