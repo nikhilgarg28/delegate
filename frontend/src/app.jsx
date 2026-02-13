@@ -1,6 +1,6 @@
 import { render } from "preact";
-import { useEffect, useCallback } from "preact/hooks";
-import { batch } from "@preact/signals";
+import { useEffect } from "preact/hooks";
+import { batch, useSignalEffect } from "@preact/signals";
 import {
   currentTeam, teams, bossName, hcHome, tasks, agents, agentStatsMap, messages,
   activeTab, knownAgentNames,
@@ -64,85 +64,45 @@ function _syncSignalsNow(team) {
 
 // ── Main App ──
 function App() {
-  const tab = activeTab.value;
-  // Subscribe to team signals so effects with these deps re-evaluate on change.
-  const team = currentTeam.value;
-  const teamList = teams.value;
-
-  // Keyboard handler
+  // ── Keyboard shortcuts ──
   useEffect(() => {
     const handler = (e) => {
-      // Helper to check if we're in an input
       const isInputFocused = () => {
         const el = document.activeElement;
         if (!el) return false;
         const tag = el.tagName.toLowerCase();
         return tag === "input" || tag === "textarea" || tag === "select" || el.contentEditable === "true";
       };
+      const isOverlayOpen = () => panelStack.value.length > 0 || helpOverlayOpen.value;
 
-      // Helper to check if any overlay is open
-      const isOverlayOpen = () => {
-        return panelStack.value.length > 0 || helpOverlayOpen.value;
-      };
-
-      // Escape: pop one panel level (or close last), close overlays, or blur input
       if (e.key === "Escape") {
         if (helpOverlayOpen.value) { helpOverlayOpen.value = false; return; }
         if (panelStack.value.length > 0) { popPanel(); return; }
         if (isInputFocused()) { document.activeElement.blur(); return; }
         return;
       }
-
-      // All other shortcuts require no input focus
       if (isInputFocused()) return;
-
-      // / (slash): focus chat input
       if (e.key === "/" && !isOverlayOpen()) {
         e.preventDefault();
         const chatInput = document.querySelector(".chat-input-box textarea");
         if (chatInput) chatInput.focus();
         return;
       }
-
-      // s: toggle sidebar
       if (e.key === "s" && !isOverlayOpen()) {
         sidebarCollapsed.value = !sidebarCollapsed.value;
         localStorage.setItem("delegate-sidebar-collapsed", sidebarCollapsed.value ? "true" : "false");
         return;
       }
-
-      // c: go to chat
-      if (e.key === "c" && !isOverlayOpen()) {
-        activeTab.value = "chat";
-        window.history.pushState({}, "", "/chat");
-        return;
-      }
-
-      // t: go to tasks
-      if (e.key === "t" && !isOverlayOpen()) {
-        activeTab.value = "tasks";
-        window.history.pushState({}, "", "/tasks");
-        return;
-      }
-
-      // a: go to agents
-      if (e.key === "a" && !isOverlayOpen()) {
-        activeTab.value = "agents";
-        window.history.pushState({}, "", "/agents");
-        return;
-      }
-
-      // ?: toggle help overlay
-      if (e.key === "?" && !isInputFocused()) {
-        helpOverlayOpen.value = !helpOverlayOpen.value;
-        return;
-      }
+      if (e.key === "c" && !isOverlayOpen()) { activeTab.value = "chat"; window.history.pushState({}, "", "/chat"); return; }
+      if (e.key === "t" && !isOverlayOpen()) { activeTab.value = "tasks"; window.history.pushState({}, "", "/tasks"); return; }
+      if (e.key === "a" && !isOverlayOpen()) { activeTab.value = "agents"; window.history.pushState({}, "", "/agents"); return; }
+      if (e.key === "?" && !isInputFocused()) { helpOverlayOpen.value = !helpOverlayOpen.value; return; }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
-  // Path routing
+  // ── Path routing ──
   useEffect(() => {
     const onPath = () => {
       const path = window.location.pathname.replace(/^\//, "");
@@ -151,9 +111,7 @@ function App() {
         activeTab.value = path;
       } else {
         activeTab.value = "chat";
-        if (path !== "") {
-          window.history.replaceState(null, "", "/chat");
-        }
+        if (path !== "") window.history.replaceState(null, "", "/chat");
       }
     };
     window.addEventListener("popstate", onPath);
@@ -161,7 +119,7 @@ function App() {
     return () => window.removeEventListener("popstate", onPath);
   }, []);
 
-  // Initial bootstrap: fetch config + teams
+  // ── Bootstrap: fetch config + teams ──
   useEffect(() => {
     (async () => {
       try {
@@ -179,18 +137,18 @@ function App() {
     })();
   }, []);
 
-  // Polling loop — fetches data every 2s and updates signals
+  // ── Polling loop (reads currentTeam.value dynamically each cycle) ──
   useEffect(() => {
     let active = true;
     const poll = async () => {
       if (!active) return;
-      const team = currentTeam.value;
-      if (!team) {
+      const t = currentTeam.value;
+      if (!t) {
         try {
-          const teamList = await api.fetchTeams();
-          if (teamList.length) {
-            teams.value = teamList;
-            if (!currentTeam.value) currentTeam.value = teamList[0];
+          const tl = await api.fetchTeams();
+          if (tl.length) {
+            teams.value = tl;
+            if (!currentTeam.value) currentTeam.value = tl[0];
           }
         } catch (e) { }
         return;
@@ -198,15 +156,15 @@ function App() {
 
       try {
         const [taskData, agentData] = await Promise.all([
-          api.fetchTasks(team),
-          api.fetchAgents(team),
+          api.fetchTasks(t),
+          api.fetchAgents(t),
         ]);
 
         const statsMap = {};
         await Promise.all(
           agentData.map(async (a) => {
             try {
-              const s = await api.fetchAgentStats(team, a.name);
+              const s = await api.fetchAgentStats(t, a.name);
               if (s) statsMap[a.name] = s;
             } catch (e) { }
           })
@@ -214,21 +172,20 @@ function App() {
 
         let msgData = messages.value;
         if (activeTab.value === "chat") {
-          try {
-            msgData = await api.fetchMessages(team, {});
-          } catch (e) { }
+          try { msgData = await api.fetchMessages(t, {}); } catch (e) { }
         }
 
         if (active) {
-          batch(() => {
-            tasks.value = taskData;
-            agents.value = agentData;
-            agentStatsMap.value = statsMap;
-            knownAgentNames.value = agentData.map(a => a.name);
-            if (activeTab.value === "chat") {
-              messages.value = msgData;
-            }
-          });
+          // Guard: only apply if the team hasn't changed mid-flight
+          if (t === currentTeam.value) {
+            batch(() => {
+              tasks.value = taskData;
+              agents.value = agentData;
+              agentStatsMap.value = statsMap;
+              knownAgentNames.value = agentData.map(a => a.name);
+              if (activeTab.value === "chat") messages.value = msgData;
+            });
+          }
         }
       } catch (e) {
         showToast("Failed to refresh data", "error");
@@ -240,44 +197,54 @@ function App() {
     return () => { active = false; clearInterval(interval); };
   }, []);
 
-  // When team changes, restore ephemeral state from backing store and re-poll
-  useEffect(() => {
-    if (!team) return;
+  // ── Team switch: clear data + re-fetch ──
+  // Uses useSignalEffect (from @preact/signals) which auto-tracks
+  // signal reads and re-runs when they change.  This is more reliable
+  // than useEffect([team]) which depends on Preact's dep comparison
+  // during signal-triggered re-renders.
+  useSignalEffect(() => {
+    const t = currentTeam.value;           // ← auto-tracked
+    if (!t) return;
+
+    // Clear stale data from previous team
     batch(() => {
       tasks.value = [];
       agents.value = [];
       agentStatsMap.value = {};
       messages.value = [];
-      // Restore ephemeral activity state from the per-team backing store
-      // (instant — no network round-trip needed).
-      _syncSignalsNow(team);
+      _syncSignalsNow(t);
     });
+
+    // Fetch data for new team
     (async () => {
       try {
-        const [taskData, agentData] = await Promise.all([
-          api.fetchTasks(team),
-          api.fetchAgents(team),
+        const [taskData, agentData, msgData] = await Promise.all([
+          api.fetchTasks(t),
+          api.fetchAgents(t),
+          api.fetchMessages(t, {}),
         ]);
+        // Guard: only apply if the team hasn't changed while we were fetching
+        if (t !== currentTeam.value) return;
         batch(() => {
           tasks.value = taskData;
           agents.value = agentData;
+          messages.value = msgData;
         });
-        // Update cached manager name for this team
         const mgr = agentData.find(a => a.role === "manager");
-        _pt.managerName[team] = mgr?.name ?? null;
+        _pt.managerName[t] = mgr?.name ?? null;
       } catch (e) { }
     })();
-  }, [team]);
+  });
 
-  // SSE: live agent activity streams — one connection per team.
-  // Events are buffered in the per-team backing store (_pt).
-  // Only events for currentTeam are pushed into the reactive signals.
-  useEffect(() => {
-    if (!teamList || !teamList.length) return;
+  // ── SSE: one connection per team ──
+  // Also uses useSignalEffect so it auto-tracks teams.value.
+  useSignalEffect(() => {
+    const list = teams.value;              // ← auto-tracked
+    if (!list || !list.length) return;
 
     const connections = {};
 
-    for (const team of teamList) {
+    for (const team of list) {
       // Ensure backing store slots exist
       if (!_pt.activity[team])    _pt.activity[team]    = {};
       if (!_pt.activityLog[team]) _pt.activityLog[team] = [];
@@ -319,7 +286,7 @@ function App() {
             return;
           }
 
-          // ── task_update (only for current team — tasks signal is single-team) ──
+          // ── task_update ──
           if (entry.type === "task_update") {
             if (isCurrent) {
               const tid = entry.task_id;
@@ -340,12 +307,10 @@ function App() {
           // ── agent_activity ──
           _pt.activity[team][entry.agent] = entry;
 
-          // Activity log (capped)
           const log = _pt.activityLog[team];
           if (log.length >= MAX_LOG_ENTRIES) log.splice(0, log.length - MAX_LOG_ENTRIES + 1);
           log.push(entry);
 
-          // Manager context — bump timestamp or recover if missed turn_started
           const mgrName = _pt.managerName[team];
           if (mgrName && entry.agent === mgrName) {
             const ctx = _pt.managerCtx[team];
@@ -363,7 +328,6 @@ function App() {
             }
           }
 
-          // Push to reactive signals only for the current team
           if (isCurrent) _syncSignals(team);
         } catch (e) { /* ignore malformed events */ }
       };
@@ -375,7 +339,7 @@ function App() {
     return () => {
       for (const es of Object.values(connections)) es.close();
     };
-  }, [teamList]);
+  });
 
   return (
     <>
