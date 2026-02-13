@@ -37,7 +37,7 @@ def local_repo(tmp_path):
     """Create a local git repo with a main branch."""
     repo = tmp_path / "myproject"
     repo.mkdir()
-    subprocess.run(["git", "init"], cwd=str(repo), capture_output=True, check=True)
+    subprocess.run(["git", "init", "-b", "main"], cwd=str(repo), capture_output=True, check=True)
     subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=str(repo), capture_output=True)
     subprocess.run(["git", "config", "user.name", "Test"], cwd=str(repo), capture_output=True)
     (repo / "README.md").write_text("# Project\n")
@@ -102,7 +102,7 @@ class TestUpdateRepoPath:
         register_repo(hc_home, TEAM, str(local_repo))
         new_loc = tmp_path / "moved"
         new_loc.mkdir()
-        subprocess.run(["git", "init"], cwd=str(new_loc), capture_output=True, check=True)
+        subprocess.run(["git", "init", "-b", "main"], cwd=str(new_loc), capture_output=True, check=True)
 
         update_repo_path(hc_home, TEAM, local_repo.name, str(new_loc))
         link = get_repo_path(hc_home, TEAM, local_repo.name)

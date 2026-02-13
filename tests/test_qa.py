@@ -37,7 +37,7 @@ def qa_team(tmp_path):
     # Create a simple test repo outside the boss directory
     repo_dir = tmp_path / "repos" / "myapp"
     repo_dir.mkdir(parents=True)
-    subprocess.run(["git", "init"], cwd=str(repo_dir), capture_output=True, check=True)
+    subprocess.run(["git", "init", "-b", "main"], cwd=str(repo_dir), capture_output=True, check=True)
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
         cwd=str(repo_dir), capture_output=True, check=True,
