@@ -231,13 +231,13 @@ def update_task(hc_home: Path, team: str, task_id: int, **updates) -> dict:
                 params.append(json.dumps(value) if value else "{}")
         else:
             params.append(value)
-    params.append(task_id)
+    params.extend([team, task_id])
 
     conn = get_connection(hc_home, team)
     try:
         conn.execute(
             f"UPDATE tasks SET {', '.join(set_parts)} WHERE team = ? AND id = ?",
-            [team] + params,
+            params,
         )
         conn.commit()
         row = conn.execute("SELECT * FROM tasks WHERE team = ? AND id = ?", (team, task_id)).fetchone()

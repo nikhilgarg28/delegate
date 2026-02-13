@@ -181,6 +181,20 @@ def bootstrap(
     if not tid_path.exists():
         tid_path.write_text(uuid.uuid4().hex[:6] + "\n")
 
+    # Read the team_id and register the team in the global teams table
+    team_id = tid_path.read_text().strip()
+    from delegate.db import get_connection
+    conn = get_connection(hc_home, team_name)
+    try:
+        # Insert or ignore (idempotent — safe to call multiple times)
+        conn.execute(
+            "INSERT OR IGNORE INTO teams (name, team_id) VALUES (?, ?)",
+            (team_name, team_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
     # Per-team repos directory
     _repos_dir(hc_home, team_name).mkdir(parents=True, exist_ok=True)
 
