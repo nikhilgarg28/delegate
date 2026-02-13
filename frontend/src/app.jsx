@@ -19,6 +19,27 @@ import { ToastContainer } from "./components/Toast.jsx";
 import { HelpOverlay } from "./components/HelpOverlay.jsx";
 import { showToast } from "./toast.js";
 
+// ── Per-team backing stores (plain objects, not signals) ──
+// SSE events for ALL teams are buffered here.  Only the current-team
+// slice is pushed into the reactive signals so non-active teams don't
+// trigger re-renders.
+const _pt = {
+  activity:    {},   // team → { agentName: entry }
+  activityLog: {},   // team → [entry, …]
+  managerCtx:  {},   // team → ctx | null
+  managerName: {},   // team → managerAgentName | null
+};
+const MAX_LOG_ENTRIES = 500;
+
+/** Sync the reactive signals from the backing store for *team*. */
+function _syncSignals(team) {
+  batch(() => {
+    agentLastActivity.value  = _pt.activity[team]    ? { ..._pt.activity[team] }    : {};
+    agentActivityLog.value   = _pt.activityLog[team] ? [..._pt.activityLog[team]] : [];
+    managerTurnContext.value = _pt.managerCtx[team]  ?? null;
+  });
+}
+
 // ── Main App ──
 function App() {
   const tab = activeTab.value;
@@ -193,7 +214,7 @@ function App() {
     return () => { active = false; clearInterval(interval); };
   }, []);
 
-  // When team changes, clear data and re-poll
+  // When team changes, restore ephemeral state from backing store and re-poll
   useEffect(() => {
     const team = currentTeam.value;
     if (!team) return;
@@ -202,10 +223,9 @@ function App() {
       agents.value = [];
       agentStatsMap.value = {};
       messages.value = [];
-      // Clear ephemeral activity state from the previous team
-      managerTurnContext.value = null;
-      agentLastActivity.value = {};
-      agentActivityLog.value = [];
+      // Restore ephemeral activity state from the per-team backing store
+      // (instant — no network round-trip needed).
+      _syncSignals(team);
     });
     (async () => {
       try {
@@ -217,74 +237,101 @@ function App() {
           tasks.value = taskData;
           agents.value = agentData;
         });
+        // Update cached manager name for this team
+        const mgr = agentData.find(a => a.role === "manager");
+        _pt.managerName[team] = mgr?.name ?? null;
       } catch (e) { }
     })();
   }, [currentTeam.value]);
 
-  // SSE: live agent activity stream
+  // SSE: live agent activity streams — one connection per team.
+  // Events are buffered in the per-team backing store (_pt).
+  // Only events for currentTeam are pushed into the reactive signals.
   useEffect(() => {
-    const team = currentTeam.value;
-    if (!team) return;
+    const teamList = teams.value;
+    if (!teamList || !teamList.length) return;
 
-    const MAX_LOG_ENTRIES = 500;
-    let es = null;
+    const connections = {};
 
-    const connect = () => {
-      es = new EventSource(`/teams/${team}/activity/stream`);
+    for (const team of teamList) {
+      // Ensure backing store slots exist
+      if (!_pt.activity[team])    _pt.activity[team]    = {};
+      if (!_pt.activityLog[team]) _pt.activityLog[team] = [];
+
+      // Fetch manager name for this team (one-time, best-effort)
+      if (_pt.managerName[team] === undefined) {
+        api.fetchAgents(team).then(agentData => {
+          const mgr = agentData.find(a => a.role === "manager");
+          _pt.managerName[team] = mgr?.name ?? null;
+        }).catch(() => { _pt.managerName[team] = null; });
+      }
+
+      const es = new EventSource(`/teams/${team}/activity/stream`);
 
       es.onmessage = (evt) => {
         try {
           const entry = JSON.parse(evt.data);
           if (entry.type === "connected") return;
 
+          const isCurrent = (team === currentTeam.value);
+
+          // ── turn_started ──
           if (entry.type === "turn_started") {
-            const managerAgent = agents.value?.find(a => a.role === "manager");
-            if (managerAgent && managerAgent.name === entry.agent) {
-              managerTurnContext.value = entry;
+            const mgrName = _pt.managerName[team];
+            if (mgrName && mgrName === entry.agent) {
+              _pt.managerCtx[team] = entry;
+              if (isCurrent) managerTurnContext.value = entry;
             }
             return;
           }
 
+          // ── turn_ended ──
           if (entry.type === "turn_ended") {
-            if (managerTurnContext.value && managerTurnContext.value.agent === entry.agent) {
-              managerTurnContext.value = null;
+            const ctx = _pt.managerCtx[team];
+            if (ctx && ctx.agent === entry.agent) {
+              _pt.managerCtx[team] = null;
+              if (isCurrent) managerTurnContext.value = null;
             }
             return;
           }
 
+          // ── task_update (only for current team — tasks signal is single-team) ──
           if (entry.type === "task_update") {
-            const tid = entry.task_id;
-            const cur = tasks.value;
-            const idx = cur.findIndex(t => t.id === tid);
-            if (idx !== -1) {
-              const updated = { ...cur[idx] };
-              if (entry.status !== undefined) updated.status = entry.status;
-              if (entry.assignee !== undefined) updated.assignee = entry.assignee;
-              const next = [...cur];
-              next[idx] = updated;
-              tasks.value = next;
+            if (isCurrent) {
+              const tid = entry.task_id;
+              const cur = tasks.value;
+              const idx = cur.findIndex(t => t.id === tid);
+              if (idx !== -1) {
+                const updated = { ...cur[idx] };
+                if (entry.status !== undefined) updated.status = entry.status;
+                if (entry.assignee !== undefined) updated.assignee = entry.assignee;
+                const next = [...cur];
+                next[idx] = updated;
+                tasks.value = next;
+              }
             }
             return;
           }
 
-          const prev = agentLastActivity.value;
-          agentLastActivity.value = { ...prev, [entry.agent]: entry };
+          // ── agent_activity ──
+          _pt.activity[team][entry.agent] = entry;
 
-          // Keep manager activity bar alive: bump timestamp on every activity event
-          // from the active manager so the safety timeout keeps resetting.
-          // If managerTurnContext is null (we missed the turn_started event due to
-          // page load, team switch, or SSE reconnect mid-turn), reconstruct it
-          // from the activity event so the bar appears.
-          const mtc = managerTurnContext.value;
-          if (mtc && mtc.agent === entry.agent) {
-            managerTurnContext.value = { ...mtc, timestamp: entry.timestamp };
-          } else if (!mtc) {
-            const managerAgent = agents.value?.find(a => a.role === "manager");
-            if (managerAgent && entry.agent === managerAgent.name) {
-              managerTurnContext.value = {
+          // Activity log (capped)
+          const log = _pt.activityLog[team];
+          if (log.length >= MAX_LOG_ENTRIES) log.splice(0, log.length - MAX_LOG_ENTRIES + 1);
+          log.push(entry);
+
+          // Manager context — bump timestamp or recover if missed turn_started
+          const mgrName = _pt.managerName[team];
+          if (mgrName && entry.agent === mgrName) {
+            const ctx = _pt.managerCtx[team];
+            if (ctx) {
+              _pt.managerCtx[team] = { ...ctx, timestamp: entry.timestamp };
+            } else {
+              _pt.managerCtx[team] = {
                 type: "turn_started",
                 agent: entry.agent,
-                team: entry.team || "",
+                team: team,
                 task_id: entry.task_id ?? null,
                 sender: "",
                 timestamp: entry.timestamp,
@@ -292,23 +339,19 @@ function App() {
             }
           }
 
-          const log = agentActivityLog.value;
-          const next = log.length >= MAX_LOG_ENTRIES
-            ? [...log.slice(log.length - MAX_LOG_ENTRIES + 1), entry]
-            : [...log, entry];
-          agentActivityLog.value = next;
+          // Push to reactive signals only for the current team
+          if (isCurrent) _syncSignals(team);
         } catch (e) { /* ignore malformed events */ }
       };
 
-      es.onerror = () => { };
-    };
-
-    connect();
+      es.onerror = () => {};
+      connections[team] = es;
+    }
 
     return () => {
-      if (es) es.close();
+      for (const es of Object.values(connections)) es.close();
     };
-  }, [currentTeam.value]);
+  }, [teams.value]);
 
   return (
     <>
