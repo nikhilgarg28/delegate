@@ -505,12 +505,6 @@ function MergePreviewTab({ task, mergePreviewRaw, stats }) {
 
   if (!mergePreviewRaw) return <div class="diff-empty">Loading merge preview...</div>;
 
-  const diffHtml = diff2HtmlRender(mergePreviewRaw, {
-    outputFormat: "line-by-line",
-    drawFileList: false,
-    matching: "words",
-  });
-
   return (
     <div>
       {/* Branch info */}
@@ -531,7 +525,13 @@ function MergePreviewTab({ task, mergePreviewRaw, stats }) {
         <div class="diff-empty">No differences from main</div>
       )}
       {/* Full diff */}
-      {diffHtml && <div dangerouslySetInnerHTML={{ __html: diffHtml }} />}
+      <ReviewableDiff
+        diffRaw={mergePreviewRaw}
+        taskId={task.id}
+        currentComments={[]}
+        oldComments={[]}
+        isReviewable={false}
+      />
     </div>
   );
 }
