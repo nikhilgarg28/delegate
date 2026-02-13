@@ -89,14 +89,14 @@ function RetryMergeButton({ task }) {
   };
 
   return (
-    <button
+      <button
       class="btn-approve"
-      onClick={handleRetry}
-      disabled={loading}
+        onClick={handleRetry}
+        disabled={loading}
       style={{ marginLeft: "8px" }}
-    >
+      >
       {loading ? "Retrying..." : "\u21BB Retry Merge"}
-    </button>
+      </button>
   );
 }
 
@@ -602,11 +602,11 @@ function ActivityTab({ taskId, task }) {
 
   return (
     <div class="task-activity-tab">
-      {timeline === null ? (
-        <div class="diff-empty">Loading activity...</div>
-      ) : timeline.length === 0 ? (
-        <div class="diff-empty">No activity yet</div>
-      ) : (
+        {timeline === null ? (
+          <div class="diff-empty">Loading activity...</div>
+        ) : timeline.length === 0 ? (
+          <div class="diff-empty">No activity yet</div>
+        ) : (
         <div class="task-activity-timeline">
           {timeline.map((e, i) =>
             e.type === "comment" ? (
@@ -626,29 +626,29 @@ function ActivityTab({ taskId, task }) {
                 <span class="task-activity-text">{stripEmojis(e.text)}</span>
                 <span class="task-activity-time">{fmtRelativeTime(e.time)}</span>
               </div>
-            )
-          )}
+          )
+        )}
         </div>
       )}
       {/* Comment input */}
-      <div class="task-comment-input-row">
-        <input
-          type="text"
-          class="task-comment-input"
-          placeholder="Add a comment..."
-          value={commentText}
-          onInput={(e) => setCommentText(e.target.value)}
-          onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") handlePostComment(); }}
-          onClick={(e) => e.stopPropagation()}
-          disabled={posting}
-        />
-        <button
-          class="task-comment-submit"
-          onClick={(e) => { e.stopPropagation(); handlePostComment(); }}
-          disabled={posting || !commentText.trim()}
-        >
-          {posting ? "..." : "\u2192"}
-        </button>
+        <div class="task-comment-input-row">
+          <input
+            type="text"
+            class="task-comment-input"
+            placeholder="Add a comment..."
+            value={commentText}
+            onInput={(e) => setCommentText(e.target.value)}
+            onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") handlePostComment(); }}
+            onClick={(e) => e.stopPropagation()}
+            disabled={posting}
+          />
+          <button
+            class="task-comment-submit"
+            onClick={(e) => { e.stopPropagation(); handlePostComment(); }}
+            disabled={posting || !commentText.trim()}
+          >
+            {posting ? "..." : "\u2192"}
+          </button>
       </div>
     </div>
   );
@@ -857,27 +857,27 @@ export function TaskSidePanel() {
               {visitedTabs.overview && (
                 <div style={{ display: activeTab === "overview" ? "" : "none" }}>
                   <OverviewTab task={t} stats={stats} />
-                </div>
+              </div>
               )}
               {visitedTabs.changes && (
                 <div style={{ display: activeTab === "changes" ? "" : "none" }}>
                   <ChangesTab task={t} diffRaw={diffRaw} currentReview={currentReview} oldComments={oldComments} stats={stats} />
-                </div>
-              )}
+              </div>
+          )}
               {visitedTabs.merge && (
                 <div style={{ display: activeTab === "merge" ? "" : "none" }}>
                   <MergePreviewTab task={t} mergePreviewRaw={mergePreviewRaw} stats={stats} />
-                </div>
+        </div>
               )}
               {visitedTabs.activity && (
                 <div style={{ display: activeTab === "activity" ? "" : "none" }}>
                   <ActivityTab taskId={t.id} task={t} />
-                </div>
-              )}
-            </>
-          )}
-        </div>
       </div>
+      )}
+    </>
+          )}
+      </div>
+        </div>
       <div class={"task-backdrop" + (isOpen ? " open" : "")} onClick={close}></div>
     </>
   );

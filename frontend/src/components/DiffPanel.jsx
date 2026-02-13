@@ -256,38 +256,39 @@ function AgentView({ agentName }) {
 }
 
 // ── File viewer ──
+// NOTE: useEffect / useSignalEffect do NOT fire reliably inside
+// signal-driven parent renders (@preact/signals v2 commit-phase bug).
+// We use a render-phase fetch pattern instead: the fetch is kicked off
+// during render when the inputs change (guarded by a key stored in
+// state to prevent infinite loops).  This is the same pattern React
+// documents as "adjusting state during rendering".
 function FileView({ filePath }) {
   const team = currentTeam.value;
   const [fileData, setFileData] = useState(null);
   const [error, setError] = useState(null);
+  const [fetchKey, setFetchKey] = useState(null);
+  const abortRef = useRef(null);
 
-  useEffect(() => {
-    if (!filePath || !team) return;
-    setFileData(null); setError(null);
-    const abortCtrl = new AbortController();
-    let settled = false;
-    // Normalise the file path for the backend.
-    // Absolute paths inside delegate home are stripped to delegate-relative.
-    // The backend resolves delegate-relative paths from hc_home.
+  const key = `${team}|${filePath}`;
+  if (filePath && team && key !== fetchKey) {
+    // New inputs detected during render — kick off fetch
+    setFetchKey(key);
+    setFileData(null);
+    setError(null);
+
+    if (abortRef.current) abortRef.current.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
     const apiPath = toApiPath(filePath, team);
-    api.fetchFileContent(team, apiPath, { signal: abortCtrl.signal }).then(data => {
-      settled = true;
-      if (!abortCtrl.signal.aborted) setFileData(data);
+    api.fetchFileContent(team, apiPath, { signal: ctrl.signal }).then(data => {
+      if (!ctrl.signal.aborted) setFileData(data);
     }).catch(e => {
-      settled = true;
-      if (!abortCtrl.signal.aborted) {
-        console.error('FileView fetch failed:', e);
+      if (!ctrl.signal.aborted) {
         setError((e && e.message) || String(e) || 'Failed to load file');
       }
     });
-    // Safety: if the fetch hasn't settled after 8s, show an error
-    const timeout = setTimeout(() => {
-      if (!settled && !abortCtrl.signal.aborted) {
-        setError("Request timed out — the file may not exist or the server is unreachable.");
-      }
-    }, 8000);
-    return () => { abortCtrl.abort(); clearTimeout(timeout); };
-  }, [filePath, team]);
+  }
 
   const ext = filePath ? (filePath.lastIndexOf(".") !== -1 ? filePath.substring(filePath.lastIndexOf(".") + 1).toLowerCase() : "") : "";
 
