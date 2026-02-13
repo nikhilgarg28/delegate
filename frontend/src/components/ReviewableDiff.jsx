@@ -67,10 +67,23 @@ function InlineCommentForm({ file, line, taskId, onSaved, onCancel }) {
     }
   }, [body, file, line, taskId, onSaved]);
 
-  // Focus on mount
+  // Auto-grow textarea
+  const handleInput = useCallback((e) => {
+    setBody(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 300) + 'px';
+  }, []);
+
+  // Focus on mount and set initial height
   const setRef = useCallback((el) => {
     ref.current = el;
-    if (el) setTimeout(() => el.focus(), 50);
+    if (el) {
+      setTimeout(() => {
+        el.focus();
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 300) + 'px';
+      }, 50);
+    }
   }, []);
 
   return (
@@ -80,13 +93,12 @@ function InlineCommentForm({ file, line, taskId, onSaved, onCancel }) {
         class="rc-comment-textarea"
         placeholder="Leave a comment..."
         value={body}
-        onInput={(e) => setBody(e.target.value)}
+        onInput={handleInput}
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSave();
           if (e.key === "Escape") onCancel && onCancel();
         }}
-        rows="2"
       />
       <div class="rc-comment-form-actions">
         <button class="rc-btn rc-btn-cancel" onClick={onCancel} disabled={saving}>Cancel</button>
@@ -118,9 +130,23 @@ function InlineEditForm({ comment, taskId, onSaved, onCancel }) {
     }
   }, [body, taskId, comment.id, onSaved]);
 
+  // Auto-grow textarea
+  const handleInput = useCallback((e) => {
+    setBody(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 300) + 'px';
+  }, []);
+
+  // Focus on mount and set initial height
   const setRef = useCallback((el) => {
     ref.current = el;
-    if (el) setTimeout(() => el.focus(), 50);
+    if (el) {
+      setTimeout(() => {
+        el.focus();
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 300) + 'px';
+      }, 50);
+    }
   }, []);
 
   return (
@@ -129,13 +155,12 @@ function InlineEditForm({ comment, taskId, onSaved, onCancel }) {
         ref={setRef}
         class="rc-comment-textarea"
         value={body}
-        onInput={(e) => setBody(e.target.value)}
+        onInput={handleInput}
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSave();
           if (e.key === "Escape") onCancel && onCancel();
         }}
-        rows="2"
       />
       <div class="rc-comment-form-actions">
         <button class="rc-btn rc-btn-cancel" onClick={onCancel} disabled={saving}>Cancel</button>
