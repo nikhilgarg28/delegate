@@ -77,7 +77,11 @@ export function ManagerActivityBar() {
 
   return (
     <div class="manager-activity-bar">
-      <div class="manager-activity-dot" />
+      <div class="manager-typing-dots">
+        <span class="manager-typing-dot" />
+        <span class="manager-typing-dot" />
+        <span class="manager-typing-dot" />
+      </div>
       <div class="manager-activity-content">
         <span class="mgr-context">{context}</span>
         {status}

@@ -7,7 +7,7 @@ import { CopyBtn } from "./CopyBtn.jsx";
 
 // ── Static field configs (enum options that don't change) ──
 const STATUS_OPTIONS = [
-  "todo", "in_progress", "in_review", "in_approval", "merging", "done", "rejected", "merge_failed",
+  "todo", "in_progress", "in_review", "in_approval", "merging", "done", "rejected", "merge_failed", "cancelled",
 ];
 const PRIORITY_OPTIONS = ["low", "medium", "high", "critical"];
 const APPROVAL_OPTIONS = ["approved", "rejected", "(none)"];
