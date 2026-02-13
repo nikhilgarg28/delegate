@@ -92,7 +92,6 @@ function App() {
         if (bellPopoverOpen.value) { bellPopoverOpen.value = false; return; }
         if (helpOverlayOpen.value) { helpOverlayOpen.value = false; return; }
         if (panelStack.value.length > 0) { popPanel(); return; }
-        if (commandMode.value) { commandMode.value = false; return; }
         if (isInputFocused()) { document.activeElement.blur(); return; }
         return;
       }
