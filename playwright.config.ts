@@ -81,7 +81,6 @@ export default defineConfig({
     env: {
       ...process.env,
       DELEGATE_HOME: tmpDir,
-      PYTHONPATH: __dirname,
     },
     timeout: 15_000,
   },

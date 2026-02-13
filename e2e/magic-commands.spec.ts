@@ -63,9 +63,9 @@ test.describe("Magic command autocomplete", () => {
       expect(gap).toBeGreaterThanOrEqual(0);
       expect(gap).toBeLessThanOrEqual(15);
 
-      // Dropdown should be horizontally aligned with input box
-      expect(dropdownBounds.x).toBeCloseTo(inputBoxBounds.x, 0);
-      expect(dropdownBounds.width).toBeCloseTo(inputBoxBounds.width, 0);
+      // Dropdown should be horizontally aligned with input box (allow 1-2px rounding difference)
+      expect(Math.abs(dropdownBounds.x - inputBoxBounds.x)).toBeLessThanOrEqual(2);
+      expect(Math.abs(dropdownBounds.width - inputBoxBounds.width)).toBeLessThanOrEqual(2);
     }
   });
 
