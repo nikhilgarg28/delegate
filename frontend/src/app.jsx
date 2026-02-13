@@ -452,15 +452,15 @@ function App() {
                     (entry.status === "in_approval" || entry.status === "merge_failed")) {
                   const title = `T${String(tid).padStart(4, "0")} "${task.title}"`;
                   const body = entry.status === "in_approval"
-                    ? "needs your approval"
-                    : "merge failed -- needs resolution";
+                    ? "Needs your approval"
+                    : "Merge failed -- needs resolution";
                   showActionToast({ title, body, taskId: tid, type: "info" });
                 }
 
                 // Task completed
                 if (entry.status === "done") {
                   const title = `T${String(tid).padStart(4, "0")} "${task.title}"`;
-                  const body = "merged successfully";
+                  const body = "Merged successfully";
                   showActionToast({ title, body, taskId: tid, type: "success" });
                 }
               }

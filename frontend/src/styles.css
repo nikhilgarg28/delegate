@@ -1995,7 +1995,7 @@ select option:hover {
   color: var(--text-primary);
   font-size: 14px;
   line-height: 1.4;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
   animation: toast-slide-in 0.2s ease-out;
   pointer-events: auto;
 }
@@ -2003,15 +2003,15 @@ select option:hover {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
-.toast-error { border-left: 3px solid var(--semantic-red); }
-.toast-success { border-left: 3px solid var(--semantic-green); }
-.toast-info { border-left: 3px solid var(--text-secondary); }
+.toast-error { border: 1px solid var(--semantic-red); }
+.toast-success { border: 1px solid var(--semantic-green); }
+.toast-info { border: 1px solid var(--border); }
 .toast-message { flex: 1; word-break: break-word; }
 .toast-close {
   flex-shrink: 0;
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: var(--text-tertiary);
   cursor: pointer;
   font-size: 20px;
   line-height: 1;
@@ -2023,7 +2023,7 @@ select option:hover {
   justify-content: center;
   transition: color 100ms;
 }
-.toast-close:hover { color: var(--text-primary); }
+.toast-close:hover { color: var(--text-secondary); }
 
 /* Action toast layout */
 .toast-content {
@@ -2033,7 +2033,7 @@ select option:hover {
   gap: 4px;
 }
 .toast-title {
-  font-weight: 600;
+  font-weight: 400;
   color: var(--text-primary);
 }
 .toast-body {
@@ -2049,14 +2049,14 @@ select option:hover {
 .toast-action {
   background: none;
   border: none;
-  color: var(--accent);
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 14px;
   padding: 0;
   transition: color 100ms;
 }
 .toast-action:hover {
-  color: var(--accent-hover);
+  color: var(--text-primary);
 }
 
 /* ================================================================
