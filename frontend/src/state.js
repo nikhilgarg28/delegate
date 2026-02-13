@@ -73,6 +73,7 @@ export function navigateTab(tab) {
 // Each entry: { type: "task"|"agent"|"file"|"diff", target: any }
 export const panelStack = signal([]);
 export const helpOverlayOpen = signal(false);  // keyboard shortcuts help overlay
+export const teamSwitcherOpen = signal(false); // Cmd+K team quick switcher
 
 /** Open a panel from the main UI — replaces the entire stack. */
 export function openPanel(type, target) {

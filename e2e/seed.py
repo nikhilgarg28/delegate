@@ -23,6 +23,7 @@ from delegate.chat import log_event
 
 HUMAN = "testboss"  # the human member name (kept as "testboss" for test compat)
 TEAM = "testteam"
+TEAM2 = "otherteam"
 MANAGER = "edison"
 AGENTS = ["alice", "bob"]
 
@@ -33,8 +34,9 @@ def seed(hc_home: Path) -> None:
     # --- Create human member ---
     add_member(hc_home, HUMAN)
 
-    # --- Bootstrap team ---
+    # --- Bootstrap teams ---
     bootstrap(hc_home, team_name=TEAM, manager=MANAGER, agents=AGENTS)
+    bootstrap(hc_home, team_name=TEAM2, manager="charlie", agents=["dana"])
 
     # --- Create shared file for attachments ---
     shared_dir = hc_home / "teams" / TEAM / "shared" / "specs"
@@ -102,7 +104,18 @@ def seed(hc_home: Path) -> None:
     log_event(hc_home, TEAM, "Alice started working on T0001", task_id=t1["id"])
     log_event(hc_home, TEAM, "Bob assigned to T0002", task_id=t2["id"])
 
-    print(f"Seeded {hc_home} with team '{TEAM}', 3 tasks, 5 messages, 2 events")
+    # --- Second team with minimal data ---
+    t4 = create_task(
+        hc_home, TEAM2,
+        title="Setup infrastructure",
+        assignee="dana",
+        description="Set up basic infrastructure for the project.",
+        priority="high",
+    )
+    send(hc_home, TEAM2, BOSS, "charlie", "Please coordinate with dana on setup.")
+    log_event(hc_home, TEAM2, "Team created")
+
+    print(f"Seeded {hc_home} with teams '{TEAM}' and '{TEAM2}', 4 tasks total, 6 messages, 3 events")
 
 
 if __name__ == "__main__":

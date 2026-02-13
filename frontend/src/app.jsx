@@ -6,7 +6,7 @@ import {
   activeTab, knownAgentNames,
   panelStack, popPanel, closeAllPanels,
   agentLastActivity, agentActivityLog, agentTurnState, managerTurnContext,
-  helpOverlayOpen, sidebarCollapsed, bellPopoverOpen, isMuted,
+  helpOverlayOpen, sidebarCollapsed, bellPopoverOpen, isMuted, teamSwitcherOpen,
   syncFromUrl, navigate, navigateTab, taskTeamFilter,
   actionItemCount, awaySummary, getLastSeen, updateLastSeen,
   fetchWorkflows,
@@ -22,6 +22,7 @@ import { ToastContainer } from "./components/Toast.jsx";
 import { HelpOverlay } from "./components/HelpOverlay.jsx";
 import { NotificationBell } from "./components/NotificationBell.jsx";
 import { NotificationPopover } from "./components/NotificationPopover.jsx";
+import { TeamSwitcher } from "./components/TeamSwitcher.jsx";
 import { showToast, showActionToast, showReturnToast } from "./toast.js";
 
 // ── Per-team backing stores (plain objects, not signals) ──
@@ -87,6 +88,7 @@ function App() {
       const isHelpOpen = () => helpOverlayOpen.value;
 
       if (e.key === "Escape") {
+        if (teamSwitcherOpen.value) { teamSwitcherOpen.value = false; return; }
         if (bellPopoverOpen.value) { bellPopoverOpen.value = false; return; }
         if (helpOverlayOpen.value) { helpOverlayOpen.value = false; return; }
         if (panelStack.value.length > 0) { popPanel(); return; }
@@ -121,6 +123,11 @@ function App() {
         return;
       }
       if (e.key === "?" && !isInputFocused()) { helpOverlayOpen.value = !helpOverlayOpen.value; return; }
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        teamSwitcherOpen.value = !teamSwitcherOpen.value;
+        return;
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
@@ -527,6 +534,7 @@ function App() {
       <DiffPanel />
       <HelpOverlay />
       <NotificationPopover />
+      <TeamSwitcher open={teamSwitcherOpen.value} onClose={() => teamSwitcherOpen.value = false} />
       <ToastContainer />
     </>
   );

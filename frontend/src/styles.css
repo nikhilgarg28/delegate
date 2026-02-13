@@ -938,6 +938,10 @@ body {
   font-weight: 500;
   min-width: 90px;
 }
+.chat-team-select .csel-menu {
+  bottom: auto;
+  top: calc(100% + 4px);
+}
 /* ── Global select styling ── */
 select {
   appearance: none;
@@ -1759,9 +1763,9 @@ select option:hover {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--bg-active);
+  background: transparent;
   color: var(--text-secondary);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid transparent;
   border-radius: 6px;
   padding: 4px 8px 4px 10px;
   font-family: var(--font-mono);
@@ -1771,7 +1775,7 @@ select option:hover {
   white-space: nowrap;
   line-height: 1.4;
 }
-.csel-trigger:hover { border-color: var(--text-muted); color: var(--text-primary); }
+.csel-trigger:hover { border-color: var(--border-subtle); color: var(--text-primary); }
 .csel-trigger.csel-open { border-color: var(--border-focus); color: var(--text-primary); }
 .csel-chevron { flex-shrink: 0; color: var(--text-muted); transition: transform 120ms; }
 .csel-trigger.csel-open .csel-chevron { transform: rotate(180deg); }
@@ -2809,31 +2813,31 @@ select option:hover {
 .team-switcher-backdrop {
   position: fixed;
   inset: 0;
-  background: var(--backdrop-bg);
+  background: rgba(0, 0, 0, 0.2);
   z-index: 9998;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 120px;
+  padding-top: 80px;
 }
 
 .team-switcher-modal {
-  width: 560px;
+  width: 400px;
   max-width: 90%;
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
   border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   display: flex;
   flex-direction: column;
-  max-height: 480px;
+  max-height: 400px;
 }
 
 .team-switcher-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px;
+  gap: 10px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -2859,17 +2863,17 @@ select option:hover {
 .team-switcher-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 6px;
 }
 
 .team-switcher-item {
-  padding: 12px 16px;
+  padding: 10px 12px;
   border-radius: 6px;
   cursor: pointer;
   transition: background 100ms;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .team-switcher-item:hover {
@@ -2907,8 +2911,8 @@ select option:hover {
 .team-switcher-footer {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
+  gap: 12px;
+  padding: 10px 14px;
   border-top: 1px solid var(--border-subtle);
   font-size: 11px;
   color: var(--text-muted);
