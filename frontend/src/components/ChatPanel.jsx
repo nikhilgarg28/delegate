@@ -921,8 +921,8 @@ export function ChatPanel() {
       {/* Text selection tooltip */}
       <SelectionTooltip containerRef={logRef} chatInputRef={inputRef} />
 
-      {/* Chat input — Cursor-style: textarea on top, toolbar on bottom */}
-      <div class={`chat-input-box ${commandMode.value ? 'command-mode' : ''}`}>
+      {/* Command autocomplete dropdown - positioned relative to input wrapper */}
+      <div class="chat-input-wrapper">
         {commandMode.value && (
           <CommandAutocomplete
             input={inputVal}
@@ -939,7 +939,8 @@ export function ChatPanel() {
             }}
           />
         )}
-        <div class="chat-input-wrapper">
+        {/* Chat input — Cursor-style: textarea on top, toolbar on bottom */}
+        <div class={`chat-input-box ${commandMode.value ? 'command-mode' : ''}`}>
           <textarea
             ref={inputRef}
             class={!commandMode.value && inputVal && hasMarkdown(inputVal) ? "chat-input-has-overlay" : ""}
@@ -1026,6 +1027,7 @@ export function ChatPanel() {
             )}
           </button>
         </div>
+      </div>
       </div>
     </div>
   );

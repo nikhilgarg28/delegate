@@ -859,15 +859,19 @@ body {
 /* ================================================================
    Chat input — Cursor-style
    ================================================================ */
-.chat-input-box {
+/* Wrapper for chat input and autocomplete dropdown positioning */
+.chat-input-wrapper {
   position: relative; /* Anchor for command autocomplete dropdown */
+  flex-shrink: 0;
+}
+
+.chat-input-box {
   border: 1px solid var(--border-default);
   border-radius: 10px;
   background: var(--bg-elevated);
   margin: 8px 0 4px;
   display: flex;
   flex-direction: column;
-  overflow: visible; /* Allow autocomplete dropdown to appear above */
   flex-shrink: 0;
   transition: border-color 150ms;
 }

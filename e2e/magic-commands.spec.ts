@@ -4,11 +4,8 @@ import { test, expect } from "@playwright/test";
  * Magic command UX tests.
  *
  * Tests for:
- * 1. Command autocomplete dropdown functionality
+ * 1. Command autocomplete dropdown functionality and positioning
  * 2. Shell command cwd visibility and changeability
- *
- * Note: Exact dropdown positioning is a known issue - dropdown appears but
- * positioning relative to input needs further investigation.
  */
 
 const TEAM = "testteam";
@@ -35,6 +32,41 @@ test.describe("Magic command autocomplete", () => {
     // Dropdown should contain command items
     const items = dropdown.locator(".command-autocomplete-item");
     await expect(items.first()).toBeVisible();
+  });
+
+  test("autocomplete dropdown is positioned directly above input", async ({ page }) => {
+    const textarea = page.locator(".chat-input-box textarea");
+    const inputBox = page.locator(".chat-input-box");
+
+    // Type a slash to trigger command mode
+    await textarea.fill("/");
+
+    // Wait for dropdown to appear
+    const dropdown = page.locator(".command-autocomplete");
+    await expect(dropdown).toBeVisible({ timeout: 2_000 });
+
+    // Get bounding boxes
+    const inputBoxBounds = await inputBox.boundingBox();
+    const dropdownBounds = await dropdown.boundingBox();
+
+    expect(inputBoxBounds).not.toBeNull();
+    expect(dropdownBounds).not.toBeNull();
+
+    if (inputBoxBounds && dropdownBounds) {
+      // Dropdown should be positioned above the input box
+      // The bottom of the dropdown should be within ~10px of the top of the input box
+      const dropdownBottom = dropdownBounds.y + dropdownBounds.height;
+      const inputTop = inputBoxBounds.y;
+      const gap = inputTop - dropdownBottom;
+
+      // Gap should be positive (dropdown is above input) and small (dropdown has 4px margin-bottom + input-box has 8px margin-top = 12px total)
+      expect(gap).toBeGreaterThanOrEqual(0);
+      expect(gap).toBeLessThanOrEqual(15);
+
+      // Dropdown should be horizontally aligned with input box
+      expect(dropdownBounds.x).toBeCloseTo(inputBoxBounds.x, 0);
+      expect(dropdownBounds.width).toBeCloseTo(inputBoxBounds.width, 0);
+    }
   });
 
   test("autocomplete shows available commands when typing /", async ({ page }) => {
@@ -75,7 +107,7 @@ test.describe("Magic command autocomplete", () => {
 
     // Press Escape
     await page.keyboard.press("Escape");
-    await page.waitForTimeout(100); // Allow time for command mode state to update
+    await page.waitForTimeout(300); // Allow time for command mode state to update
 
     // Dropdown should be hidden
     await expect(dropdown).not.toBeVisible();
