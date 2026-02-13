@@ -2,7 +2,7 @@
 
 Commands:
     delegate doctor                                  — verify runtime dependencies
-    delegate start [--port N]                        — start delegate (web UI + agents)
+    delegate start [--port N] [--env-file .env]       — start delegate (web UI + agents)
     delegate stop                                    — stop running delegate
     delegate status                                  — check if delegate is running
     delegate team add <name> --manager M --agents a:role,b --repo /path  — create a new team
@@ -21,10 +21,6 @@ import sys
 from pathlib import Path
 
 import click
-from dotenv import load_dotenv
-
-# Load .env from CWD (or parent dirs) so ANTHROPIC_API_KEY etc. are available.
-load_dotenv()
 
 from delegate.paths import home as _home, teams_dir as _teams_dir, team_dir as _team_dir
 
@@ -72,6 +68,11 @@ def doctor() -> None:
 @click.option("--max-concurrent", type=int, default=32, help="Max concurrent agents.")
 @click.option("--token-budget", type=int, default=None, help="Default token budget per agent session.")
 @click.option("--foreground", is_flag=True, help="Run in foreground instead of background.")
+@click.option(
+    "--env-file", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to .env file to load (e.g. for ANTHROPIC_API_KEY).",
+)
 @click.pass_context
 def start(
     ctx: click.Context,
@@ -80,6 +81,7 @@ def start(
     max_concurrent: int,
     token_budget: int | None,
     foreground: bool,
+    env_file: Path | None,
 ) -> None:
     """Start delegate (web UI + agent orchestration)."""
     import webbrowser
@@ -87,6 +89,13 @@ def start(
     from delegate.daemon import start_daemon, is_running
     from delegate.doctor import run_doctor, print_doctor_report
     from delegate.fmt import success, get_auth_display, get_version
+
+    # Load env file if provided — makes vars available to this process
+    # and all child processes (daemon, agents).
+    if env_file:
+        from dotenv import load_dotenv
+        load_dotenv(env_file)
+        success(f"Loaded env file: {env_file}")
 
     hc_home = _get_home(ctx)
 

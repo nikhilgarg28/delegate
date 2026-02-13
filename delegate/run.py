@@ -15,12 +15,7 @@ import logging
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
 import uvicorn
-
-# Load .env from CWD (or parent dirs) so ANTHROPIC_API_KEY etc. are available
-# before any SDK / CLI code checks os.environ.
-load_dotenv()
 
 from delegate.mailbox import send as mailbox_send
 from delegate.bootstrap import get_member_by_role
