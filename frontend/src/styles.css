@@ -311,102 +311,29 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+.sb-agent-status {
+  color: var(--text-muted);
+  font-size: 10px;
   flex: 1;
   min-width: 0;
 }
-.sb-agent-time {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
+.sb-agent-task-id {
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  color: var(--text-secondary);
+  font-size: 10px;
   flex-shrink: 0;
 }
 
-.sb-agent-line2 {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
+.sb-agent-tool-line {
   padding-left: 14px;
-  color: var(--text-muted);
-  overflow: hidden;
-}
-.sb-agent-task {
-  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
-  color: var(--text-secondary);
-  flex-shrink: 0;
   font-size: 10px;
-}
-.sb-agent-tool {
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
-  font-size: 10px;
-}
-
-/* Task row */
-.sb-task-row {
-  display: flex;
-  flex-direction: column;
-  padding: 5px 4px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 100ms;
-}
-.sb-task-row:hover { background: var(--bg-hover); }
-
-.sb-task-line1 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-}
-.sb-task-id {
-  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-.sb-task-title {
-  color: var(--text-secondary);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-}
-.sb-task-time {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-
-.sb-task-line2 {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  padding-left: 14px;
-  color: var(--text-muted);
-  overflow: hidden;
-}
-.sb-task-assignee {
-  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-  font-size: 10px;
-}
-.sb-task-tool {
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
-  font-size: 10px;
 }
 
 /* Team selector */

@@ -5,7 +5,7 @@ import {
   currentTeam, teams, bossName, hcHome, tasks, agents, agentStatsMap, messages,
   activeTab, knownAgentNames,
   panelStack, popPanel, closeAllPanels,
-  agentLastActivity, agentActivityLog, managerTurnContext,
+  agentLastActivity, agentActivityLog, agentTurnState, managerTurnContext,
   helpOverlayOpen, sidebarCollapsed,
   syncFromUrl, navigate, navigateTab,
 } from "./state.js";
@@ -29,6 +29,7 @@ const _pt = {
   activityLog: {},   // team → [entry, …]
   managerCtx:  {},   // team → ctx | null
   managerName: {},   // team → managerAgentName | null
+  turnState:   {},   // team → { agentName: { inTurn: bool, taskId: num|null } }
 };
 const MAX_LOG_ENTRIES = 500;
 
@@ -49,6 +50,7 @@ function _syncSignals(team) {
     batch(() => {
       agentLastActivity.value  = _pt.activity[t]    ? { ..._pt.activity[t] }    : {};
       agentActivityLog.value   = _pt.activityLog[t] ? [..._pt.activityLog[t]] : [];
+      agentTurnState.value     = _pt.turnState[t]   ? { ..._pt.turnState[t] }   : {};
       managerTurnContext.value = _pt.managerCtx[t]  ?? null;
     });
   });
@@ -61,6 +63,7 @@ function _syncSignalsNow(team) {
   batch(() => {
     agentLastActivity.value  = _pt.activity[team]    ? { ..._pt.activity[team] }    : {};
     agentActivityLog.value   = _pt.activityLog[team] ? [..._pt.activityLog[team]] : [];
+    agentTurnState.value     = _pt.turnState[team]   ? { ..._pt.turnState[team] }   : {};
     managerTurnContext.value = _pt.managerCtx[team]  ?? null;
   });
 }
@@ -233,6 +236,7 @@ function App() {
       // Ensure backing store slots exist
       if (!_pt.activity[team])    _pt.activity[team]    = {};
       if (!_pt.activityLog[team]) _pt.activityLog[team] = [];
+      if (!_pt.turnState[team])   _pt.turnState[team]   = {};
 
       // Fetch manager name for this team (one-time, best-effort)
       if (_pt.managerName[team] === undefined) {
@@ -253,21 +257,40 @@ function App() {
 
           // ── turn_started ──
           if (entry.type === "turn_started") {
+            // Track turn state for all agents
+            if (!_pt.turnState[team]) _pt.turnState[team] = {};
+            _pt.turnState[team][entry.agent] = {
+              inTurn: true,
+              taskId: entry.task_id ?? null
+            };
+
             const mgrName = _pt.managerName[team];
             if (mgrName && mgrName === entry.agent) {
               _pt.managerCtx[team] = entry;
               if (isCurrent) managerTurnContext.value = entry;
             }
+
+            if (isCurrent) _syncSignals(team);
             return;
           }
 
           // ── turn_ended ──
           if (entry.type === "turn_ended") {
+            // Update turn state for all agents
+            if (_pt.turnState[team] && _pt.turnState[team][entry.agent]) {
+              _pt.turnState[team][entry.agent] = {
+                inTurn: false,
+                taskId: _pt.turnState[team][entry.agent].taskId
+              };
+            }
+
             const ctx = _pt.managerCtx[team];
             if (ctx && ctx.agent === entry.agent) {
               _pt.managerCtx[team] = null;
               if (isCurrent) managerTurnContext.value = null;
             }
+
+            if (isCurrent) _syncSignals(team);
             return;
           }
 

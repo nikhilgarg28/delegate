@@ -121,6 +121,8 @@ export const expandedMessages = signal(new Set());
 export const agentLastActivity = signal({});
 // Full activity stream for the activity tab in agent side panel
 export const agentActivityLog = signal([]); // [{agent, tool, detail, timestamp}]
+// Agent turn state: { agentName: { inTurn: boolean, taskId: number|null } }
+export const agentTurnState = signal({});
 
 // ── Manager turn context (ephemeral turn lifecycle state) ──
 // {agent, task_id, sender, timestamp} or null — indicates an active turn

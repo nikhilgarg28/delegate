@@ -2,12 +2,11 @@ import { useState, useCallback, useEffect, useRef } from "preact/hooks";
 import {
   currentTeam, teams, tasks, agents, agentStatsMap,
   activeTab, openPanel,
-  agentLastActivity, sidebarCollapsed,
+  agentLastActivity, agentActivityLog, agentTurnState, sidebarCollapsed,
   navigate, navigateTab,
 } from "../state.js";
 import {
-  cap, fmtStatus, fmtRelativeTimeShort,
-  taskTier, taskIdStr, getAgentDotClass, getAgentDotTooltip,
+  cap, taskIdStr, getAgentDotClass,
 } from "../utils.js";
 
 // ── SVG Icons ──
@@ -130,49 +129,58 @@ function TeamSelector() {
 }
 
 // ── Agent widget ──
-const MAX_AGENTS = 6;
 function AgentsWidget({ collapsed }) {
   const allAgents = agents.value;
   const allTasks = tasks.value;
   const statsMap = agentStatsMap.value;
+  const turnState = agentTurnState.value;
+  const activityLog = agentActivityLog.value;
 
-  const sorted = [...allAgents].sort((a, b) => {
-    const aOn = a.pid ? 0 : 1;
-    const bOn = b.pid ? 0 : 1;
-    if (aOn !== bOn) return aOn - bOn;
-    return (a.name || "").localeCompare(b.name || "");
-  }).slice(0, MAX_AGENTS);
+  if (collapsed || !allAgents.length) return null;
 
-  if (collapsed || !sorted.length) return null;
+  // Compute status and sort agents
+  const agentsWithStatus = allAgents.map(a => {
+    const turn = turnState[a.name];
+    const inTurn = turn?.inTurn ?? false;
+    const lastTaskId = turn?.taskId ?? null;
+    const assignedTask = allTasks.find(t => t.assignee === a.name && t.status === "in_progress");
+
+    let status = "idle";
+    let displayTaskId = null;
+
+    if (inTurn) {
+      status = "working";
+      // Show task ID only if it's still assigned to this agent
+      if (lastTaskId && assignedTask && assignedTask.id === lastTaskId) {
+        displayTaskId = lastTaskId;
+      }
+    } else if (assignedTask) {
+      status = "waiting";
+      displayTaskId = assignedTask.id;
+    }
+
+    return { agent: a, status, displayTaskId };
+  });
+
+  // Sort: active (working first, then waiting) at top, idle at bottom, alphabetically within groups
+  const sorted = [...agentsWithStatus].sort((a, b) => {
+    const statusOrder = { working: 0, waiting: 1, idle: 2 };
+    const aOrder = statusOrder[a.status];
+    const bOrder = statusOrder[b.status];
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return (a.agent.name || "").localeCompare(b.agent.name || "");
+  });
 
   return (
     <div class="sb-widget">
       <div class="sb-widget-header">Agents</div>
-      {sorted.map(a => {
+      {sorted.map(({ agent: a, status, displayTaskId }) => {
         const dotClass = getAgentDotClass(a, allTasks, statsMap[a.name]);
-        const currentTask = allTasks.find(t => t.assignee === a.name && t.status === "in_progress");
-        const lastAct = agentLastActivity.value[a.name];
 
-        // Last check-in time
-        let lastTime = "";
-        const assignedTask = allTasks.find(t => t.assignee === a.name);
-        if (assignedTask && assignedTask.updated_at) {
-          lastTime = fmtRelativeTimeShort(assignedTask.updated_at);
-        }
-
-        // Second line: task + last tool
-        let line2 = null;
-        if (currentTask) {
-          const toolStr = lastAct && lastAct.tool
-            ? ` \u00b7 ${lastAct.tool.toLowerCase()}${lastAct.detail ? ": " + lastAct.detail.split("/").pop().substring(0, 24) : ""}`
-            : "";
-          line2 = (
-            <div class="sb-agent-line2">
-              <span class="sb-agent-task">{taskIdStr(currentTask.id)}</span>
-              {toolStr && <span class="sb-agent-tool">{toolStr}</span>}
-            </div>
-          );
-        }
+        // Get last 2 tool invocations for this agent
+        const agentActivities = activityLog
+          .filter(entry => entry.agent === a.name && entry.type === "agent_activity")
+          .slice(-2);
 
         return (
           <div
@@ -183,9 +191,17 @@ function AgentsWidget({ collapsed }) {
             <div class="sb-agent-line1">
               <span class={"sb-dot " + dotClass}></span>
               <span class="sb-agent-name">{cap(a.name)}</span>
-              {lastTime && <span class="sb-agent-time">{lastTime}</span>}
+              <span class="sb-agent-status">{status}</span>
+              {displayTaskId && <span class="sb-agent-task-id">{taskIdStr(displayTaskId)}</span>}
             </div>
-            {line2}
+            {agentActivities.map((act, idx) => {
+              const toolDetail = act.tool
+                ? `${act.tool.toLowerCase()}${act.detail ? ": " + act.detail.split("/").pop().substring(0, 24) : ""}`
+                : "";
+              return toolDetail ? (
+                <div key={idx} class="sb-agent-tool-line">{toolDetail}</div>
+              ) : null;
+            })}
           </div>
         );
       })}
@@ -193,57 +209,6 @@ function AgentsWidget({ collapsed }) {
   );
 }
 
-// ── Task widget ──
-const MAX_TASKS = 6;
-function TasksWidget({ collapsed }) {
-  const allTasks = tasks.value;
-
-  const eligible = allTasks.filter(t => t.status !== "rejected" && t.status !== "cancelled");
-  const tier0 = eligible.filter(t => taskTier(t) === 0).sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
-  const tier1 = eligible.filter(t => taskTier(t) === 1).sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
-  const tier2 = eligible.filter(t => taskTier(t) === 2).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
-  const tier3 = eligible.filter(t => taskTier(t) === 3).sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || "")).slice(0, 3);
-  const sorted = [...tier0, ...tier1, ...tier2, ...tier3].slice(0, MAX_TASKS);
-
-  if (collapsed || !sorted.length) return null;
-
-  return (
-    <div class="sb-widget">
-      <div class="sb-widget-header">Tasks</div>
-      {sorted.map(t => {
-        const lastAct = t.assignee ? agentLastActivity.value[t.assignee] : null;
-        let line2 = null;
-        if (t.assignee && t.status === "in_progress") {
-          const toolStr = lastAct && lastAct.tool
-            ? ` \u00b7 ${lastAct.tool.toLowerCase()}${lastAct.detail ? ": " + lastAct.detail.split("/").pop().substring(0, 24) : ""}`
-            : "";
-          line2 = (
-            <div class="sb-task-line2">
-              <span class="sb-task-assignee">{cap(t.assignee)}</span>
-              {toolStr && <span class="sb-task-tool">{toolStr}</span>}
-            </div>
-          );
-        }
-
-        return (
-          <div
-            key={t.id}
-            class="sb-task-row"
-            onClick={() => { openPanel("task", t.id); }}
-          >
-            <div class="sb-task-line1">
-              <span class={"sb-dot dot-" + t.status}></span>
-              <span class="sb-task-id">{taskIdStr(t.id)}</span>
-              <span class="sb-task-title">{t.title}</span>
-              <span class="sb-task-time">{t.updated_at ? fmtRelativeTimeShort(t.updated_at) : ""}</span>
-            </div>
-            {line2}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 // ── Main Sidebar ──
 export function Sidebar() {
@@ -288,7 +253,6 @@ export function Sidebar() {
       {/* Widgets */}
       <div class="sb-widgets">
         <AgentsWidget collapsed={collapsed} />
-        <TasksWidget collapsed={collapsed} />
       </div>
 
       {/* Team selector at bottom */}
