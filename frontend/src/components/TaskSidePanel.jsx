@@ -383,6 +383,8 @@ function ChangesTab({ task, diffRaw, currentReview, oldComments, stats }) {
   const t = task;
   const isReviewable = t && t.status === "in_approval";
 
+  if (diffRaw === null) return <div class="diff-empty">Loading changes...</div>;
+
   const files = useMemo(() => diffRaw ? diff2HtmlParse(diffRaw) : [], [diffRaw]);
   let totalAdd = 0, totalDel = 0;
   for (const f of files) { totalAdd += f.addedLines; totalDel += f.deletedLines; }
@@ -652,7 +654,7 @@ export function TaskSidePanel() {
   // Track which tabs have been visited — only mount a tab's component
   // after the user first navigates to it (lazy rendering).
   const [visitedTabs, setVisitedTabs] = useState({ overview: true });
-  const [diffRaw, setDiffRaw] = useState("");
+  const [diffRaw, setDiffRaw] = useState(null);
   const [diffLoaded, setDiffLoaded] = useState(false);
   const [mergePreviewRaw, setMergePreviewRaw] = useState("");
   const [mergePreviewLoaded, setMergePreviewLoaded] = useState(false);
@@ -675,7 +677,7 @@ export function TaskSidePanel() {
     // ── Restore from cache (instant) ──
     const c = _getCache(team, id);
     setStats(c.stats ?? null);
-    setDiffRaw(c.diffRaw ?? "");
+    setDiffRaw(c.diffRaw ?? null);
     setDiffLoaded(!!c.diffRaw);
     setMergePreviewRaw(c.mergePreviewRaw ?? "");
     setMergePreviewLoaded(!!c.mergePreviewRaw);
