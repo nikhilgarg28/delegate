@@ -63,7 +63,7 @@ _TASK_FIELDS = frozenset({
     "completed_at", "depends_on", "branch", "base_sha",
     "rejection_reason", "approval_status", "merge_base", "merge_tip",
     "attachments", "review_attempt", "status_detail", "merge_attempts",
-    "workflow", "workflow_version",
+    "workflow", "workflow_version", "metadata",
 })
 
 
@@ -95,8 +95,9 @@ def create_task(
     depends_on: list[int] | None = None,
     repo: str | list[str] = "",
     tags: list[str] | None = None,
-    workflow_name: str = "standard",
+    workflow_name: str = "default",
     workflow_version: int | None = None,
+    metadata: dict | None = None,
 ) -> dict:
     """Create a new task. Returns the task dict with assigned ID.
 
@@ -108,9 +109,13 @@ def create_task(
     *tags* is an optional free-form list of string labels (e.g.
     ``["bugfix", "frontend"]``).
 
-    *workflow_name* specifies which workflow this task follows (default: "standard").
+    *workflow_name* specifies which workflow this task follows (default: "default").
     *workflow_version* stamps a specific version; if None, uses the latest
     registered version for the team (or 1 as fallback).
+
+    *metadata* is an optional free-form dict for user/workflow-specific data.
+    The core Delegate system never reads this field — it is exclusively for
+    workflows, integrations, and user-defined extensions.
     """
     if not assignee or not assignee.strip():
         raise ValueError("Assignee/DRI is required when creating a task")
@@ -140,14 +145,14 @@ def create_task(
                 created_at, updated_at, completed_at,
                 depends_on, branch, base_sha, commits,
                 rejection_reason, approval_status, merge_base, merge_tip, team,
-                workflow, workflow_version
+                workflow, workflow_version, metadata
             ) VALUES (
                 ?, ?, 'todo', ?, ?,
                 ?, ?, ?, ?,
                 ?, ?, '',
                 ?, '', '{}', '{}',
                 '', '', '{}', '{}', ?,
-                ?, ?
+                ?, ?, ?
             )""",
             (
                 title, description, assignee, assignee,
@@ -158,6 +163,7 @@ def create_task(
                 json.dumps([int(d) for d in depends_on] if depends_on else []),
                 team,
                 workflow_name, workflow_version,
+                json.dumps(metadata or {}),
             ),
         )
         conn.commit()
@@ -238,8 +244,8 @@ def update_task(hc_home: Path, team: str, task_id: int, **updates) -> dict:
             params.append(json.dumps([str(x) for x in value] if value else []))
         elif key == "attachments":
             params.append(json.dumps([str(x) for x in value] if value else []))
-        elif key in ("commits", "base_sha", "merge_base", "merge_tip"):
-            # Dict columns keyed by repo name
+        elif key in ("commits", "base_sha", "merge_base", "merge_tip", "metadata"):
+            # Dict columns — keyed by repo name or free-form (metadata)
             if isinstance(value, dict):
                 params.append(json.dumps(value))
             else:
@@ -485,7 +491,7 @@ def change_status(hc_home: Path, team: str, task_id: int, status: str, suppress_
             wf_def = None
 
     if wf_def:
-        from delegate.lib import Context
+        from delegate.workflows.core import Context
         ctx = Context(hc_home, team, old_task)
 
         # 1. Exit hook on old stage
@@ -543,7 +549,7 @@ def change_status(hc_home: Path, team: str, task_id: int, status: str, suppress_
     # ── Workflow assign hook ──
     if wf_def and status in wf_def.stage_map:
         try:
-            from delegate.lib import Context
+            from delegate.workflows.core import Context
             ctx = Context(hc_home, team, task)
             new_stage = wf_def.stage_map[status]()
             new_assignee = new_stage.assign(ctx)

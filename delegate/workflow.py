@@ -351,8 +351,8 @@ def workflow(name: str, version: int):
 
     The decorated function must return a list of Stage subclasses::
 
-        @workflow(name="standard", version=1)
-        def standard():
+        @workflow(name="default", version=1)
+        def default():
             return [Todo, InProgress, InReview, Approved, Merging, Done, Cancelled]
 
     The workflow is validated and stored in the module-level registry.

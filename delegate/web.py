@@ -251,7 +251,7 @@ def _process_auto_stages(hc_home: Path, team: str) -> None:
     """
     from delegate.task import list_tasks, change_status, format_task_id, get_task
     from delegate.workflow import load_workflow_cached, ActionError
-    from delegate.lib import Context
+    from delegate.workflows.core import Context
     from delegate.chat import log_event
 
     try:

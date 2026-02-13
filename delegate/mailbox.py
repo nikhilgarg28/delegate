@@ -98,7 +98,9 @@ def send(
     Returns the message id.
     """
     # Soft validation: warn when non-human messages lack task_id
-    if task_id is None:
+    # System user messages are always valid (automated events).
+    from delegate.config import SYSTEM_USER
+    if task_id is None and sender != SYSTEM_USER and recipient != SYSTEM_USER:
         try:
             from delegate.config import get_default_human
             human = get_default_human(hc_home)

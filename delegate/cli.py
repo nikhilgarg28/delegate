@@ -18,7 +18,7 @@ Commands:
     delegate workflow list <team>                    — list workflows for a team
     delegate workflow show <team> <name>             — show workflow details/graph
     delegate workflow update-actions <team> <name> <path> — update workflow actions
-    delegate workflow init <team>                    — register built-in standard workflow
+    delegate workflow init <team>                    — register built-in default workflow
     delegate self-update                             — update delegate from source repo
 """
 
@@ -106,10 +106,15 @@ def start(
     hc_home = _get_home(ctx)
 
     # Migrate legacy boss config → members/ (one-time)
-    from delegate.config import migrate_boss_to_member
+    from delegate.config import migrate_boss_to_member, migrate_standard_to_default_workflow
     migrated = migrate_boss_to_member(hc_home)
     if migrated:
         success(f"Migrated legacy boss '{migrated}' to members/")
+
+    # Migrate standard → default workflow (one-time)
+    wf_migrated = migrate_standard_to_default_workflow(hc_home)
+    if wf_migrated:
+        success(f"Migrated {wf_migrated} team(s) from 'standard' to 'default' workflow")
 
     # Run doctor check first — suppress output if all checks pass
     checks = run_doctor()
@@ -290,13 +295,13 @@ def team_create(
 
     success(f"Created team '{name}'")
 
-    # Register the built-in standard workflow
+    # Register the built-in default workflow
     try:
         from delegate.workflow import register_workflow, get_latest_version
-        builtin = Path(__file__).parent / "workflows" / "standard.py"
-        if builtin.is_file() and get_latest_version(hc_home, name, "standard") is None:
+        builtin = Path(__file__).parent / "workflows" / "default.py"
+        if builtin.is_file() and get_latest_version(hc_home, name, "default") is None:
             register_workflow(hc_home, name, builtin)
-            success("Registered default workflow: standard v1")
+            success("Registered default workflow: default v1")
     except Exception as exc:
         from delegate.fmt import warn
         warn(f"Could not register default workflow: {exc}")
@@ -749,7 +754,7 @@ def workflow_add(ctx: click.Context, team_name: str, path: Path) -> None:
     any existing version for that workflow name.
 
     Example:
-        delegate workflow add myteam ./pipelines/standard.py
+        delegate workflow add myteam ./pipelines/my-workflow.py
     """
     from delegate.workflow import register_workflow
     from delegate.fmt import success
@@ -846,7 +851,7 @@ def workflow_update_actions(ctx: click.Context, team_name: str, name: str, actio
 @click.argument("team_name")
 @click.pass_context
 def workflow_init(ctx: click.Context, team_name: str) -> None:
-    """Register the built-in 'standard' workflow for a team.
+    """Register the built-in 'default' workflow for a team.
 
     This copies the default workflow shipped with Delegate into the
     team's workflows directory.  Safe to re-run.
@@ -857,15 +862,15 @@ def workflow_init(ctx: click.Context, team_name: str) -> None:
     hc_home = _get_home(ctx)
 
     # Check if already registered
-    current = get_latest_version(hc_home, team_name, "standard")
+    current = get_latest_version(hc_home, team_name, "default")
     if current is not None:
-        info(f"Workflow 'standard' v{current} already registered for team '{team_name}'")
+        info(f"Workflow 'default' v{current} already registered for team '{team_name}'")
         return
 
-    # Find the built-in standard.py
-    builtin = Path(__file__).parent / "workflows" / "standard.py"
+    # Find the built-in default.py
+    builtin = Path(__file__).parent / "workflows" / "default.py"
     if not builtin.is_file():
-        raise click.ClickException(f"Built-in standard workflow not found at {builtin}")
+        raise click.ClickException(f"Built-in default workflow not found at {builtin}")
 
     try:
         wf = register_workflow(hc_home, team_name, builtin)

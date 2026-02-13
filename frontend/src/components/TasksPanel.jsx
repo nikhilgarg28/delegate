@@ -113,7 +113,7 @@ export function TasksPanel() {
     }
 
     // Use workflow stages if available, otherwise fall back to hardcoded
-    const wfStages = getWorkflowStages(team, "standard");
+    const wfStages = getWorkflowStages(team, "default");
     const statusOpts = wfStages
       ? wfStages.map(s => s.key)
       : FALLBACK_STATUS_OPTIONS;

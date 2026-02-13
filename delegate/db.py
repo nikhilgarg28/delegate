@@ -439,9 +439,15 @@ CREATE INDEX IF NOT EXISTS idx_task_comments_team_task_id ON task_comments(team,
 
     # --- V13: Workflow columns on tasks ---
     """\
-ALTER TABLE tasks ADD COLUMN workflow TEXT NOT NULL DEFAULT 'standard';
+ALTER TABLE tasks ADD COLUMN workflow TEXT NOT NULL DEFAULT 'default';
 ALTER TABLE tasks ADD COLUMN workflow_version INTEGER NOT NULL DEFAULT 1;
 CREATE INDEX IF NOT EXISTS idx_tasks_workflow ON tasks(workflow);
+""",
+
+    # --- V14: Free-form metadata JSON on tasks + rename standard→default workflow ---
+    """\
+ALTER TABLE tasks ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}';
+UPDATE tasks SET workflow = 'default' WHERE workflow = 'standard';
 """,
 ]
 
@@ -449,7 +455,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_workflow ON tasks(workflow);
 _JSON_LIST_COLUMNS = frozenset({"tags", "depends_on", "attachments", "repo"})
 
 # Columns that store JSON dicts (keyed by repo name for multi-repo).
-_JSON_DICT_COLUMNS = frozenset({"commits", "base_sha", "merge_base", "merge_tip"})
+_JSON_DICT_COLUMNS = frozenset({"commits", "base_sha", "merge_base", "merge_tip", "metadata"})
 
 # Union of both — kept for external callers.
 _JSON_COLUMNS = _JSON_LIST_COLUMNS | _JSON_DICT_COLUMNS

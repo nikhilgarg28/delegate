@@ -9,6 +9,7 @@ Schema is managed by ``delegate.db`` — this module only reads/writes data.
 import argparse
 from pathlib import Path
 
+from delegate.config import SYSTEM_USER
 from delegate.db import get_connection
 
 
@@ -16,8 +17,8 @@ def log_event(hc_home: Path, team: str, description: str, *, task_id: int | None
     """Log a system event. Returns the event ID."""
     conn = get_connection(hc_home, team)
     cursor = conn.execute(
-        "INSERT INTO messages (sender, recipient, content, type, task_id, team) VALUES ('system', 'system', ?, 'event', ?, ?)",
-        (description, task_id, team),
+        "INSERT INTO messages (sender, recipient, content, type, task_id, team) VALUES (?, ?, ?, 'event', ?, ?)",
+        (SYSTEM_USER, SYSTEM_USER, description, task_id, team),
     )
     conn.commit()
     msg_id = cursor.lastrowid

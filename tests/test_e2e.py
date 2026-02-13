@@ -306,8 +306,8 @@ class TestUniquenessEnforcement:
             bootstrap(hc, team_name="gamma", manager="alice", agents=["alice"])
 
     def test_boss_name_as_agent_rejected(self, hc):
-        """Cannot use the boss's name as an agent name."""
-        with pytest.raises(ValueError, match="conflicts with.*boss"):
+        """Cannot use the human member's name as an agent name."""
+        with pytest.raises(ValueError, match="conflicts with.*human member"):
             bootstrap(hc, team_name="gamma", manager=DIRECTOR, agents=["dave"])
 
     def test_same_name_across_teams_accepted(self, hc):

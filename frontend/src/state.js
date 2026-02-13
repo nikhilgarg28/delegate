@@ -143,7 +143,7 @@ export async function fetchWorkflows(team) {
 export function getStageLabel(team, workflowName, stageKey) {
   const teamWfs = teamWorkflows.value[team];
   if (teamWfs) {
-    const wf = teamWfs[workflowName || "standard"];
+    const wf = teamWfs[workflowName || "default"];
     if (wf) {
       const stage = wf.stages.find(s => s.key === stageKey);
       if (stage) return stage.label;
@@ -157,7 +157,7 @@ export function getStageLabel(team, workflowName, stageKey) {
 export function getWorkflowStages(team, workflowName) {
   const teamWfs = teamWorkflows.value[team];
   if (teamWfs) {
-    const wf = teamWfs[workflowName || "standard"];
+    const wf = teamWfs[workflowName || "default"];
     if (wf) return wf.stages;
   }
   return null; // null = use hardcoded fallback
@@ -187,7 +187,7 @@ export const managerTurnContext = signal(null);
 
 // ── Computed helpers ──
 // Terminal statuses (tasks that are "done" from a workflow perspective).
-// This set is updated when workflows load; defaults to the standard workflow.
+// This set is updated when workflows load; defaults to the default workflow.
 const _terminalStatuses = new Set(["done", "cancelled"]);
 
 export const actionItems = computed(() => {

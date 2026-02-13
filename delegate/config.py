@@ -11,6 +11,17 @@ import yaml
 
 from delegate.paths import config_path, team_dir, members_dir, member_path
 
+# ---------------------------------------------------------------------------
+# Well-known identities
+# ---------------------------------------------------------------------------
+
+SYSTEM_USER = "system"
+"""The system user identity — used for automated actions, merge outcomes,
+status transitions, CI/CD integrations, and other non-human/non-agent events.
+
+Not a real member; hardcoded as recognised everywhere (routing, display, etc.).
+Messages from ``system`` are informational events, never routed to an inbox.
+"""
 
 # ---------------------------------------------------------------------------
 # Global config (config.yaml)
@@ -49,6 +60,31 @@ def migrate_boss_to_member(hc_home: Path) -> str | None:
         return None  # nothing to migrate
     add_member(hc_home, legacy_name)
     return legacy_name
+
+
+def migrate_standard_to_default_workflow(hc_home: Path) -> int:
+    """One-time migration: rename on-disk ``workflows/standard/`` dirs to
+    ``workflows/default/`` for each team.
+
+    The DB-level rename (``workflow = 'standard'`` → ``'default'``) is handled
+    by migration V14 in ``db.py``.  This function handles the filesystem side.
+
+    Returns the number of teams migrated.
+    """
+    teams_root = hc_home / "teams"
+    if not teams_root.is_dir():
+        return 0
+
+    migrated = 0
+    for team_dir in teams_root.iterdir():
+        if not team_dir.is_dir():
+            continue
+        old = team_dir / "workflows" / "standard"
+        new = team_dir / "workflows" / "default"
+        if old.is_dir() and not new.exists():
+            old.rename(new)
+            migrated += 1
+    return migrated
 
 
 def get_human_members(hc_home: Path) -> list[dict]:

@@ -19,7 +19,7 @@ import uvicorn
 
 from delegate.mailbox import send as mailbox_send
 from delegate.bootstrap import get_member_by_role
-from delegate.config import get_default_human, migrate_boss_to_member
+from delegate.config import get_default_human, migrate_boss_to_member, migrate_standard_to_default_workflow
 from delegate.logging_setup import configure_logging
 
 logger = logging.getLogger("daemon")
@@ -55,6 +55,11 @@ def main():
     migrated = migrate_boss_to_member(hc_home)
     if migrated:
         logger.info("Migrated legacy boss '%s' to members/", migrated)
+
+    # --- Migrate standard → default workflow (one-time) ---
+    wf_migrated = migrate_standard_to_default_workflow(hc_home)
+    if wf_migrated:
+        logger.info("Migrated %d team(s) from 'standard' to 'default' workflow", wf_migrated)
 
     # --- Send kick message (once, before uvicorn spawns workers) ---
     if args.kick:

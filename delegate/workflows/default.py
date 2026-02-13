@@ -1,4 +1,4 @@
-"""Standard software development workflow.
+"""Default software development workflow.
 
 This is the default workflow shipped with Delegate.  It replicates the
 original hardcoded task lifecycle:
@@ -11,10 +11,13 @@ With branches for rejection (→ in_progress), merge failure
 Usage:
     Register for a team automatically on ``team add`` or manually::
 
-        delegate workflow add myteam delegate/workflows/standard.py
+        delegate workflow add myteam delegate/workflows/default.py
 """
 
 from delegate.workflow import Stage, workflow
+
+# Import git mixin so ctx gets git methods
+import delegate.workflows.git  # noqa: F401
 
 
 # ── Stages ────────────────────────────────────────────────────
@@ -186,8 +189,8 @@ class Error(Stage):
 
 # ── Workflow registration ─────────────────────────────────────
 
-@workflow(name="standard", version=1)
-def standard():
+@workflow(name="default", version=1)
+def default():
     return [
         Todo,
         InProgress,
