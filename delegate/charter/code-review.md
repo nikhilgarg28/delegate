@@ -12,8 +12,8 @@ All work on feature branches: `delegate/<team_id>/<team>/T<NNNN>` (e.g., `delega
 
 1. Agent completes work → sets task to `in_review`. Manager reassigns to a peer reviewer.
 2. Reviewer reviews diff (base_sha → branch tip), runs tests, checks quality.
-3. Approved → `in_approval`, manager reassigns to boss. Rejected → `in_progress`, manager reassigns to DRI with feedback.
-4. Boss approves (manual) or auto-merge (auto repos).
+3. Approved → `in_approval`, manager reassigns to human. Rejected → `in_progress`, manager reassigns to DRI with feedback.
+4. Human approves (manual) or auto-merge (auto repos).
 5. Merge worker rebases onto main, runs tests. Conflicts → task becomes `merge_failed`, manager notified.
 6. Clean rebase + tests pass → fast-forward merge → `done`, worktree cleaned up.
 

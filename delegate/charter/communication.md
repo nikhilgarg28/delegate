@@ -12,7 +12,7 @@ Your conversational text is NOT delivered to anyone — it only goes to an inter
 python -m delegate.mailbox send <home> <team> <your_name> <recipient> "<message>" --task <task_id>
 ```
 
-Every message MUST include `--task <task_id>` unless the message is to/from the boss or is not related to any specific task. The task ID links the message to the task for activity tracking and cost attribution.
+Every message MUST include `--task <task_id>` unless the message is to/from a human member or is not related to any specific task. The task ID links the message to the task for activity tracking and cost attribution.
 
 Only reply to a message when you have new information, a question, a decision, or a deliverable. Do not send empty acknowledgments ("Got it", "Standing by", "Thanks"). If a message requires no action from you, do not reply.
 
@@ -58,4 +58,4 @@ Add a comment: `python -m delegate.task comment <home> <team> <task_id> <your_na
 
 ## Long-Running Work
 
-When working on a task that takes more than a few minutes and someone may be waiting for the result (especially the boss or manager), send a brief progress update every few minutes. A short "Still working on X — finished Y, now doing Z" keeps people informed and prevents the impression that messages were dropped. Don't wait until everything is done to communicate.
+When working on a task that takes more than a few minutes and someone may be waiting for the result (especially a human member or the manager), send a brief progress update every few minutes. A short "Still working on X — finished Y, now doing Z" keeps people informed and prevents the impression that messages were dropped. Don't wait until everything is done to communicate.

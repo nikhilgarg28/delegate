@@ -16,7 +16,7 @@ Agents don't merge their own branches. To merge:
 
 1. Agent sets the task status to `in_review`. Manager reassigns to a peer reviewer.
 2. Reviewer creates a worktree, runs a quick smoke test — does it start, does the happy path work?
-3. If approved: task moves to `in_approval`. Auto-merge or boss approval depending on repo settings.
+3. If approved: task moves to `in_approval`. Auto-merge or human approval depending on repo settings.
 4. Merge worker rebases onto main, runs tests, fast-forward merges. On failure, task becomes `merge_failed` and manager is notified.
 
 ## Review Standards
