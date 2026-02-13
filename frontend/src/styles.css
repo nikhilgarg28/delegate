@@ -311,6 +311,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 0;
+  width: 56px;
   cursor: pointer;
 }
 .sb-agent-name:hover {
@@ -321,7 +322,7 @@ body {
   font-size: 10px;
   flex: 1;
   min-width: 0;
-  text-align: right;
+  text-align: left;
 }
 .sb-agent-task-link {
   font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
