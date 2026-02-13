@@ -36,10 +36,22 @@ export function ManagerActivityBar() {
     return <div class="manager-activity-bar" />;
   }
 
-  // --- Context: <Manager> | TNNN  or  <Manager> → <Sender> ---
+  // --- Context: <Manager> | TNNN  or  <Manager> → <Sender>  or  <Manager> → <Sender> | TNNN ---
   const managerName = cap(turnCtx.agent);
   let context;
-  if (turnCtx.task_id != null) {
+  if (turnCtx.task_id != null && turnCtx.sender) {
+    // Combined format: Name -> Sender | TXXX
+    context = (
+      <>
+        <span class="mgr-name">{managerName}</span>
+        <span class="mgr-sep"> → </span>
+        <span class="mgr-sender">{cap(turnCtx.sender)}</span>
+        <span class="mgr-sep"> | </span>
+        <span class="mgr-task">{taskIdStr(turnCtx.task_id)}</span>
+      </>
+    );
+  } else if (turnCtx.task_id != null) {
+    // Task only: Name | TXXX
     context = (
       <>
         <span class="mgr-name">{managerName}</span>
@@ -48,6 +60,7 @@ export function ManagerActivityBar() {
       </>
     );
   } else {
+    // Sender only: Name → Sender
     context = (
       <>
         <span class="mgr-name">{managerName}</span>
