@@ -38,35 +38,21 @@ function panelTitle(entry, allTasks) {
 }
 
 // ── Event delegation for linked content ──
+// Uses onClick prop (not useEffect+addEventListener) to avoid broken
+// commit-phase hook scheduling with @preact/signals v2.
 function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
-  const internalRef = useRef();
+  const handler = useCallback((e) => {
+    const copyBtn = e.target.closest(".copy-btn");
+    if (copyBtn) { e.stopPropagation(); e.preventDefault(); handleCopyClick(copyBtn); return; }
+    const taskLink = e.target.closest("[data-task-id]");
+    if (taskLink) { e.stopPropagation(); pushPanel("task", parseInt(taskLink.dataset.taskId, 10)); return; }
+    const agentLink = e.target.closest("[data-agent-name]");
+    if (agentLink) { e.stopPropagation(); pushPanel("agent", agentLink.dataset.agentName); return; }
+    const fileLink = e.target.closest("[data-file-path]");
+    if (fileLink) { e.stopPropagation(); pushPanel("file", fileLink.dataset.filePath); return; }
+  }, []);
 
-  const setRefs = useCallback((el) => {
-    internalRef.current = el;
-    if (externalRef) {
-      if (typeof externalRef === 'function') externalRef(el);
-      else externalRef.current = el;
-    }
-  }, [externalRef]);
-
-  useEffect(() => {
-    if (!internalRef.current) return;
-    const el = internalRef.current;
-    const handler = (e) => {
-      const copyBtn = e.target.closest(".copy-btn");
-      if (copyBtn) { e.stopPropagation(); e.preventDefault(); handleCopyClick(copyBtn); return; }
-      const taskLink = e.target.closest("[data-task-id]");
-      if (taskLink) { e.stopPropagation(); pushPanel("task", parseInt(taskLink.dataset.taskId, 10)); return; }
-      const agentLink = e.target.closest("[data-agent-name]");
-      if (agentLink) { e.stopPropagation(); pushPanel("agent", agentLink.dataset.agentName); return; }
-      const fileLink = e.target.closest("[data-file-path]");
-      if (fileLink) { e.stopPropagation(); pushPanel("file", fileLink.dataset.filePath); return; }
-    };
-    el.addEventListener("click", handler);
-    return () => el.removeEventListener("click", handler);
-  }, [html]);
-
-  return <div ref={setRefs} class={cls} style={style} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div ref={externalRef} class={cls} style={style} onClick={handler} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 // ── Retry merge button (compact, inline) ──
