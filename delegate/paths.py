@@ -79,8 +79,13 @@ def get_team_id(hc_home: Path, team: str) -> str:
     return team
 
 
+def global_db_path(hc_home: Path) -> Path:
+    """Global SQLite database (multi-team)."""
+    return hc_home / "db.sqlite"
+
+
 def db_path(hc_home: Path, team: str) -> Path:
-    """Per-team SQLite database."""
+    """Per-team SQLite database (deprecated — use global_db_path)."""
     return team_dir(hc_home, team) / "db.sqlite"
 
 

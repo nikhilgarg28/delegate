@@ -16,21 +16,22 @@ from delegate.chat import (
     get_project_stats,
 )
 from delegate.mailbox import send
-from delegate.paths import db_path as _db_path
+from delegate.paths import global_db_path as _db_path
 
 
 class TestSchema:
     def test_schema_created(self, tmp_team):
-        conn = sqlite3.connect(str(_db_path(tmp_team, TEAM)))
+        conn = sqlite3.connect(str(_db_path(tmp_team)))
         cursor = conn.execute("PRAGMA table_info(messages)")
         columns = {row[1] for row in cursor.fetchall()}
         conn.close()
         # V9 added delivered_at, seen_at, processed_at to messages table
         # V10 added result for magic commands support
-        assert columns == {"id", "timestamp", "sender", "recipient", "content", "type", "task_id", "delivered_at", "seen_at", "processed_at", "result"}
+        # V11 added team for multi-team support
+        assert columns == {"id", "timestamp", "sender", "recipient", "content", "type", "task_id", "delivered_at", "seen_at", "processed_at", "result", "team"}
 
     def test_sessions_table_exists(self, tmp_team):
-        conn = sqlite3.connect(str(_db_path(tmp_team, TEAM)))
+        conn = sqlite3.connect(str(_db_path(tmp_team)))
         cursor = conn.execute("PRAGMA table_info(sessions)")
         columns = {row[1] for row in cursor.fetchall()}
         conn.close()
@@ -38,6 +39,7 @@ class TestSchema:
         assert "task_id" in columns
         assert "tokens_in" in columns
         assert "tokens_out" in columns
+        assert "team" in columns
 
 
 class TestSendMessage:

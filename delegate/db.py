@@ -23,12 +23,13 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from delegate.paths import db_path
+from delegate.paths import db_path, global_db_path
 
 logger = logging.getLogger(__name__)
 
 # Per-process cache to avoid redundant schema checks
-_schema_verified: dict[tuple[str, str], int] = {}
+# Changed to use just hc_home since we now have a global DB
+_schema_verified: dict[str, int] = {}
 _schema_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
@@ -354,6 +355,87 @@ CREATE INDEX IF NOT EXISTS idx_messages_task_ts
 CREATE INDEX IF NOT EXISTS idx_task_comments_task_ts
     ON task_comments(task_id, created_at);
 """,
+
+    # --- V12: Multi-team support ---
+    """\
+-- Create teams metadata table
+CREATE TABLE IF NOT EXISTS teams (
+    name        TEXT PRIMARY KEY,
+    team_id     TEXT NOT NULL UNIQUE,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- Add team column to messages (requires table recreation since V10 just recreated it)
+CREATE TABLE messages_new (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    sender      TEXT    NOT NULL,
+    recipient   TEXT    NOT NULL,
+    content     TEXT    NOT NULL,
+    type        TEXT    NOT NULL CHECK(type IN ('chat', 'event', 'command')),
+    task_id     INTEGER,
+    delivered_at TEXT,
+    seen_at     TEXT,
+    processed_at TEXT,
+    result      TEXT,
+    team        TEXT    NOT NULL DEFAULT ''
+);
+
+INSERT INTO messages_new (id, timestamp, sender, recipient, content, type, task_id, delivered_at, seen_at, processed_at, result, team)
+SELECT id, timestamp, sender, recipient, content, type, task_id, delivered_at, seen_at, processed_at, result, ''
+FROM messages;
+
+DROP TABLE messages;
+ALTER TABLE messages_new RENAME TO messages;
+
+-- Recreate all messages indexes with team
+CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(type);
+CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient ON messages(sender, recipient);
+CREATE INDEX IF NOT EXISTS idx_messages_task_id ON messages(task_id);
+CREATE INDEX IF NOT EXISTS idx_messages_recipient_unread
+    ON messages(recipient, delivered_at)
+    WHERE type = 'chat' AND processed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_messages_sender
+    ON messages(sender)
+    WHERE type = 'chat';
+CREATE INDEX IF NOT EXISTS idx_messages_undelivered
+    ON messages(id)
+    WHERE type = 'chat' AND delivered_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_messages_recipient_processed
+    ON messages(recipient, processed_at)
+    WHERE type = 'chat' AND processed_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_messages_recipient_sender_processed
+    ON messages(recipient, sender, processed_at)
+    WHERE type = 'chat' AND processed_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_messages_task_type
+    ON messages(task_id, type);
+CREATE INDEX IF NOT EXISTS idx_messages_task_ts
+    ON messages(task_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_messages_team_recipient ON messages(team, recipient);
+
+-- Add team column to sessions
+ALTER TABLE sessions ADD COLUMN team TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_sessions_team_agent ON sessions(team, agent);
+CREATE INDEX IF NOT EXISTS idx_sessions_team_task_id ON sessions(team, task_id);
+
+-- Add team column to tasks
+ALTER TABLE tasks ADD COLUMN team TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_tasks_team_status ON tasks(team, status);
+CREATE INDEX IF NOT EXISTS idx_tasks_team_id ON tasks(team, id);
+
+-- Add team column to reviews
+ALTER TABLE reviews ADD COLUMN team TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_reviews_team_task_id ON reviews(team, task_id);
+
+-- Add team column to review_comments
+ALTER TABLE review_comments ADD COLUMN team TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_review_comments_team_task_attempt ON review_comments(team, task_id, attempt);
+
+-- Add team column to task_comments
+ALTER TABLE task_comments ADD COLUMN team TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_task_comments_team_task_id ON task_comments(team, task_id);
+""",
 ]
 
 # Columns that store JSON arrays and need parse/serialize on read/write.
@@ -378,8 +460,8 @@ def _current_version(conn: sqlite3.Connection) -> int:
     return row[0] or 0
 
 
-def ensure_schema(hc_home: Path, team: str) -> None:
-    """Apply any pending migrations to the team's database.
+def ensure_schema(hc_home: Path, team: str = "") -> None:
+    """Apply any pending migrations to the global database.
 
     Safe to call repeatedly — each migration runs at most once.
     Call this at daemon startup or lazily before first DB access.
@@ -388,15 +470,13 @@ def ensure_schema(hc_home: Path, team: str) -> None:
     statements (including DDL) plus the version bump are applied atomically.
     SQLite supports transactional DDL — if any statement fails the entire
     migration is rolled back and no version is recorded.
+
+    Note: team parameter is kept for backward compatibility but is no longer used.
     """
-    # Early return if already verified at current version
-    path = db_path(hc_home, team)
-    key = (str(hc_home), team)
+    # Set up paths and version info
+    path = global_db_path(hc_home)
+    key = str(hc_home)
     current_version = len(MIGRATIONS)
-    with _schema_lock:
-        # Only trust cache if DB file still exists
-        if _schema_verified.get(key) == current_version and path.exists():
-            return
     path.parent.mkdir(parents=True, exist_ok=True)
 
     # Use isolation_level=None (autocommit) so Python's sqlite3 module
@@ -418,10 +498,18 @@ def ensure_schema(hc_home: Path, team: str) -> None:
     conn.execute("COMMIT")
 
     current = _current_version(conn)
+
+    # If already at current version, update cache and return
+    if current == current_version:
+        with _schema_lock:
+            _schema_verified[key] = current_version
+        conn.close()
+        return
+
     pending = MIGRATIONS[current:]
 
     for i, sql in enumerate(pending, start=current + 1):
-        logger.info("Applying migration V%d to team DB …", i)
+        logger.info("Applying migration V%d to global DB …", i)
         stmts = [s.strip() for s in sql.split(";") if s.strip()]
         try:
             # BEGIN IMMEDIATE acquires a write-lock up front, preventing
@@ -445,13 +533,15 @@ def ensure_schema(hc_home: Path, team: str) -> None:
     conn.close()
 
 
-def get_connection(hc_home: Path, team: str) -> sqlite3.Connection:
-    """Open a connection to the team's DB with row_factory and ensure schema is current.
+def get_connection(hc_home: Path, team: str = "") -> sqlite3.Connection:
+    """Open a connection to the global DB with row_factory and ensure schema is current.
 
     Callers are responsible for closing the connection.
+
+    Note: team parameter is kept for backward compatibility but is no longer used.
     """
     ensure_schema(hc_home, team)
-    path = db_path(hc_home, team)
+    path = global_db_path(hc_home)
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")

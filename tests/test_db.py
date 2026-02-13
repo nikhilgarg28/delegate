@@ -13,7 +13,7 @@ from delegate.db import (
     MIGRATIONS,
     _current_version,
 )
-from delegate.paths import db_path
+from delegate.paths import db_path, global_db_path
 from tests.conftest import SAMPLE_TEAM_NAME as TEAM
 
 
@@ -22,13 +22,13 @@ class TestSchemaInitialization:
 
     def test_ensure_schema_creates_db_file(self, tmp_team):
         """ensure_schema should create the SQLite database file."""
-        path = db_path(tmp_team, TEAM)
+        path = global_db_path(tmp_team)
         assert path.exists()
         assert path.is_file()
 
     def test_ensure_schema_creates_schema_meta(self, tmp_team):
         """ensure_schema should create the schema_meta table."""
-        conn = sqlite3.connect(str(db_path(tmp_team, TEAM)))
+        conn = sqlite3.connect(str(global_db_path(tmp_team)))
         cursor = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_meta'"
         )
@@ -37,14 +37,14 @@ class TestSchemaInitialization:
 
     def test_ensure_schema_creates_all_tables(self, tmp_team):
         """ensure_schema should create all tables from migrations."""
-        conn = sqlite3.connect(str(db_path(tmp_team, TEAM)))
+        conn = sqlite3.connect(str(global_db_path(tmp_team)))
         cursor = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         )
         tables = {row[0] for row in cursor.fetchall()}
         conn.close()
 
-        # Expected tables from all migrations (mailbox dropped in V9)
+        # Expected tables from all migrations (mailbox dropped in V9, teams added in V11)
         expected = {
             "schema_meta",
             "messages",
@@ -53,19 +53,20 @@ class TestSchemaInitialization:
             "reviews",
             "review_comments",
             "task_comments",
+            "teams",
         }
         assert expected.issubset(tables)
 
     def test_ensure_schema_applies_all_migrations(self, tmp_team):
         """ensure_schema should apply all migrations in order."""
-        conn = sqlite3.connect(str(db_path(tmp_team, TEAM)))
+        conn = sqlite3.connect(str(global_db_path(tmp_team)))
         current = _current_version(conn)
         conn.close()
         assert current == len(MIGRATIONS)
 
     def test_ensure_schema_records_migration_metadata(self, tmp_team):
         """schema_meta should record version and timestamp for each migration."""
-        conn = sqlite3.connect(str(db_path(tmp_team, TEAM)))
+        conn = sqlite3.connect(str(global_db_path(tmp_team)))
         cursor = conn.execute("SELECT version, applied_at FROM schema_meta ORDER BY version")
         rows = cursor.fetchall()
         conn.close()
@@ -83,17 +84,17 @@ class TestMigrationIdempotency:
     def test_ensure_schema_is_idempotent(self, tmp_team):
         """Running ensure_schema twice should not fail or duplicate data."""
         # First run already happened in tmp_team fixture
-        version1 = _current_version(sqlite3.connect(str(db_path(tmp_team, TEAM))))
+        version1 = _current_version(sqlite3.connect(str(global_db_path(tmp_team))))
 
         # Run again
         ensure_schema(tmp_team, TEAM)
-        version2 = _current_version(sqlite3.connect(str(db_path(tmp_team, TEAM))))
+        version2 = _current_version(sqlite3.connect(str(global_db_path(tmp_team))))
 
         assert version1 == version2 == len(MIGRATIONS)
 
     def test_multiple_ensure_schema_calls_do_not_duplicate_migrations(self, tmp_team):
         """Multiple ensure_schema calls should not re-apply migrations."""
-        conn = sqlite3.connect(str(db_path(tmp_team, TEAM)))
+        conn = sqlite3.connect(str(global_db_path(tmp_team)))
         count1 = conn.execute("SELECT COUNT(*) FROM schema_meta").fetchone()[0]
         conn.close()
 
@@ -102,7 +103,7 @@ class TestMigrationIdempotency:
         ensure_schema(tmp_team, TEAM)
         ensure_schema(tmp_team, TEAM)
 
-        conn = sqlite3.connect(str(db_path(tmp_team, TEAM)))
+        conn = sqlite3.connect(str(global_db_path(tmp_team)))
         count2 = conn.execute("SELECT COUNT(*) FROM schema_meta").fetchone()[0]
         conn.close()
 
@@ -110,9 +111,9 @@ class TestMigrationIdempotency:
 
     def test_partial_migration_resumes_correctly(self, tmp_team):
         """If some migrations are applied, ensure_schema applies only pending ones."""
-        # Create a fresh team with only first 2 migrations
-        fresh_team = "freshteam"
-        fresh_path = db_path(tmp_team, fresh_team)
+        # Delete the existing global DB and create a fresh one with only first 2 migrations
+        fresh_path = global_db_path(tmp_team)
+        fresh_path.unlink(missing_ok=True)
         fresh_path.parent.mkdir(parents=True, exist_ok=True)
 
         conn = sqlite3.connect(str(fresh_path))
@@ -135,7 +136,7 @@ class TestMigrationIdempotency:
         conn.close()
 
         # Now run ensure_schema — should apply remaining migrations
-        ensure_schema(tmp_team, fresh_team)
+        ensure_schema(tmp_team)
         conn = sqlite3.connect(str(fresh_path))
         final_version = _current_version(conn)
         conn.close()
@@ -169,7 +170,7 @@ class TestConnectionManagement:
     def test_get_connection_ensures_schema(self, tmp_team):
         """get_connection should call ensure_schema before returning."""
         # Delete the DB to force re-creation
-        path = db_path(tmp_team, TEAM)
+        path = global_db_path(tmp_team)
         path.unlink(missing_ok=True)
 
         conn = get_connection(tmp_team, TEAM)
@@ -419,12 +420,12 @@ class TestEdgeCases:
 
     def test_ensure_schema_on_nonexistent_directory(self, tmp_team):
         """ensure_schema should create parent directories if they don't exist."""
-        new_team = "newteam"
-        new_team_dir = tmp_team / "teams" / new_team
-        assert not new_team_dir.exists()
+        # Delete the global DB and recreate with ensure_schema
+        global_path = global_db_path(tmp_team)
+        global_path.unlink(missing_ok=True)
 
-        ensure_schema(tmp_team, new_team)
-        assert db_path(tmp_team, new_team).exists()
+        ensure_schema(tmp_team)
+        assert global_path.exists()
 
     def test_task_row_to_dict_with_null_fields(self, tmp_team):
         """task_row_to_dict should handle NULL fields gracefully."""

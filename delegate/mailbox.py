@@ -115,9 +115,9 @@ def send(
     try:
         cursor = conn.execute(
             """\
-            INSERT INTO messages (sender, recipient, content, type, task_id, delivered_at)
-            VALUES (?, ?, ?, 'chat', ?, ?)""",
-            (sender, recipient, message, task_id, now),
+            INSERT INTO messages (sender, recipient, content, type, task_id, delivered_at, team)
+            VALUES (?, ?, ?, 'chat', ?, ?, ?)""",
+            (sender, recipient, message, task_id, now, team),
         )
         conn.commit()
         msg_id = cursor.lastrowid
@@ -134,18 +134,19 @@ def read_inbox(
 
     If *unread_only* is True, returns only unprocessed messages.
     Messages must be delivered (``delivered_at IS NOT NULL``) to be visible.
+    Filters by team to ensure cross-team isolation.
     """
     conn = get_connection(hc_home, team)
     try:
         if unread_only:
             rows = conn.execute(
-                "SELECT * FROM messages WHERE type = 'chat' AND recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL ORDER BY id ASC",
-                (agent,),
+                "SELECT * FROM messages WHERE type = 'chat' AND team = ? AND recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL ORDER BY id ASC",
+                (team, agent),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM messages WHERE type = 'chat' AND recipient = ? AND delivered_at IS NOT NULL ORDER BY id ASC",
-                (agent,),
+                "SELECT * FROM messages WHERE type = 'chat' AND team = ? AND recipient = ? AND delivered_at IS NOT NULL ORDER BY id ASC",
+                (team, agent),
             ).fetchall()
     finally:
         conn.close()
@@ -159,18 +160,19 @@ def read_outbox(
 
     If *pending_only* is True, returns only undelivered messages
     (``delivered_at IS NULL``).
+    Filters by team to ensure cross-team isolation.
     """
     conn = get_connection(hc_home, team)
     try:
         if pending_only:
             rows = conn.execute(
-                "SELECT * FROM messages WHERE type = 'chat' AND sender = ? AND delivered_at IS NULL ORDER BY id ASC",
-                (agent,),
+                "SELECT * FROM messages WHERE type = 'chat' AND team = ? AND sender = ? AND delivered_at IS NULL ORDER BY id ASC",
+                (team, agent),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM messages WHERE type = 'chat' AND sender = ? ORDER BY id ASC",
-                (agent,),
+                "SELECT * FROM messages WHERE type = 'chat' AND team = ? AND sender = ? ORDER BY id ASC",
+                (team, agent),
             ).fetchall()
     finally:
         conn.close()
@@ -268,9 +270,9 @@ def deliver(hc_home: Path, team: str, message: Message) -> int:
     try:
         cursor = conn.execute(
             """\
-            INSERT INTO messages (sender, recipient, content, type, task_id, delivered_at)
-            VALUES (?, ?, ?, 'chat', ?, ?)""",
-            (message.sender, message.recipient, message.body, message.task_id, now),
+            INSERT INTO messages (sender, recipient, content, type, task_id, delivered_at, team)
+            VALUES (?, ?, ?, 'chat', ?, ?, ?)""",
+            (message.sender, message.recipient, message.body, message.task_id, now, team),
         )
         conn.commit()
         msg_id = cursor.lastrowid

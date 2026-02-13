@@ -8,7 +8,7 @@ import yaml
 from delegate.bootstrap import bootstrap, add_agent, AGENT_SUBDIRS, get_member_by_role
 from delegate.config import set_boss, get_boss
 from delegate.paths import (
-    team_dir, agents_dir, agent_dir, db_path,
+    team_dir, agents_dir, agent_dir, db_path, global_db_path,
     roster_path, boss_person_dir, base_charter_dir,
 )
 
@@ -42,7 +42,7 @@ def test_creates_starter_files(tmp_team):
     """Bootstrap creates all expected files with content."""
     hc_home = tmp_team
     assert roster_path(hc_home, TEAM).is_file()
-    assert db_path(hc_home, TEAM).is_file()
+    assert global_db_path(hc_home).is_file()
 
     for name in ["manager", "alice", "bob"]:
         ad = agent_dir(hc_home, TEAM, name)
@@ -120,20 +120,22 @@ def test_workspace_exists_per_agent(tmp_team):
 
 def test_db_schema_created(tmp_team):
     """SQLite database has the messages and sessions tables."""
-    conn = sqlite3.connect(str(db_path(tmp_team, TEAM)))
+    conn = sqlite3.connect(str(global_db_path(tmp_team)))
 
     cursor = conn.execute("PRAGMA table_info(messages)")
     msg_columns = {row[1] for row in cursor.fetchall()}
     # V9 added delivered_at, seen_at, processed_at for unified mailbox/messages table
     # V10 added result for magic commands support
-    assert msg_columns == {"id", "timestamp", "sender", "recipient", "content", "type", "task_id", "delivered_at", "seen_at", "processed_at", "result"}
+    # V11 added team for multi-team support
+    assert msg_columns == {"id", "timestamp", "sender", "recipient", "content", "type", "task_id", "delivered_at", "seen_at", "processed_at", "result", "team"}
 
     cursor = conn.execute("PRAGMA table_info(sessions)")
     sess_columns = {row[1] for row in cursor.fetchall()}
+    # V11 added team for multi-team support
     assert sess_columns == {
         "id", "agent", "task_id", "started_at", "ended_at",
         "duration_seconds", "tokens_in", "tokens_out", "cost_usd",
-        "cache_read_tokens", "cache_write_tokens",
+        "cache_read_tokens", "cache_write_tokens", "team",
     }
 
     conn.close()
