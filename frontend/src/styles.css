@@ -922,6 +922,24 @@ body {
 /* ================================================================
    Chat filters — minimal row
    ================================================================ */
+/* Team channel header (shows current team) */
+.chat-team-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.chat-team-name {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
 .chat-filters, .task-filters {
   display: flex;
   align-items: center;
@@ -2572,4 +2590,121 @@ select option:hover {
   color: var(--accent);
   font-weight: 500;
   font-size: 12px;
+}
+
+/* ================================================================
+   Team Switcher Modal (Cmd+K)
+   ================================================================ */
+.team-switcher-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--backdrop-bg);
+  z-index: 9998;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 120px;
+}
+
+.team-switcher-modal {
+  width: 560px;
+  max-width: 90%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  display: flex;
+  flex-direction: column;
+  max-height: 480px;
+}
+
+.team-switcher-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.team-switcher-icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.team-switcher-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.team-switcher-input::placeholder {
+  color: var(--text-muted);
+}
+
+.team-switcher-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.team-switcher-item {
+  padding: 12px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 100ms;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.team-switcher-item:hover {
+  background: var(--bg-hover);
+}
+
+.team-switcher-item.selected {
+  background: var(--bg-active);
+}
+
+.team-switcher-item.current .team-switcher-item-name::before {
+  content: "✓ ";
+  color: var(--semantic-green);
+  margin-right: 4px;
+}
+
+.team-switcher-item-name {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.team-switcher-item-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.team-switcher-empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.team-switcher-footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.team-switcher-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }

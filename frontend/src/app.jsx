@@ -1,5 +1,5 @@
 import { render } from "preact";
-import { useEffect } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { batch, useSignalEffect } from "@preact/signals";
 import {
   currentTeam, teams, bossName, hcHome, tasks, agents, agentStatsMap, messages,
@@ -20,6 +20,7 @@ import { ToastContainer } from "./components/Toast.jsx";
 import { HelpOverlay } from "./components/HelpOverlay.jsx";
 import { NotificationBell } from "./components/NotificationBell.jsx";
 import { NotificationPopover } from "./components/NotificationPopover.jsx";
+import { TeamSwitcher } from "./components/TeamSwitcher.jsx";
 import { showToast, showActionToast } from "./toast.js";
 
 // ── Per-team backing stores (plain objects, not signals) ──
@@ -72,6 +73,8 @@ function _syncSignalsNow(team) {
 
 // ── Main App ──
 function App() {
+  const [teamSwitcherOpen, setTeamSwitcherOpen] = useState(false);
+
   // ── Keyboard shortcuts ──
   useEffect(() => {
     const handler = (e) => {
@@ -81,9 +84,17 @@ function App() {
         const tag = el.tagName.toLowerCase();
         return tag === "input" || tag === "textarea" || tag === "select" || el.contentEditable === "true";
       };
-      const isOverlayOpen = () => panelStack.value.length > 0 || helpOverlayOpen.value;
+      const isOverlayOpen = () => panelStack.value.length > 0 || helpOverlayOpen.value || teamSwitcherOpen;
+
+      // Cmd+K or Ctrl+K to open team switcher
+      if ((e.metaKey || e.ctrlKey) && e.key === "k" && !isOverlayOpen()) {
+        e.preventDefault();
+        setTeamSwitcherOpen(true);
+        return;
+      }
 
       if (e.key === "Escape") {
+        if (teamSwitcherOpen) { setTeamSwitcherOpen(false); return; }
         if (bellPopoverOpen.value) { bellPopoverOpen.value = false; return; }
         if (helpOverlayOpen.value) { helpOverlayOpen.value = false; return; }
         if (panelStack.value.length > 0) { popPanel(); return; }
@@ -119,7 +130,7 @@ function App() {
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, []);
+  }, [teamSwitcherOpen]);
 
   // ── URL routing: /{team}/{tab} ──
   useEffect(() => {
@@ -141,9 +152,12 @@ function App() {
       try {
         const teamList = await api.fetchTeams();
         teams.value = teamList;
-        // If URL didn't set a valid team, navigate to the first team
+
+        // If URL didn't set a valid team, check localStorage or navigate to the first team
         if (teamList.length > 0 && !currentTeam.value) {
-          navigate(teamList[0], "chat");
+          const lastTeam = localStorage.getItem("delegate-last-team");
+          const targetTeam = lastTeam && teamList.includes(lastTeam) ? lastTeam : teamList[0];
+          navigate(targetTeam, "chat");
         } else if (teamList.length > 0 && !teamList.includes(currentTeam.value)) {
           // URL had an invalid team — fix it
           navigate(teamList[0], activeTab.value || "chat");
@@ -202,6 +216,9 @@ function App() {
   useSignalEffect(() => {
     const t = currentTeam.value;           // ← auto-tracked
     if (!t) return;
+
+    // Persist last-selected team to localStorage
+    localStorage.setItem("delegate-last-team", t);
 
     // Clear stale data from previous team
     batch(() => {
@@ -407,6 +424,7 @@ function App() {
       <DiffPanel />
       <HelpOverlay />
       <NotificationPopover />
+      <TeamSwitcher open={teamSwitcherOpen} onClose={() => setTeamSwitcherOpen(false)} />
       <ToastContainer />
     </>
   );

@@ -214,9 +214,32 @@ export function ChatPanel() {
   const oldestMsgIdRef = useRef(null);
   const newestMsgTsRef = useRef("");
   const pollingIntervalRef = useRef(null);
+  const draftsByTeam = useRef({}); // Store drafts per team
+  const lastTeamRef = useRef(team); // Track last team to detect switches
 
   const mic = useSpeechRecognition(inputRef);
   const muted = isMuted.value;
+
+  // Save and restore drafts when team changes
+  useEffect(() => {
+    const prevTeam = lastTeamRef.current;
+    if (prevTeam && prevTeam !== team) {
+      // Save draft from previous team
+      if (inputRef.current) {
+        draftsByTeam.current[prevTeam] = inputRef.current.value;
+      }
+      // Restore draft for new team
+      const draft = draftsByTeam.current[team] || "";
+      if (inputRef.current) {
+        inputRef.current.value = draft;
+        inputRef.current.style.height = "auto";
+        inputRef.current.style.height = inputRef.current.scrollHeight + "px";
+      }
+      setInputVal(draft);
+      setSendBtnActive(!!draft.trim());
+    }
+    lastTeamRef.current = team;
+  }, [team]);
 
   // Restore filters from session storage
   useEffect(() => {
@@ -587,6 +610,14 @@ export function ChatPanel() {
 
   return (
     <div class="panel active" style={{ display: activeTab.value === "chat" ? "" : "none" }}>
+      {/* Team channel indicator */}
+      <div class="chat-team-header">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 3h10a1 1 0 011 1v8a1 1 0 01-1 1H6l-3 3V4a1 1 0 011-1z" />
+        </svg>
+        <span class="chat-team-name">{cap(team)}</span>
+      </div>
+
       {/* Minimal filter bar */}
       <div class="chat-filters">
         <div class="filter-search-wrap">
