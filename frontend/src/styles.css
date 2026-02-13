@@ -830,6 +830,49 @@ body {
 .chat-jump-btn:hover { color: var(--text-primary); }
 
 /* ================================================================
+   Selection Tooltip
+   ================================================================ */
+.selection-tooltip {
+  z-index: 1000;
+  display: flex;
+  gap: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  pointer-events: auto;
+}
+
+.selection-tooltip-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 100ms;
+  white-space: nowrap;
+}
+
+.selection-tooltip-btn:hover {
+  background: var(--bg-hover);
+}
+
+.selection-tooltip-btn svg {
+  flex-shrink: 0;
+}
+
+.selection-tooltip-label {
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* ================================================================
    Manager activity bar
    ================================================================ */
 .manager-activity-bar {

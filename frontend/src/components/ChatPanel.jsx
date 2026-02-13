@@ -15,6 +15,7 @@ import { showToast } from "../toast.js";
 import { CopyBtn } from "./CopyBtn.jsx";
 import { CustomSelect } from "./CustomSelect.jsx";
 import { ManagerActivityBar } from "./ManagerActivityBar.jsx";
+import { SelectionTooltip } from "./SelectionTooltip.jsx";
 
 // ── Linked content with event delegation ──
 function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
@@ -495,6 +496,9 @@ export function ChatPanel() {
 
       {/* Manager activity indicator */}
       <ManagerActivityBar />
+
+      {/* Text selection tooltip */}
+      <SelectionTooltip containerRef={logRef} chatInputRef={inputRef} />
 
       {/* Chat input — Cursor-style: textarea on top, toolbar on bottom */}
       <div class="chat-input-box">
