@@ -23,9 +23,10 @@ from delegate.paths import (
     repos_dir as _repos_dir,
     roster_path as _roster_path,
     boss_person_dir as _boss_person_dir,
+    members_dir as _members_dir,
     base_charter_dir,
 )
-from delegate.config import get_boss
+from delegate.config import get_boss, get_default_human, add_member
 
 
 def _detect_boss_name() -> str:
@@ -248,15 +249,19 @@ def bootstrap(
     # --- Per-team SQLite DB ---
     ensure_schema(hc_home, team_name)
 
-    # --- Boss mailbox (org-wide, outside any team) ---
-    # Ensure a boss name is configured.
+    # --- Human member (org-wide, outside any team) ---
+    # Ensure at least one human member exists.
     # Auto-detect from git config user.name (first name, lowercased), fall back to "boss".
-    from delegate.config import set_boss
+    from delegate.config import set_boss, get_human_members
     boss_name = get_boss(hc_home)
     if not boss_name:
         boss_name = _detect_boss_name()
-        set_boss(hc_home, boss_name)
+        set_boss(hc_home, boss_name)  # creates member file + legacy config.yaml
+    else:
+        # Ensure member file exists for legacy boss
+        add_member(hc_home, boss_name)
 
+    # Legacy: keep boss dir for backward compat
     dd = _boss_person_dir(hc_home)
     dd.mkdir(parents=True, exist_ok=True)
 

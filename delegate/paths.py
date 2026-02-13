@@ -29,10 +29,25 @@ def home(override: Path | None = None) -> Path:
     return _DEFAULT_HOME
 
 
-# --- Boss (org-wide, outside any team) ---
+# --- Members (org-wide, outside any team) ---
+
+def members_dir(hc_home: Path) -> Path:
+    """Directory containing human member YAML files."""
+    return hc_home / "members"
+
+
+def member_path(hc_home: Path, name: str) -> Path:
+    """Path to a specific member's YAML file."""
+    return members_dir(hc_home) / f"{name}.yaml"
+
+
+# --- Boss (deprecated — use members_dir) ---
 
 def boss_person_dir(hc_home: Path) -> Path:
-    """Boss's global directory (outside any team)."""
+    """Boss's global directory (outside any team).
+
+    .. deprecated:: Use ``members_dir`` instead.
+    """
     return hc_home / "boss"
 
 

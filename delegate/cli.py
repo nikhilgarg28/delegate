@@ -396,6 +396,69 @@ def agent_add(ctx: click.Context, team: str, name: str, role: str, seniority: st
 
 
 # ──────────────────────────────────────────────────────────────
+# delegate member add / list / remove
+# ──────────────────────────────────────────────────────────────
+
+@main.group()
+def member() -> None:
+    """Manage human members."""
+    pass
+
+
+@member.command("add")
+@click.argument("name")
+@click.pass_context
+def member_add(ctx: click.Context, name: str) -> None:
+    """Add a human member to Delegate.
+
+    Creates a member YAML file in ~/.delegate/members/.
+    The member is automatically added to all existing teams.
+    """
+    from delegate.config import add_member, get_human_members
+    from delegate.fmt import success
+
+    hc_home = _get_home(ctx)
+    add_member(hc_home, name)
+    success(f"Added member '{name}'")
+
+
+@member.command("list")
+@click.pass_context
+def member_list(ctx: click.Context) -> None:
+    """List all human members."""
+    from delegate.config import get_human_members
+
+    hc_home = _get_home(ctx)
+    members = get_human_members(hc_home)
+    if not members:
+        click.echo("No members found.")
+        return
+
+    click.echo("Members:")
+    for m in members:
+        click.echo(f"  - {click.style(m['name'], bold=True)} (kind: {m.get('kind', 'human')})")
+
+
+@member.command("remove")
+@click.argument("name")
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt.")
+@click.pass_context
+def member_remove(ctx: click.Context, name: str, yes: bool) -> None:
+    """Remove a human member."""
+    from delegate.config import remove_member
+    from delegate.fmt import success
+
+    hc_home = _get_home(ctx)
+    if not yes:
+        click.confirm(f"Remove member '{name}'?", abort=True)
+
+    if remove_member(hc_home, name):
+        success(f"Removed member '{name}'")
+    else:
+        click.echo(f"Member '{name}' not found.")
+
+
+# ──────────────────────────────────────────────────────────────
 # delegate config set boss / source-repo
 # ──────────────────────────────────────────────────────────────
 
@@ -415,12 +478,12 @@ def config_set() -> None:
 @click.argument("name")
 @click.pass_context
 def config_set_boss(ctx: click.Context, name: str) -> None:
-    """Set the org-wide boss name."""
+    """Set the org-wide boss name (creates a human member)."""
     from delegate.config import set_boss
 
     hc_home = _get_home(ctx)
     set_boss(hc_home, name)
-    click.echo(f"Boss set to: {name}")
+    click.echo(f"Boss set to: {name} (member created)")
 
 
 @config_set.command("source-repo")
@@ -439,13 +502,17 @@ def config_set_source_repo(ctx: click.Context, path: Path) -> None:
 @click.pass_context
 def config_show(ctx: click.Context) -> None:
     """Show the current configuration."""
-    from delegate.config import get_boss, get_source_repo
+    from delegate.config import get_default_human, get_source_repo, get_human_members
 
     hc_home = _get_home(ctx)
-    boss = get_boss(hc_home) or "(not set)"
+    human = get_default_human(hc_home)
     source_repo = get_source_repo(hc_home) or "(not set)"
 
-    click.echo(f"Boss:        {boss}")
+    # Members
+    members = get_human_members(hc_home)
+    member_names = ", ".join(m["name"] for m in members) if members else "(none)"
+    click.echo(f"Members:     {member_names}")
+    click.echo(f"Default:     {human}")
     click.echo(f"Source repo: {source_repo}")
 
     # List teams and their repos

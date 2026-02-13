@@ -1,6 +1,7 @@
 """Configuration management for Delegate.
 
-Global config lives in ``~/.delegate/config.yaml`` (boss name, source_repo).
+Global config lives in ``~/.delegate/config.yaml`` (source_repo, etc.).
+Human members live in ``~/.delegate/members/<name>.yaml``.
 Per-team repo config lives in ``~/.delegate/teams/<team>/repos.yaml``.
 """
 
@@ -8,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from delegate.paths import config_path, team_dir
+from delegate.paths import config_path, team_dir, members_dir, member_path
 
 
 # ---------------------------------------------------------------------------
@@ -30,15 +31,91 @@ def _write(hc_home: Path, data: dict) -> None:
     cp.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
 
 
-# --- Boss ---
+# ---------------------------------------------------------------------------
+# Members (human identities — replaces the old boss model)
+# ---------------------------------------------------------------------------
+
+def get_human_members(hc_home: Path) -> list[dict]:
+    """Return all human members as a list of dicts.
+
+    Each dict has at least ``name`` and ``kind`` (always ``"human"``).
+    """
+    md = members_dir(hc_home)
+    if not md.is_dir():
+        return []
+    members = []
+    for f in sorted(md.iterdir()):
+        if f.suffix != ".yaml":
+            continue
+        data = yaml.safe_load(f.read_text()) or {}
+        data.setdefault("name", f.stem)
+        data.setdefault("kind", "human")
+        members.append(data)
+    return members
+
+
+def get_default_human(hc_home: Path) -> str:
+    """Return the name of the default (first) human member.
+
+    Falls back to the legacy ``config.yaml:boss`` field, then ``"boss"``.
+    """
+    members = get_human_members(hc_home)
+    if members:
+        return members[0]["name"]
+    # Legacy fallback
+    return get_boss(hc_home) or "boss"
+
+
+def add_member(hc_home: Path, name: str, **extra) -> dict:
+    """Create a human member YAML file.
+
+    Returns the member dict.  Safe to call multiple times — does not
+    overwrite existing files.
+    """
+    md = members_dir(hc_home)
+    md.mkdir(parents=True, exist_ok=True)
+    mp = member_path(hc_home, name)
+    data = {"name": name, "kind": "human"}
+    data.update(extra)
+    if not mp.exists():
+        mp.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+    else:
+        data = yaml.safe_load(mp.read_text()) or {}
+        data.setdefault("name", name)
+        data.setdefault("kind", "human")
+    return data
+
+
+def remove_member(hc_home: Path, name: str) -> bool:
+    """Remove a human member YAML file.  Returns True if removed."""
+    mp = member_path(hc_home, name)
+    if mp.exists():
+        mp.unlink()
+        return True
+    return False
+
+
+# --- Boss (backward compat — delegates to member API) ---
 
 def get_boss(hc_home: Path) -> str | None:
-    """Return the org-wide boss name, or None if not set."""
+    """Return the org-wide boss name, or None if not set.
+
+    Checks the members directory first, then falls back to config.yaml.
+    """
+    members = get_human_members(hc_home)
+    if members:
+        return members[0]["name"]
     return _read(hc_home).get("boss")
 
 
 def set_boss(hc_home: Path, name: str) -> None:
-    """Set the org-wide boss name."""
+    """Set the org-wide boss name.
+
+    Creates a member file AND writes to config.yaml for backward compat.
+    """
+    # Create member file
+    add_member(hc_home, name)
+    # Legacy config.yaml
     data = _read(hc_home)
     data["boss"] = name
     _write(hc_home, data)
