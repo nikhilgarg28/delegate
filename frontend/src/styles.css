@@ -1977,3 +1977,375 @@ select option:hover {
   font-size: 14px;
   color: var(--text-primary);
 }
+
+/* ================================================================
+   Magic Commands
+   ================================================================ */
+
+/* Command mode input box */
+.chat-input-box.command-mode textarea {
+  border-color: rgba(86,156,214,0.4);
+  box-shadow: 0 0 0 1px rgba(86,156,214,0.2);
+}
+
+/* Command autocomplete dropdown */
+.command-autocomplete {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.command-autocomplete-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.command-autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+.command-autocomplete-item:hover,
+.command-autocomplete-item.selected {
+  background: var(--bg-hover);
+}
+
+.command-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 80px;
+}
+
+.command-description {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* CWD badge */
+.chat-cwd-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.chat-cwd-label {
+  color: var(--text-secondary);
+}
+
+.chat-cwd-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  outline: none;
+}
+
+.chat-cwd-input:focus {
+  color: var(--text-heading);
+}
+
+/* Command message container */
+.msg-command {
+  margin: 16px 0;
+}
+
+.msg-command-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.msg-command-sender {
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.msg-command-text {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--accent);
+}
+
+/* Shell output block */
+.shell-output-block {
+  background: var(--bg-inset);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+.shell-output-block.error {
+  border-color: var(--semantic-red);
+}
+
+.shell-output-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.shell-output-cwd {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.shell-output-duration {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.shell-copy-btn {
+  padding: 4px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.shell-copy-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.shell-output-body {
+  position: relative;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.shell-output-stdout {
+  padding: 12px;
+  margin: 0;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.shell-expand-btn {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  background: var(--bg-surface);
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.shell-expand-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.shell-output-stderr {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(241,76,76,0.08);
+  border-top: 1px solid rgba(241,76,76,0.2);
+}
+
+.shell-output-stderr-label {
+  color: var(--semantic-red);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.shell-output-stderr pre {
+  margin: 0;
+  color: rgba(241,76,76,0.9);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.shell-output-footer {
+  padding: 6px 12px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.shell-output-footer.success {
+  color: var(--semantic-green);
+}
+
+.shell-output-footer.error {
+  color: var(--semantic-red);
+}
+
+.shell-output-loading {
+  padding: 24px;
+  text-align: center;
+}
+
+.shell-output-loading .dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 3px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.shell-output-loading .dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.shell-output-loading .dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes pulse {
+  0%, 80%, 100% {
+    opacity: 0.3;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+/* Status block */
+.status-block {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.status-block.loading,
+.status-block.error {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.status-header {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-heading);
+  margin-bottom: 16px;
+}
+
+.status-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.status-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.status-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-heading);
+  margin-bottom: 4px;
+}
+
+.status-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.status-agent-name {
+  min-width: 80px;
+  color: var(--text-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.status-agent-name:hover {
+  color: var(--accent);
+}
+
+.status-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.status-badge.status-idle {
+  background: var(--status-done-bg);
+  color: var(--semantic-green);
+}
+
+.status-badge.status-working {
+  background: var(--status-in-progress-bg);
+  color: var(--semantic-yellow);
+}
+
+.status-task-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+.status-task-link:hover {
+  text-decoration: underline;
+}
+
+.status-last-turn {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.status-task-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.status-count {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.status-total {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-heading);
+}

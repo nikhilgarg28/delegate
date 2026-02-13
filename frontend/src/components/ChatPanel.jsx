@@ -3,6 +3,7 @@ import {
   currentTeam, messages, agents, activeTab,
   chatFilterDirection, openPanel,
   knownAgentNames, isMuted, bossName, expandedMessages,
+  commandMode, commandCwd,
 } from "../state.js";
 import * as api from "../api.js";
 import {
@@ -16,6 +17,10 @@ import { CopyBtn } from "./CopyBtn.jsx";
 import { CustomSelect } from "./CustomSelect.jsx";
 import { ManagerActivityBar } from "./ManagerActivityBar.jsx";
 import { SelectionTooltip } from "./SelectionTooltip.jsx";
+import { CommandAutocomplete } from "./CommandAutocomplete.jsx";
+import { ShellOutputBlock } from "./ShellOutputBlock.jsx";
+import { StatusBlock } from "./StatusBlock.jsx";
+import { parseCommand, COMMANDS } from "../commands.js";
 
 // ── Linked content with event delegation ──
 function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
@@ -421,10 +426,103 @@ export function ChatPanel() {
   }, [allAgents, msgs]);
 
 
+  // Execute a magic command
+  const executeCommand = useCallback(async (cmd) => {
+    const placeholderId = `cmd-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    // Add placeholder message
+    const placeholder = {
+      id: placeholderId,
+      type: 'command',
+      content: cmd.raw,
+      sender: bossName.value || 'boss',
+      recipient: bossName.value || 'boss',
+      timestamp: now,
+      result: null, // null = running
+    };
+    setMsgs(prev => [...prev, placeholder]);
+    newestMsgTsRef.current = now;
+
+    // Scroll to bottom
+    isAtBottomRef.current = true;
+    setShowJumpBtn(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = logRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    });
+
+    try {
+      let result;
+      if (cmd.name === 'shell') {
+        if (!cmd.args) {
+          result = { error: 'Usage: /shell [command]', exit_code: -1 };
+        } else {
+          result = await api.execShell(team, cmd.args, commandCwd.value || undefined);
+        }
+      } else if (cmd.name === 'status') {
+        // Status is client-side, build result from API calls
+        const [agentsData, tasksData] = await Promise.all([
+          api.fetchAgents(team),
+          api.fetchTasks(team),
+        ]);
+        const agents = agentsData.map(a => ({
+          name: a.name,
+          status: a.status || 'idle',
+          current_task: a.current_task_id || null,
+          last_turn: a.last_turn_at || null,
+        }));
+        const taskCounts = {
+          todo: tasksData.filter(t => t.status === 'todo').length,
+          in_progress: tasksData.filter(t => t.status === 'in_progress').length,
+          in_review: tasksData.filter(t => t.status === 'in_review').length,
+          in_approval: tasksData.filter(t => t.status === 'in_approval').length,
+          total: tasksData.filter(t => t.status !== 'done' && t.status !== 'cancelled').length,
+        };
+        result = { agents, taskCounts };
+      } else {
+        result = { error: `Unknown command: /${cmd.name}. Available: /shell, /status`, exit_code: -1 };
+      }
+
+      // Persist to DB
+      const saved = await api.saveCommand(team, cmd.raw, result);
+
+      // Update placeholder with real result
+      setMsgs(prev => prev.map(m =>
+        m.id === placeholderId ? { ...m, id: saved.id, result } : m
+      ));
+    } catch (err) {
+      // Update placeholder with error
+      const errorResult = { error: err.message, exit_code: -1 };
+      setMsgs(prev => prev.map(m =>
+        m.id === placeholderId ? { ...m, result: errorResult } : m
+      ));
+    }
+  }, [team]);
+
   const handleSend = useCallback(async () => {
     if (mic.active) mic.toggle();
     const val = inputRef.current ? inputRef.current.value.trim() : "";
-    if (!val || !team || !recipient) return;
+    if (!val || !team) return;
+
+    // Check for command
+    const cmd = parseCommand(val);
+    if (cmd && COMMANDS[cmd.name]) {
+      if (inputRef.current) {
+        inputRef.current.value = "";
+        inputRef.current.style.height = "auto";
+      }
+      setInputVal("");
+      setSendBtnActive(false);
+      commandMode.value = false;
+      await executeCommand(cmd);
+      return;
+    }
+
+    // Regular message flow
+    if (!recipient) return;
     cooldownRef.current = true;
     setTimeout(() => { cooldownRef.current = false; }, 4000);
     try {
@@ -462,7 +560,7 @@ export function ChatPanel() {
     } catch (e) {
       showToast("Failed to send message", "error");
     }
-  }, [team, recipient, mic]);
+  }, [team, recipient, mic, executeCommand]);
 
   const handleKeydown = useCallback((e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -545,6 +643,20 @@ export function ChatPanel() {
               </div>
             );
           }
+          if (m.type === "command") {
+            const parsed = parseCommand(m.content);
+            return (
+              <div key={m.id || i} class="msg-command">
+                <div class="msg-command-header">
+                  <span class="msg-command-sender">{cap(m.sender)}</span>
+                  <span class="msg-command-text">{m.content}</span>
+                  <span class="msg-time">{fmtTimestamp(m.timestamp)}</span>
+                </div>
+                {parsed?.name === 'shell' && <ShellOutputBlock result={m.result} />}
+                {parsed?.name === 'status' && <StatusBlock result={m.result} />}
+              </div>
+            );
+          }
           const contentHtml = linkifyFilePaths(linkifyTaskRefs(renderMarkdown(m.content)));
           const senderLower = m.sender.toLowerCase();
           const boss = (bossName.value || "boss").toLowerCase();
@@ -599,21 +711,62 @@ export function ChatPanel() {
       <SelectionTooltip containerRef={logRef} chatInputRef={inputRef} />
 
       {/* Chat input — Cursor-style: textarea on top, toolbar on bottom */}
-      <div class="chat-input-box">
+      <div class={`chat-input-box ${commandMode.value ? 'command-mode' : ''}`}>
+        {commandMode.value && (
+          <CommandAutocomplete
+            input={inputVal}
+            onSelect={(cmd) => {
+              if (inputRef.current) {
+                inputRef.current.value = `/${cmd.name} `;
+                inputRef.current.focus();
+                setInputVal(`/${cmd.name} `);
+                setSendBtnActive(true);
+              }
+            }}
+            onDismiss={() => {
+              commandMode.value = false;
+            }}
+          />
+        )}
         <textarea
           ref={inputRef}
           placeholder="Send a message..."
           rows="2"
           onKeyDown={handleKeydown}
           onInput={(e) => {
+            const val = e.target.value;
             e.target.style.height = "auto";
             e.target.style.height = e.target.scrollHeight + "px";
-            setSendBtnActive(!!e.target.value.trim());
+            setSendBtnActive(!!val.trim());
+            setInputVal(val);
+
+            // Detect command mode
+            commandMode.value = val.startsWith('/');
+
+            // Update CWD from parsed command if it has -d flag
+            const cmd = parseCommand(val);
+            if (cmd && cmd.name === 'shell' && cmd.args.includes('-d')) {
+              // Simple -d flag parsing (not perfect but works for basic usage)
+              const match = cmd.args.match(/-d\s+(\S+)/);
+              if (match) commandCwd.value = match[1];
+            }
           }}
         />
+        {commandMode.value && parseCommand(inputVal)?.name === 'shell' && (
+          <div class="chat-cwd-badge">
+            <span class="chat-cwd-label">cwd:</span>
+            <input
+              type="text"
+              class="chat-cwd-input"
+              value={commandCwd.value || '~'}
+              placeholder="~"
+              onInput={(e) => { commandCwd.value = e.target.value; }}
+            />
+          </div>
+        )}
         <div class="chat-input-toolbar">
           <div class="chat-input-toolbar-spacer" />
-          {mic.supported && (
+          {mic.supported && !commandMode.value && (
             <button
               class={"chat-tool-btn" + (mic.active ? " recording" : "")}
               onClick={mic.toggle}
@@ -626,22 +779,31 @@ export function ChatPanel() {
               </svg>
             </button>
           )}
-          <button
-            class="chat-tool-btn"
-            onClick={toggleMute}
-            title={muted ? "Unmute notifications" : "Mute notifications"}
-          >
-            <BellIcon muted={muted} />
-          </button>
+          {!commandMode.value && (
+            <button
+              class="chat-tool-btn"
+              onClick={toggleMute}
+              title={muted ? "Unmute notifications" : "Mute notifications"}
+            >
+              <BellIcon muted={muted} />
+            </button>
+          )}
           <button
             class={"chat-tool-btn send-btn" + (sendBtnActive ? " active" : "")}
             onClick={handleSend}
-            title="Send message"
+            title={commandMode.value ? "Run command" : "Send message"}
           >
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="8" y1="12" x2="8" y2="4" />
-              <polyline points="4.5,7.5 8,4 11.5,7.5" />
-            </svg>
+            {commandMode.value ? (
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="4,12 8,8 4,4" />
+                <line x1="12" y1="4" x2="12" y2="12" />
+              </svg>
+            ) : (
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="12" x2="8" y2="4" />
+                <polyline points="4.5,7.5 8,4 11.5,7.5" />
+              </svg>
+            )}
           </button>
         </div>
       </div>

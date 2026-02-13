@@ -116,6 +116,10 @@ export const chatFilterDirection = signal("one-way"); // "one-way" | "bidi"
 // ── Expanded messages (for collapsible long messages) ──
 export const expandedMessages = signal(new Set());
 
+// ── Command mode (magic commands) ──
+export const commandMode = signal(false);
+export const commandCwd = signal('');  // current working directory for shell commands
+
 // ── Agent activity (live tool usage from SSE) ──
 // { agentName: { tool, detail, timestamp } } — last activity per agent
 export const agentLastActivity = signal({});

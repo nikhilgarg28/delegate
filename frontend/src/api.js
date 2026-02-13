@@ -215,3 +215,31 @@ export async function fetchFileContent(team, path, opts = {}) {
   }
   return r.json();
 }
+
+// --- Magic Commands ---
+
+export async function execShell(team, command, cwd) {
+  const r = await fetch(`/teams/${team}/exec/shell`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ command, cwd: cwd || undefined }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || r.statusText);
+  }
+  return r.json();
+}
+
+export async function saveCommand(team, command, result) {
+  const r = await fetch(`/teams/${team}/commands`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ command, result }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || r.statusText);
+  }
+  return r.json();
+}
