@@ -7,7 +7,7 @@ import {
   panelStack, popPanel, closeAllPanels,
   agentLastActivity, agentActivityLog, agentTurnState, managerTurnContext,
   helpOverlayOpen, sidebarCollapsed, bellPopoverOpen, isMuted,
-  syncFromUrl, navigate, navigateTab,
+  syncFromUrl, navigate, navigateTab, taskTeamFilter,
 } from "./state.js";
 import * as api from "./api.js";
 import { Sidebar } from "./components/Sidebar.jsx";
@@ -166,17 +166,24 @@ function App() {
     })();
   }, []);
 
-  // ── Polling loop (reads currentTeam.value dynamically each cycle) ──
+  // ── Polling loop (reads currentTeam.value and taskTeamFilter dynamically each cycle) ──
   useEffect(() => {
     let active = true;
     const poll = async () => {
       if (!active) return;
       const t = currentTeam.value;
+      const filter = taskTeamFilter.value;
       if (!t) return; // No team yet — bootstrap will set one
 
       try {
+        const taskDataPromise = filter === "all"
+          ? api.fetchAllTasks()
+          : filter === "current"
+            ? api.fetchTasks(t)
+            : api.fetchTasks(filter);
+
         const [taskData, agentData] = await Promise.all([
-          api.fetchTasks(t),
+          taskDataPromise,
           api.fetchAgents(t),
         ]);
 
@@ -190,7 +197,7 @@ function App() {
           })
         );
 
-        if (active && t === currentTeam.value) {
+        if (active && t === currentTeam.value && filter === taskTeamFilter.value) {
           batch(() => {
             tasks.value = taskData;
             agents.value = agentData;
@@ -226,6 +233,7 @@ function App() {
       agents.value = [];
       agentStatsMap.value = {};
       messages.value = [];
+      taskTeamFilter.value = "current";  // Reset to current team on team switch
       _syncSignalsNow(t);
     });
 

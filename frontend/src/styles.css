@@ -1046,6 +1046,76 @@ select option:hover {
 .filter-search::placeholder { color: var(--text-faint); }
 .filter-label { color: var(--text-faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
 
+/* Task filters row (team filter + FilterBar) */
+.task-filters-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.team-filter-dropdown { flex-shrink: 0; }
+.team-filter-select {
+  min-width: 120px;
+  /* inherits global select styles */
+}
+
+/* Team-grouped task list */
+.task-list-grouped {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.task-team-group {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.task-team-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  cursor: pointer;
+  user-select: none;
+  transition: background 100ms;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.task-team-header:hover { background: var(--bg-hover); }
+.task-team-toggle {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.task-team-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.task-team-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-active);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* Team badge (shown in task panel header when viewing cross-team) */
+.task-team-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-active);
+  color: var(--text-muted);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
 /* ================================================================
    Agents panel
    ================================================================ */

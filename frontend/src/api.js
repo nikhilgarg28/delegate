@@ -18,6 +18,11 @@ export async function fetchTasks(team) {
   return r.ok ? r.json() : [];
 }
 
+export async function fetchAllTasks() {
+  const r = await fetch(`/api/tasks?team=all`);
+  return r.ok ? r.json() : [];
+}
+
 export async function fetchAgents(team) {
   const r = await fetch(`/teams/${team}/agents`);
   return r.ok ? r.json() : [];

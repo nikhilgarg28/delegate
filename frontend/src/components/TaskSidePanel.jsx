@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "preact/hooks";
 import {
   currentTeam, tasks, taskPanelId, knownAgentNames, bossName,
-  panelStack, pushPanel, closeAllPanels, popPanel,
+  panelStack, pushPanel, closeAllPanels, popPanel, taskTeamFilter,
 } from "../state.js";
 import * as api from "../api.js";
 import {
@@ -883,7 +883,13 @@ export function TaskSidePanel() {
         {/* Header */}
         <div class="task-panel-header">
           <div class="task-panel-title-row">
-            <span class="task-panel-id copyable">{taskIdStr(id)}<CopyBtn text={taskIdStr(id)} /></span>
+            <span class="task-panel-id copyable">
+              {taskIdStr(id)}
+              {taskTeamFilter.value === "all" && t && t.team && (
+                <span class="task-team-badge">{cap(t.team)}</span>
+              )}
+              <CopyBtn text={taskIdStr(id)} />
+            </span>
             <span class="task-panel-title">{t ? t.title : "Loading..."}</span>
           </div>
           <div class="task-panel-meta-row">

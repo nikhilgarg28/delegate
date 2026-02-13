@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "preact/hooks";
-import { currentTeam, tasks, activeTab, openPanel } from "../state.js";
+import { currentTeam, tasks, activeTab, openPanel, taskTeamFilter, teams } from "../state.js";
 import { cap, fmtStatus, taskIdStr } from "../utils.js";
 import { playTaskSound } from "../audio.js";
 import { FilterBar, applyFilters } from "./FilterBar.jsx";
@@ -19,10 +19,13 @@ const DEFAULT_FILTERS = [
 export function TasksPanel() {
   const team = currentTeam.value;
   const allTasks = tasks.value;
+  const teamFilter = taskTeamFilter.value;
+  const allTeams = teams.value;
 
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [collapsedTeams, setCollapsedTeams] = useState(new Set());
   const searchTimerRef = useRef(null);
   const prevStatusRef = useRef({});
 
@@ -135,14 +138,69 @@ export function TasksPanel() {
     searchTimerRef.current = setTimeout(() => setSearchQuery(val), 300);
   }, []);
 
-  // Keyboard navigation
+  // Reset selection when filters change
+  useEffect(() => {
+    setSelectedIndex(-1);
+  }, [filters, searchQuery]);
+
+  const searchIcon = (
+    <svg class="filter-search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="6" r="4.5" /><line x1="9.5" y1="9.5" x2="13" y2="13" />
+    </svg>
+  );
+
+  const handleTeamFilterChange = useCallback((val) => {
+    taskTeamFilter.value = val;
+    setCollapsedTeams(new Set());
+    setSelectedIndex(-1);
+  }, []);
+
+  const toggleTeamGroup = useCallback((teamName) => {
+    setCollapsedTeams(prev => {
+      const next = new Set(prev);
+      if (next.has(teamName)) {
+        next.delete(teamName);
+      } else {
+        next.add(teamName);
+      }
+      return next;
+    });
+  }, []);
+
+  // Group tasks by team when viewing "all"
+  const groupedTasks = useMemo(() => {
+    if (teamFilter !== "all") {
+      return { [team]: filtered };
+    }
+    const groups = {};
+    for (const t of filtered) {
+      const tTeam = t.team || team;
+      if (!groups[tTeam]) groups[tTeam] = [];
+      groups[tTeam].push(t);
+    }
+    return groups;
+  }, [filtered, teamFilter, team]);
+
+  const isGroupedView = teamFilter === "all";
+
+  // Build flat task list for keyboard navigation (respecting collapsed state)
+  const flatTaskList = useMemo(() => {
+    const list = [];
+    Object.entries(groupedTasks).forEach(([teamName, teamTasks]) => {
+      if (!isGroupedView || !collapsedTeams.has(teamName)) {
+        list.push(...teamTasks);
+      }
+    });
+    return list;
+  }, [groupedTasks, isGroupedView, collapsedTeams]);
+
+  // Update keyboard navigation to use flatTaskList
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Only handle when tasks panel is active and no input is focused
       if (activeTab.value !== "tasks") return;
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
 
-      const len = filtered.length;
+      const len = flatTaskList.length;
       if (len === 0) return;
 
       if (e.key === "j" || e.key === "ArrowDown") {
@@ -159,7 +217,7 @@ export function TasksPanel() {
         });
       } else if (e.key === "Enter" && selectedIndex >= 0 && selectedIndex < len) {
         e.preventDefault();
-        openPanel("task", filtered[selectedIndex].id);
+        openPanel("task", flatTaskList[selectedIndex].id);
       } else if (e.key === "Escape") {
         e.preventDefault();
         setSelectedIndex(-1);
@@ -168,18 +226,7 @@ export function TasksPanel() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [filtered, selectedIndex]);
-
-  // Reset selection when filters change
-  useEffect(() => {
-    setSelectedIndex(-1);
-  }, [filters, searchQuery]);
-
-  const searchIcon = (
-    <svg class="filter-search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="6" cy="6" r="4.5" /><line x1="9.5" y1="9.5" x2="13" y2="13" />
-    </svg>
-  );
+  }, [flatTaskList, selectedIndex]);
 
   return (
     <div class={`panel${activeTab.value === "tasks" ? " active" : ""}`}>
@@ -194,17 +241,69 @@ export function TasksPanel() {
             onInput={onSearchInput}
           />
         </div>
-        <FilterBar
-          filters={filters}
-          onFiltersChange={setFilters}
-          fieldConfig={fieldConfig}
-        />
+        <div class="task-filters-row">
+          <div class="team-filter-dropdown">
+            <select
+              class="team-filter-select"
+              value={teamFilter}
+              onChange={(e) => handleTeamFilterChange(e.target.value)}
+            >
+              <option value="current">{cap(team)}</option>
+              <option value="all">All teams</option>
+              {allTeams.filter(t => t.name !== team).map(t => (
+                <option key={t.name} value={t.name}>{cap(t.name)}</option>
+              ))}
+            </select>
+          </div>
+          <FilterBar
+            filters={filters}
+            onFiltersChange={setFilters}
+            fieldConfig={fieldConfig}
+          />
+        </div>
       </div>
       <div>
         {!allTasks.length ? (
           <p style={{ color: "var(--text-secondary)" }}>No tasks yet.</p>
         ) : !filtered.length ? (
           <p style={{ color: "var(--text-secondary)" }}>No tasks match filters.</p>
+        ) : isGroupedView ? (
+          <div class="task-list-grouped">
+            {Object.entries(groupedTasks).map(([teamName, teamTasks]) => {
+              const isCollapsed = collapsedTeams.has(teamName);
+              return (
+                <div key={teamName} class="task-team-group">
+                  <div class="task-team-header" onClick={() => toggleTeamGroup(teamName)}>
+                    <span class="task-team-toggle">{isCollapsed ? "\u25B6" : "\u25BC"}</span>
+                    <span class="task-team-name">{cap(teamName)}</span>
+                    <span class="task-team-count">{teamTasks.length}</span>
+                  </div>
+                  {!isCollapsed && (
+                    <div class="task-list">
+                      {teamTasks.map((t) => {
+                        const globalIdx = flatTaskList.findIndex(ft => ft.id === t.id);
+                        return (
+                          <div
+                            key={t.id}
+                            class={`task-row${globalIdx === selectedIndex ? " selected" : ""}`}
+                            onClick={() => { openPanel("task", t.id); }}
+                          >
+                            <div class="task-summary">
+                              <span class="task-id copyable">{taskIdStr(t.id)}<CopyBtn text={taskIdStr(t.id)} /></span>
+                              <span class="task-title">{t.title}</span>
+                              <span><span class={"badge badge-" + t.status}>{fmtStatus(t.status)}</span></span>
+                              <span class="task-assignee">{t.assignee ? cap(t.assignee) : "\u2014"}</span>
+                              <span class="task-priority">{cap(t.priority)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         ) : (
           <div class="task-list">
             {filtered.map((t, idx) => (
