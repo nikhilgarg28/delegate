@@ -177,22 +177,47 @@ function AgentsWidget({ collapsed }) {
       {sorted.map(({ agent: a, status, displayTaskId }) => {
         const dotClass = getAgentDotClass(a, allTasks, statsMap[a.name]);
 
-        // Get last 2 tool invocations for this agent
+        // Get last 1 tool invocation for this agent
         const agentActivities = activityLog
           .filter(entry => entry.agent === a.name && entry.type === "agent_activity")
-          .slice(-2);
+          .slice(-1);
+
+        // Build status text with task ID embedded
+        let statusText = status;
+        if (status === "working" && displayTaskId) {
+          statusText = `working on ${taskIdStr(displayTaskId)}`;
+        } else if (status === "waiting" && displayTaskId) {
+          statusText = `waiting on ${taskIdStr(displayTaskId)}`;
+        }
 
         return (
           <div
             key={a.name}
             class="sb-agent-row"
-            onClick={() => { openPanel("agent", a.name); }}
           >
             <div class="sb-agent-line1">
               <span class={"sb-dot " + dotClass}></span>
-              <span class="sb-agent-name">{cap(a.name)}</span>
-              <span class="sb-agent-status">{status}</span>
-              {displayTaskId && <span class="sb-agent-task-id">{taskIdStr(displayTaskId)}</span>}
+              <span
+                class="sb-agent-name"
+                onClick={(e) => { e.stopPropagation(); openPanel("agent", a.name); }}
+              >
+                {cap(a.name)}
+              </span>
+              <span class="sb-agent-status">
+                {status === "idle" ? "idle" : (
+                  <>
+                    {status === "working" ? "working on " : "waiting on "}
+                    {displayTaskId && (
+                      <span
+                        class="sb-agent-task-link"
+                        onClick={(e) => { e.stopPropagation(); openPanel("task", displayTaskId); }}
+                      >
+                        {taskIdStr(displayTaskId)}
+                      </span>
+                    )}
+                  </>
+                )}
+              </span>
             </div>
             {agentActivities.map((act, idx) => {
               const toolDetail = act.tool

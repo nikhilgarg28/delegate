@@ -284,6 +284,12 @@ function App() {
               };
             }
 
+            // Clear activity log entries for this agent
+            const log = _pt.activityLog[team];
+            if (log) {
+              _pt.activityLog[team] = log.filter(e => e.agent !== entry.agent);
+            }
+
             const ctx = _pt.managerCtx[team];
             if (ctx && ctx.agent === entry.agent) {
               _pt.managerCtx[team] = null;

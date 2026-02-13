@@ -292,7 +292,6 @@ body {
   flex-direction: column;
   padding: 5px 4px;
   border-radius: 4px;
-  cursor: pointer;
   transition: background 100ms;
 }
 .sb-agent-row:hover { background: var(--bg-hover); }
@@ -312,18 +311,25 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 0;
+  cursor: pointer;
+}
+.sb-agent-name:hover {
+  text-decoration: underline;
 }
 .sb-agent-status {
   color: var(--text-muted);
   font-size: 10px;
   flex: 1;
   min-width: 0;
+  text-align: left;
 }
-.sb-agent-task-id {
+.sb-agent-task-link {
   font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   color: var(--text-secondary);
-  font-size: 10px;
-  flex-shrink: 0;
+  cursor: pointer;
+}
+.sb-agent-task-link:hover {
+  text-decoration: underline;
 }
 
 .sb-agent-tool-line {
