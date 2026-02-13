@@ -403,7 +403,7 @@ body {
 .task-list { display: flex; flex-direction: column; gap: 1px; }
 .task-row {
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 0 4px 4px 0;
   transition: background 100ms;
   border-left: 2px solid transparent;
 }
