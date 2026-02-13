@@ -219,6 +219,13 @@ export function TasksPanel() {
     return list;
   }, [groupedTasks, isGroupedView, collapsedTeams]);
 
+  // Keep a ref for selectedIndex so the keyboard handler always reads the
+  // latest value without needing to re-register on every selection change.
+  // (Avoids a stale-closure race where Enter fires before useEffect
+  // re-attaches the handler with the updated selectedIndex.)
+  const selectedIndexRef = useRef(selectedIndex);
+  selectedIndexRef.current = selectedIndex;
+
   // Update keyboard navigation to use flatTaskList
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -242,10 +249,13 @@ export function TasksPanel() {
           if (prev === -1) return len - 1;
           return (prev - 1 + len) % len;
         });
-      } else if (e.key === "Enter" && selectedIndex >= 0 && selectedIndex < len) {
-        e.preventDefault();
-        e.stopPropagation();
-        openPanel("task", flatTaskList[selectedIndex].id);
+      } else if (e.key === "Enter") {
+        const idx = selectedIndexRef.current;
+        if (idx >= 0 && idx < len) {
+          e.preventDefault();
+          e.stopPropagation();
+          openPanel("task", flatTaskList[idx].id);
+        }
       } else if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -255,7 +265,7 @@ export function TasksPanel() {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [flatTaskList, selectedIndex]);
+  }, [flatTaskList]);
 
   return (
     <div class={`panel${activeTab.value === "tasks" ? " active" : ""}`}>

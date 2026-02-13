@@ -22,6 +22,12 @@ import { test, expect } from "@playwright/test";
 
 const TEAM = "testteam";
 
+// Wait for Preact useEffect handlers to settle after DOM updates.
+// Webkit has a larger gap between DOM paint and useEffect execution,
+// so we flush several frames to ensure handlers are registered.
+const waitForEffects = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => new Promise<void>(r => setTimeout(r, 100)));
+
 test.describe("Keyboard shortcuts", () => {
   test("c navigates to Chat tab", async ({ page }) => {
     await page.goto(`/${TEAM}/tasks`);
@@ -52,6 +58,8 @@ test.describe("Keyboard shortcuts", () => {
 
   test("s toggles sidebar collapse", async ({ page }) => {
     await page.goto(`/${TEAM}/chat`);
+    // Wait for page to be ready (keyboard handler registered in useEffect)
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
 
     // Sidebar should start expanded
     const sidebar = page.locator(".sb");
@@ -68,6 +76,8 @@ test.describe("Keyboard shortcuts", () => {
 
   test("? toggles help overlay", async ({ page }) => {
     await page.goto(`/${TEAM}/chat`);
+    // Wait for page to be ready (keyboard handler registered in useEffect)
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
 
     // Help overlay should not be visible initially
     const helpOverlay = page.locator(".help-overlay");
@@ -84,6 +94,8 @@ test.describe("Keyboard shortcuts", () => {
 
   test("Escape closes help overlay", async ({ page }) => {
     await page.goto(`/${TEAM}/chat`);
+    // Wait for page to be ready (keyboard handler registered in useEffect)
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
 
     // Open help overlay with '?'
     await page.keyboard.press("?");
@@ -97,6 +109,8 @@ test.describe("Keyboard shortcuts", () => {
 
   test("/ focuses chat input", async ({ page }) => {
     await page.goto(`/${TEAM}/chat`);
+    // Wait for page to be ready (keyboard handler registered in useEffect)
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
 
     // Chat input should not be focused initially
     const chatInput = page.locator('textarea[placeholder="Send a message..."]');
@@ -109,6 +123,8 @@ test.describe("Keyboard shortcuts", () => {
 
   test("Escape blurs chat input when focused", async ({ page }) => {
     await page.goto(`/${TEAM}/chat`);
+    // Wait for page to be ready (keyboard handler registered in useEffect)
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
 
     // Focus the chat input with '/'
     const chatInput = page.locator('textarea[placeholder="Send a message..."]');
@@ -122,6 +138,7 @@ test.describe("Keyboard shortcuts", () => {
 
   test("Escape closes task side panel", async ({ page }) => {
     await page.goto(`/${TEAM}/tasks`);
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Tasks");
     await expect(page.locator(".task-row").first()).toBeVisible({
       timeout: 5_000,
     });
@@ -140,6 +157,7 @@ test.describe("Keyboard shortcuts", () => {
     page,
   }) => {
     await page.goto(`/${TEAM}/tasks`);
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Tasks");
     await expect(page.locator(".task-row").first()).toBeVisible({
       timeout: 5_000,
     });
@@ -157,6 +175,7 @@ test.describe("Keyboard shortcuts", () => {
 
   test("sidebar toggle works when task panel is open", async ({ page }) => {
     await page.goto(`/${TEAM}/tasks`);
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Tasks");
     await expect(page.locator(".task-row").first()).toBeVisible({
       timeout: 5_000,
     });
@@ -183,6 +202,8 @@ test.describe("Keyboard shortcuts", () => {
 
   test("help overlay blocks all other shortcuts", async ({ page }) => {
     await page.goto(`/${TEAM}/chat`);
+    // Wait for page to be ready (keyboard handler registered in useEffect)
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
 
     // Open help overlay
     await page.keyboard.press("?");
@@ -211,9 +232,11 @@ test.describe("Keyboard shortcuts", () => {
     page,
   }) => {
     await page.goto(`/${TEAM}/tasks`);
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Tasks");
     await expect(page.locator(".task-row").first()).toBeVisible({
       timeout: 5_000,
     });
+    await waitForEffects(page);
 
     // There should be 2 tasks (T0001, T0002) with default filters
     await expect(page.locator(".task-row")).toHaveCount(2);
@@ -259,9 +282,11 @@ test.describe("Keyboard shortcuts", () => {
 
   test("Enter opens selected task in tasks panel", async ({ page }) => {
     await page.goto(`/${TEAM}/tasks`);
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Tasks");
     await expect(page.locator(".task-row").first()).toBeVisible({
       timeout: 5_000,
     });
+    await waitForEffects(page);
 
     // Press 'j' to select first task (tasks sorted by ID descending, so T0002 is first)
     await page.keyboard.press("j");
