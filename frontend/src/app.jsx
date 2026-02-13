@@ -261,7 +261,8 @@ function App() {
             if (!_pt.turnState[team]) _pt.turnState[team] = {};
             _pt.turnState[team][entry.agent] = {
               inTurn: true,
-              taskId: entry.task_id ?? null
+              taskId: entry.task_id ?? null,
+              sender: entry.sender ?? ""
             };
 
             const mgrName = _pt.managerName[team];

@@ -143,23 +143,28 @@ function AgentsWidget({ collapsed }) {
     const turn = turnState[a.name];
     const inTurn = turn?.inTurn ?? false;
     const lastTaskId = turn?.taskId ?? null;
+    const sender = turn?.sender ?? "";
     const assignedTask = allTasks.find(t => t.assignee === a.name && t.status === "in_progress");
 
     let status = "idle";
     let displayTaskId = null;
+    let respondingTo = null;
 
     if (inTurn) {
       status = "working";
       // Show task ID only if it's still assigned to this agent
       if (lastTaskId && assignedTask && assignedTask.id === lastTaskId) {
         displayTaskId = lastTaskId;
+      } else if (!lastTaskId && sender) {
+        // In turn with no task but has sender -> responding to sender
+        respondingTo = sender;
       }
     } else if (assignedTask) {
       status = "waiting";
       displayTaskId = assignedTask.id;
     }
 
-    return { agent: a, status, displayTaskId };
+    return { agent: a, status, displayTaskId, respondingTo };
   });
 
   // Sort: active (working first, then waiting) at top, idle at bottom, alphabetically within groups
@@ -174,7 +179,7 @@ function AgentsWidget({ collapsed }) {
   return (
     <div class="sb-widget">
       <div class="sb-widget-header">Agents</div>
-      {sorted.map(({ agent: a, status, displayTaskId }) => {
+      {sorted.map(({ agent: a, status, displayTaskId, respondingTo }) => {
         let dotClass = getAgentDotClass(a, allTasks, statsMap[a.name]);
 
         // Override dot color for idle agents
@@ -209,7 +214,9 @@ function AgentsWidget({ collapsed }) {
                 {cap(a.name)}
               </span>
               <span class="sb-agent-status">
-                {status === "idle" ? "idle" : (
+                {status === "idle" ? "idle" : respondingTo ? (
+                  `responding to ${respondingTo}`
+                ) : (
                   <>
                     {status === "working" ? "working on " : "waiting on "}
                     {displayTaskId && (
