@@ -2,7 +2,7 @@ import { render } from "preact";
 import { useEffect, useCallback } from "preact/hooks";
 import { batch } from "@preact/signals";
 import {
-  currentTeam, teams, bossName, tasks, agents, agentStatsMap, messages,
+  currentTeam, teams, bossName, hcHome, tasks, agents, agentStatsMap, messages,
   activeTab, knownAgentNames,
   panelStack, popPanel, closeAllPanels,
   agentLastActivity, agentActivityLog, managerTurnContext,
@@ -142,6 +142,7 @@ function App() {
       try {
         const cfg = await api.fetchConfig();
         if (cfg.boss_name) bossName.value = cfg.boss_name;
+        if (cfg.hc_home) hcHome.value = cfg.hc_home;
       } catch (e) { }
       try {
         const teamList = await api.fetchTeams();

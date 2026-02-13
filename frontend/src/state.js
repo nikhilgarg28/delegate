@@ -8,6 +8,7 @@ import { signal, computed } from "@preact/signals";
 export const currentTeam = signal("");
 export const teams = signal([]);
 export const bossName = signal("boss");
+export const hcHome = signal("");   // absolute path to delegate home (e.g. /Users/x/.delegate)
 
 // ── API data (refreshed by polling) ──
 export const tasks = signal([]);

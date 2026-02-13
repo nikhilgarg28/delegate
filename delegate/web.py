@@ -564,7 +564,10 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     @app.get("/config")
     def get_config():
         """Return app configuration (boss name, etc.) for the frontend."""
-        return {"boss_name": get_boss(hc_home) or "boss"}
+        return {
+            "boss_name": get_boss(hc_home) or "boss",
+            "hc_home": str(hc_home),
+        }
 
     # --- Team endpoints ---
 
@@ -1244,18 +1247,19 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     def _resolve_file_path(team: str, path: str) -> Path:
         """Resolve a file path from an API ``path`` parameter.
 
-        * Absolute paths (starting with ``/``) are used directly.
-        * ``agents/`` or ``worktrees/`` prefixes resolve from the team root.
-        * Everything else resolves from the team's ``shared/`` directory.
+        Two path kinds are supported:
+
+        * **Absolute** (starts with ``/``) — used directly.
+        * **Delegate-relative** (anything else) — resolved from ``hc_home``
+          (typically ``~/.delegate``).  E.g. ``teams/self/shared/spec.md``
+          resolves to ``~/.delegate/teams/self/shared/spec.md``.
 
         Returns the resolved ``Path``, or raises 404.
         """
         if path.startswith("/"):
             target = Path(path).resolve()
-        elif path.startswith("agents/") or path.startswith("worktrees/"):
-            target = (_team_dir(hc_home, team) / path).resolve()
         else:
-            target = (_shared_dir(hc_home, team) / path).resolve()
+            target = (hc_home / path).resolve()
 
         if not target.is_file():
             raise HTTPException(
@@ -1267,8 +1271,8 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     def read_file_content(team: str, path: str):
         """Read any file and return its content as JSON.
 
-        Supports absolute paths, team-relative paths (``agents/``,
-        ``worktrees/``), and shared-relative paths.
+        Supports absolute paths and delegate-relative paths (resolved
+        from ``hc_home``, e.g. ``teams/self/shared/spec.md``).
 
         For text files, returns content as string.
         For images and binary files, returns base64-encoded data with content_type.
@@ -1341,7 +1345,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
     @app.get("/teams/{team}/files/raw")
     def serve_raw_file(team: str, path: str):
-        """Serve a raw file from the team's shared/ or agents/ directory.
+        """Serve a raw file (absolute or delegate-relative path).
 
         Returns the file with its native content type so browsers can render it directly.
         Used for opening HTML attachments in new tabs.

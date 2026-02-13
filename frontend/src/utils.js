@@ -5,6 +5,7 @@
 import { html as diff2HtmlRender, parse as diff2HtmlParse } from "diff2html";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
+import { hcHome } from "./state.js";
 
 // Configure marked for GFM
 marked.setOptions({ gfm: true, breaks: true });
@@ -223,52 +224,62 @@ export function linkifyTaskRefs(html) {
 /**
  * Normalise a file path for the /teams/{team}/files/content endpoint.
  *
- * The backend accepts:
- *   - Absolute paths (starting with "/") → served directly
- *   - "agents/…" or "worktrees/…"       → resolved from team root
- *   - anything else                      → resolved from team's shared/ dir
+ * The backend accepts exactly two path kinds:
+ *   - **Absolute** (starts with "/") — used directly.
+ *   - **Delegate-relative** — resolved from hc_home (~/.delegate).
+ *     e.g. "teams/self/shared/spec.md" → ~/.delegate/teams/self/shared/spec.md
  *
- * For delegate-internal paths we strip to team-relative form.
- * Paths outside the delegate tree are passed through as absolute paths.
+ * This function converts any raw path (absolute or legacy relative) into
+ * one of those two forms.
  */
 export function toApiPath(raw, team) {
   let p = raw;
 
-  // For absolute paths inside the team directory, strip to team-relative.
-  const teamMarker = `/teams/${team}/`;
-  const tmIdx = p.indexOf(teamMarker);
-  if (tmIdx !== -1) {
-    p = p.substring(tmIdx + teamMarker.length);
+  // Absolute path inside delegate home → strip to delegate-relative.
+  const home = hcHome.value;
+  if (home && p.startsWith(home + "/")) {
+    p = p.substring(home.length + 1);
   }
 
-  // "shared/" prefix → strip so backend resolves from shared_dir.
-  if (p.startsWith("shared/")) {
-    p = p.substring(7);
+  // Still absolute → outside delegate tree, pass through for direct use.
+  if (p.startsWith("/")) return p;
+
+  // Already delegate-relative (teams/…) → pass through.
+  if (p.startsWith("teams/")) return p;
+
+  // Legacy relative: shared/foo, agents/foo, worktrees/foo → prefix with teams/{team}/
+  if (p.startsWith("shared/") || p.startsWith("agents/") || p.startsWith("worktrees/")) {
+    return `teams/${team}/${p}`;
   }
 
-  // agents/, worktrees/ are sent as-is.
-  // Absolute paths (outside delegate tree) are sent as-is — backend handles them.
-  return p;
+  // Unknown relative → assume team's shared/ dir.
+  return `teams/${team}/shared/${p}`;
 }
 
 /**
  * Shorten a file path for display.
- * Delegate-internal paths → relative to .delegate/
- * External paths → shown in full.
+ *
+ * Delegate-internal paths (absolute or delegate-relative) are shown
+ * relative to hc_home.  External paths are shown in full.
  */
 export function displayFilePath(path) {
   if (!path) return path;
-  const idx = path.indexOf(".delegate/");
-  if (idx !== -1) return path.substring(idx + ".delegate/".length);
+  // Already delegate-relative
+  if (path.startsWith("teams/")) return path;
+  // Absolute inside delegate home → strip to delegate-relative
+  const home = hcHome.value;
+  if (home && path.startsWith(home + "/")) {
+    return path.substring(home.length + 1);
+  }
   return path;
 }
 
 export function linkifyFilePaths(html) {
   // Match:
-  //  1. Relative delegate paths: shared/…, agents/…, worktrees/…
-  //  2. Absolute paths: /path/to/file.ext
+  //  1. Delegate-relative paths: teams/…, shared/…, agents/…, worktrees/…
+  //  2. Absolute paths: /path/to/file.ext  (must end with .ext)
   return html.replace(/(^[^<]+|>[^<]*)/g, match =>
-    match.replace(/(?:\b(?:shared|agents|worktrees)\/[\w\-\.\/]+\.[\w]+|\/[\w\-\.\/]+\.[\w]+)/g, path => {
+    match.replace(/(?:\b(?:teams|shared|agents|worktrees)\/[\w\-\.\/]+\.[\w]+|\/[\w\-\.\/]+\.[\w]+)/g, path => {
       const display = displayFilePath(path);
       return '<span class="file-link copyable" data-file-path="' + esc(path) + '">' + esc(display) + copyBtnHtml(path) + "</span>";
     })

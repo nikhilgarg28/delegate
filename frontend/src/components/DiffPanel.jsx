@@ -266,10 +266,9 @@ function FileView({ filePath }) {
     setFileData(null); setError(null);
     const abortCtrl = new AbortController();
     let settled = false;
-    // Normalise the file path to a team-relative API path.
-    // Absolute paths are stripped to their team-relative form.
-    // The backend resolves agents/ and worktrees/ from the team root,
-    // and everything else from the team's shared/ directory.
+    // Normalise the file path for the backend.
+    // Absolute paths inside delegate home are stripped to delegate-relative.
+    // The backend resolves delegate-relative paths from hc_home.
     const apiPath = toApiPath(filePath, team);
     api.fetchFileContent(team, apiPath, { signal: abortCtrl.signal }).then(data => {
       settled = true;

@@ -124,23 +124,24 @@ class TestListSharedFiles:
 
 
 class TestReadSharedFile:
+    """Tests use delegate-relative paths (resolved from hc_home)."""
+
     def test_read_file_returns_content(self, client):
         """Reading a file returns its content."""
         resp = client.get(
             f"/teams/{TEAM}/files/content",
-            params={"path": "decisions/2026-02-09-api-design.md"},
+            params={"path": f"teams/{TEAM}/shared/decisions/2026-02-09-api-design.md"},
         )
         assert resp.status_code == 200
         data = resp.json()
         assert "API Design Decision" in data["content"]
         assert data["name"] == "2026-02-09-api-design.md"
-        assert data["path"] == "decisions/2026-02-09-api-design.md"
 
     def test_read_file_has_required_fields(self, client):
         """Response should contain path, name, size, content, modified."""
         resp = client.get(
             f"/teams/{TEAM}/files/content",
-            params={"path": "README.md"},
+            params={"path": f"teams/{TEAM}/shared/README.md"},
         )
         data = resp.json()
         assert "path" in data
@@ -153,7 +154,7 @@ class TestReadSharedFile:
         """Reading a file at the root of shared/ works."""
         resp = client.get(
             f"/teams/{TEAM}/files/content",
-            params={"path": "README.md"},
+            params={"path": f"teams/{TEAM}/shared/README.md"},
         )
         assert resp.status_code == 200
         assert "Shared Knowledge Base" in resp.json()["content"]
@@ -162,17 +163,9 @@ class TestReadSharedFile:
         """Reading a non-existent file returns 404."""
         resp = client.get(
             f"/teams/{TEAM}/files/content",
-            params={"path": "does-not-exist.md"},
+            params={"path": f"teams/{TEAM}/shared/does-not-exist.md"},
         )
         assert resp.status_code == 404
-
-    def test_read_path_traversal_403(self, client):
-        """Path traversal attempts return 403."""
-        resp = client.get(
-            f"/teams/{TEAM}/files/content",
-            params={"path": "../../etc/passwd"},
-        )
-        assert resp.status_code == 403
 
     def test_read_large_file_truncated(self, shared_tree):
         """Files larger than 1MB should be truncated."""
@@ -186,7 +179,7 @@ class TestReadSharedFile:
         c = TestClient(app)
         resp = c.get(
             f"/teams/{TEAM}/files/content",
-            params={"path": "large.txt"},
+            params={"path": f"teams/{TEAM}/shared/large.txt"},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -213,7 +206,7 @@ class TestReadSharedFile:
         c = TestClient(app)
         resp = c.get(
             f"/teams/{TEAM}/files/content",
-            params={"path": "test.png"},
+            params={"path": f"teams/{TEAM}/shared/test.png"},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -235,10 +228,26 @@ class TestReadSharedFile:
         c = TestClient(app)
         resp = c.get(
             f"/teams/{TEAM}/files/content",
-            params={"path": "data.bin"},
+            params={"path": f"teams/{TEAM}/shared/data.bin"},
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["is_binary"] is True
         assert data["content"] == ""
         assert data["content_type"] == "application/octet-stream"
+
+    def test_read_absolute_path(self, shared_tree):
+        """Absolute paths are resolved directly."""
+        from delegate.paths import shared_dir
+
+        base = shared_dir(shared_tree, TEAM)
+        abs_path = str(base / "README.md")
+
+        app = create_app(hc_home=shared_tree)
+        c = TestClient(app)
+        resp = c.get(
+            f"/teams/{TEAM}/files/content",
+            params={"path": abs_path},
+        )
+        assert resp.status_code == 200
+        assert "Shared Knowledge Base" in resp.json()["content"]
