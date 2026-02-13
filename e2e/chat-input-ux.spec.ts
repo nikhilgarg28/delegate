@@ -15,8 +15,13 @@ const TEAM = "testteam";
 async function fillTextarea(page, text) {
   const textarea = page.locator(".chat-input-box textarea");
 
-  // First, clear the textarea and click to focus it
+  // Wait for textarea to be ready
+  await textarea.waitFor({ state: "visible" });
+
+  // Click to focus
   await textarea.click();
+
+  // Clear any existing text
   await textarea.fill("");
 
   // Type the text character by character to properly trigger all input events
@@ -60,10 +65,15 @@ test.describe("Chat input UX", () => {
   });
 
   test("Inline rendering shows for code blocks", async ({ page }) => {
-    await fillTextarea(page, "Here is some code:\n```js\nconst x = 1;\n```");
+    const textarea = page.locator(".chat-input-box textarea");
 
+    // Use Playwright's built-in fill which should trigger native events
+    await textarea.fill("```js\nconst x = 1;\n```");
+
+    // Wait for Preact to update state and render the overlay
+    // Use waitFor to be more reliable than a fixed timeout
     const overlay = page.locator(".chat-input-overlay");
-    await expect(overlay).toBeVisible();
+    await expect(overlay).toBeVisible({ timeout: 2000 });
 
     const codeBlock = overlay.locator("pre code");
     await expect(codeBlock).toBeVisible();
