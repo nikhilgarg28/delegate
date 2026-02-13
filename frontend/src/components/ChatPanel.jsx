@@ -181,10 +181,10 @@ function BellIcon({ muted }) {
 
 export function ChatPanel() {
   const team = currentTeam.value;
-  const msgs = messages.value;
   const allAgents = agents.value;
   const agNames = knownAgentNames.value;
 
+  const [msgs, setMsgs] = useState([]);
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
   const [filterSearch, setFilterSearch] = useState("");
@@ -192,6 +192,8 @@ export function ChatPanel() {
   const [recipient, setRecipient] = useState("");
   const [inputVal, setInputVal] = useState("");
   const [sendBtnActive, setSendBtnActive] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
 
   const direction = chatFilterDirection.value;
   const logRef = useRef();
@@ -202,6 +204,9 @@ export function ChatPanel() {
   const isAtBottomRef = useRef(true);
   const [showJumpBtn, setShowJumpBtn] = useState(false);
   const initialScrollDone = useRef(false);
+  const oldestMsgIdRef = useRef(null);
+  const newestMsgTsRef = useRef("");
+  const pollingIntervalRef = useRef(null);
 
   const mic = useSpeechRecognition(inputRef);
   const muted = isMuted.value;
@@ -229,6 +234,61 @@ export function ChatPanel() {
       }));
     } catch (e) { }
   }, [filterSearch, filterFrom, filterTo, showEvents, direction]);
+
+  // Initial load: fetch last 100 messages
+  useEffect(() => {
+    if (!team) return;
+    let active = true;
+    (async () => {
+      try {
+        const initial = await api.fetchMessages(team, { limit: 100 });
+        if (!active) return;
+        setMsgs(initial);
+        if (initial.length > 0) {
+          oldestMsgIdRef.current = initial[0].id;
+          newestMsgTsRef.current = initial[initial.length - 1].timestamp;
+        }
+        if (initial.length < 100) {
+          setHasMoreMessages(false);
+        }
+      } catch (e) {
+        console.error("Failed to fetch initial messages:", e);
+      }
+    })();
+    return () => { active = false; };
+  }, [team]);
+
+  // Polling: fetch new messages every 2 seconds using `since`
+  useEffect(() => {
+    if (!team) return;
+    const poll = async () => {
+      try {
+        const newMsgs = await api.fetchMessages(team, { since: newestMsgTsRef.current });
+        if (newMsgs.length > 0) {
+          setMsgs(prev => {
+            const combined = [...prev, ...newMsgs];
+            // Deduplicate by id
+            const seen = new Set();
+            const unique = combined.filter(m => {
+              if (seen.has(m.id)) return false;
+              seen.add(m.id);
+              return true;
+            });
+            return unique;
+          });
+          newestMsgTsRef.current = newMsgs[newMsgs.length - 1].timestamp;
+        }
+      } catch (e) {
+        console.error("Polling error:", e);
+      }
+    };
+    pollingIntervalRef.current = setInterval(poll, 2000);
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [team]);
 
   // Auto-select recipient when agents load
   useEffect(() => {
@@ -270,18 +330,54 @@ export function ChatPanel() {
     return filtered;
   }, [msgs, showEvents, filterFrom, filterTo, filterSearch, direction]);
 
-  // Track scroll position
+  // Track scroll position and load older messages
   useEffect(() => {
     const el = logRef.current;
     if (!el) return;
-    const onScroll = () => {
+    const onScroll = async () => {
       const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
       isAtBottomRef.current = nearBottom;
       setShowJumpBtn(!nearBottom);
+
+      // Load older messages when scrolled to top
+      const nearTop = el.scrollTop < 100;
+      if (nearTop && !isLoadingOlder && hasMoreMessages && oldestMsgIdRef.current) {
+        setIsLoadingOlder(true);
+        try {
+          const older = await api.fetchMessages(team, { before_id: oldestMsgIdRef.current, limit: 50 });
+          if (older.length > 0) {
+            const prevScrollHeight = el.scrollHeight;
+            setMsgs(prev => {
+              const combined = [...older, ...prev];
+              // Deduplicate by id
+              const seen = new Set();
+              const unique = combined.filter(m => {
+                if (seen.has(m.id)) return false;
+                seen.add(m.id);
+                return true;
+              });
+              return unique;
+            });
+            oldestMsgIdRef.current = older[0].id;
+            // Maintain scroll position after prepending
+            requestAnimationFrame(() => {
+              const newScrollHeight = el.scrollHeight;
+              el.scrollTop = newScrollHeight - prevScrollHeight;
+            });
+          }
+          if (older.length < 50) {
+            setHasMoreMessages(false);
+          }
+        } catch (e) {
+          console.error("Failed to load older messages:", e);
+        } finally {
+          setIsLoadingOlder(false);
+        }
+      }
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [team, isLoadingOlder, hasMoreMessages]);
 
   // Scroll to bottom on initial load
   useEffect(() => {
@@ -332,7 +428,7 @@ export function ChatPanel() {
     try {
       await api.sendMessage(team, recipient, val);
 
-      // Optimistic insert: add message to signal immediately
+      // Optimistic insert: add message to local state immediately
       const now = new Date().toISOString();
       const optimistic = {
         id: `optimistic-${Date.now()}`,
@@ -345,7 +441,8 @@ export function ChatPanel() {
         task_id: null,
         type: "chat",
       };
-      messages.value = [...messages.value, optimistic];
+      setMsgs(prev => [...prev, optimistic]);
+      newestMsgTsRef.current = now;
 
       if (inputRef.current) { inputRef.current.value = ""; inputRef.current.style.height = "auto"; }
       setInputVal("");

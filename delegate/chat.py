@@ -32,11 +32,15 @@ def get_messages(
     between: tuple[str, str] | None = None,
     msg_type: str | None = None,
     limit: int | None = None,
+    before_id: int | None = None,
 ) -> list[dict]:
     """Query messages with optional filters.
 
     Returns messages with lifecycle fields (delivered_at, seen_at, processed_at).
     For type='event' rows, lifecycle fields will be NULL.
+
+    When limit is used without before_id, returns the LAST N messages (most recent).
+    When before_id is provided, returns messages with id < before_id (for pagination).
     """
     conn = get_connection(hc_home, team)
     query = """
@@ -61,15 +65,28 @@ def get_messages(
         query += " AND type = ?"
         params.append(msg_type)
 
-    query += " ORDER BY id ASC"
+    if before_id:
+        query += " AND id < ?"
+        params.append(before_id)
 
-    if limit:
-        query += " LIMIT ?"
+    # If limit is used without before_id, we want the LAST N messages
+    # So we ORDER BY id DESC, LIMIT, then reverse the result
+    if limit and not before_id:
+        query += " ORDER BY id DESC LIMIT ?"
         params.append(limit)
-
-    rows = conn.execute(query, params).fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+        rows = conn.execute(query, params).fetchall()
+        conn.close()
+        # Reverse to return oldest-first
+        return [dict(row) for row in reversed(rows)]
+    else:
+        # Normal pagination or no limit
+        query += " ORDER BY id ASC"
+        if limit:
+            query += " LIMIT ?"
+            params.append(limit)
+        rows = conn.execute(query, params).fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
 
 
 def get_task_activity(

@@ -864,13 +864,13 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     # --- Message endpoints (team-scoped) ---
 
     @app.get("/teams/{team}/messages")
-    def get_team_messages(team: str, since: str | None = None, between: str | None = None, type: str | None = None, limit: int | None = None):
+    def get_team_messages(team: str, since: str | None = None, between: str | None = None, type: str | None = None, limit: int | None = None, before_id: int | None = None):
         between_tuple = None
         if between:
             parts = [p.strip() for p in between.split(",")]
             if len(parts) == 2:
                 between_tuple = (parts[0], parts[1])
-        return _get_messages(hc_home, team, since=since, between=between_tuple, msg_type=type, limit=limit)
+        return _get_messages(hc_home, team, since=since, between=between_tuple, msg_type=type, limit=limit, before_id=before_id)
 
     class SendMessage(BaseModel):
         team: str | None = None

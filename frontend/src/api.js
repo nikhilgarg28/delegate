@@ -24,7 +24,16 @@ export async function fetchAgents(team) {
 }
 
 export async function fetchMessages(team, params) {
-  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  // Filter out undefined/null params
+  const cleanParams = {};
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null) {
+        cleanParams[key] = value;
+      }
+    }
+  }
+  const qs = Object.keys(cleanParams).length ? "?" + new URLSearchParams(cleanParams).toString() : "";
   const r = await fetch(`/teams/${team}/messages${qs}`);
   return r.ok ? r.json() : [];
 }

@@ -160,18 +160,12 @@ function App() {
           })
         );
 
-        let msgData = messages.value;
-        if (activeTab.value === "chat") {
-          try { msgData = await api.fetchMessages(t, {}); } catch (e) { }
-        }
-
         if (active && t === currentTeam.value) {
           batch(() => {
             tasks.value = taskData;
             agents.value = agentData;
             agentStatsMap.value = statsMap;
             knownAgentNames.value = agentData.map(a => a.name);
-            if (activeTab.value === "chat") messages.value = msgData;
           });
         }
       } catch (e) {
@@ -202,20 +196,18 @@ function App() {
       _syncSignalsNow(t);
     });
 
-    // Fetch data for new team
+    // Fetch data for new team (messages handled by ChatPanel)
     (async () => {
       try {
-        const [taskData, agentData, msgData] = await Promise.all([
+        const [taskData, agentData] = await Promise.all([
           api.fetchTasks(t),
           api.fetchAgents(t),
-          api.fetchMessages(t, {}),
         ]);
         // Guard: only apply if the team hasn't changed while we were fetching
         if (t !== currentTeam.value) return;
         batch(() => {
           tasks.value = taskData;
           agents.value = agentData;
-          messages.value = msgData;
         });
         const mgr = agentData.find(a => a.role === "manager");
         _pt.managerName[t] = mgr?.name ?? null;
