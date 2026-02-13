@@ -528,7 +528,6 @@ body {
 .task-approval-bar-summary {
   font-size: 12px;
   color: var(--text-secondary);
-  font-style: italic;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -622,7 +621,7 @@ body {
 .approval-badge-rejected { background: rgba(241,76,76,0.08); color: var(--semantic-red); }
 .approval-badge-pending  { background: rgba(226,192,141,0.08); color: var(--semantic-yellow); }
 .approval-badge-merging  { background: rgba(226,192,141,0.08); color: var(--semantic-yellow); }
-.approval-rejection-reason { font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-style: italic; }
+.approval-rejection-reason { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
 
 /* Cancel button */
 .cancel-btn {
