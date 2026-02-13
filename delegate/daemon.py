@@ -19,8 +19,14 @@ import sys
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from delegate.paths import daemon_pid_path
 from delegate.logging_setup import configure_logging, log_file_path
+
+# Load .env from CWD (or parent dirs) so ANTHROPIC_API_KEY etc. are available
+# before any SDK / CLI code checks os.environ.
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 

@@ -21,6 +21,10 @@ import sys
 from pathlib import Path
 
 import click
+from dotenv import load_dotenv
+
+# Load .env from CWD (or parent dirs) so ANTHROPIC_API_KEY etc. are available.
+load_dotenv()
 
 from delegate.paths import home as _home, teams_dir as _teams_dir, team_dir as _team_dir
 
