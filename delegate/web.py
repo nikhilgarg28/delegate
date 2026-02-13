@@ -896,6 +896,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         """Send a welcome greeting from the team's manager to the boss.
         Called by the frontend when the boss switches to a team for the first time."""
         from datetime import datetime, timezone
+        from delegate.bootstrap import get_member_by_role
 
         boss_name = get_boss(hc_home) or "boss"
         manager_name = get_member_by_role(hc_home, team, "manager")
@@ -908,11 +909,11 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
         now_utc = datetime.now(timezone.utc)
         greeting = _build_greeting(hc_home, team, manager_name, boss_name, now_utc)
-        send_message(
+        _send(
             hc_home, team,
-            sender=manager_name,
-            recipient=boss_name,
-            message=greeting,
+            manager_name,
+            boss_name,
+            greeting,
         )
         logger.info(
             "Manager %s sent team-switch greeting to %s | team=%s",

@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 from delegate.db import ensure_schema, MIGRATIONS
-from delegate.paths import global_db_path, db_path, team_dir, team_id
+from delegate.paths import global_db_path, db_path, team_dir, get_team_id
 
 logger = logging.getLogger(__name__)
 
@@ -358,7 +358,7 @@ def migrate(hc_home: Path) -> None:
     teams_metadata = {}
     for team in team_names:
         all_team_data[team] = read_team_data(hc_home, team)
-        tid = team_id(hc_home, team)
+        tid = get_team_id(hc_home, team)
         teams_metadata[team] = tid
         logger.info(f"Team '{team}' has team_id '{tid}'")
 
