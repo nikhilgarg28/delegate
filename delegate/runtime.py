@@ -86,13 +86,17 @@ _turn_counts: dict[tuple[str, str], int] = {}
 # ---------------------------------------------------------------------------
 
 def list_ai_agents(hc_home: Path, team: str) -> list[str]:
-    """Return names of AI agents for a team (excludes the boss).
+    """Return names of AI agents for a team (excludes human members).
 
-    Used to filter ``agents_with_unread()`` results — the boss is a
-    human and should not have turns dispatched.
+    Used to filter ``agents_with_unread()`` results — humans should
+    not have turns dispatched.
     """
     import yaml
     from delegate.paths import agents_dir as _agents_dir
+    from delegate.config import get_human_members
+
+    # Build set of human member names for fast lookup
+    human_names = {m["name"] for m in get_human_members(hc_home)}
 
     adir = _agents_dir(hc_home, team)
     if not adir.is_dir():
@@ -101,12 +105,17 @@ def list_ai_agents(hc_home: Path, team: str) -> list[str]:
     for d in sorted(adir.iterdir()):
         if not d.is_dir():
             continue
+        # Skip human members
+        if d.name in human_names:
+            continue
         state_file = d / "state.yaml"
         if not state_file.exists():
             continue
         state = yaml.safe_load(state_file.read_text()) or {}
-        if state.get("role") != "boss":
-            agents.append(d.name)
+        # Also skip legacy "boss" role agents
+        if state.get("role") == "boss":
+            continue
+        agents.append(d.name)
     return agents
 
 
@@ -127,12 +136,15 @@ def _select_batch(
     inbox: list[Message],
     max_size: int = MAX_BATCH_SIZE,
     boss_name: str | None = None,
+    *,
+    human_name: str | None = None,
 ) -> list[Message]:
     """Select up to *max_size* messages from *inbox* that share the
     same ``task_id`` as the first message.
 
-    If *boss_name* is provided, the first boss message (if any)
-    determines the grouping anchor instead of the oldest message.
+    If *human_name* (or legacy *boss_name*) is provided, the first
+    human message (if any) determines the grouping anchor instead of
+    the oldest message.
 
     The inbox is assumed to be sorted by id (oldest first).
     Both ``task_id = None`` and ``task_id = N`` are valid grouping keys.
@@ -149,11 +161,12 @@ def _select_batch(
         return []
 
     # --- Determine the anchor (which task_id to batch for) ---
-    # Boss messages get priority: use the boss's first message as anchor.
+    # Human messages get priority: use the human's first message as anchor.
+    priority_name = human_name or boss_name
     anchor = inbox[0]
-    if boss_name:
+    if priority_name:
         for msg in inbox:
-            if msg.sender == boss_name:
+            if msg.sender == priority_name:
                 anchor = msg
                 break
 
@@ -345,9 +358,9 @@ async def run_turn(
     max_turns = max(1, token_budget // 4000) if token_budget else None
 
     # --- Message selection: pick ≤5 with same task_id (boss first) ---
-    from delegate.config import get_boss
+    from delegate.config import get_default_human
     inbox = read_inbox(hc_home, team, agent, unread_only=True)
-    batch = _select_batch(inbox, boss_name=get_boss(hc_home))
+    batch = _select_batch(inbox, human_name=get_default_human(hc_home))
 
     if not batch:
         log_caller.reset(_prev_caller)

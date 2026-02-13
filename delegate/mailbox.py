@@ -97,14 +97,14 @@ def send(
 
     Returns the message id.
     """
-    # Soft validation: warn when non-boss messages lack task_id
+    # Soft validation: warn when non-human messages lack task_id
     if task_id is None:
         try:
-            from delegate.config import get_boss
-            boss = get_boss(hc_home) or "boss"
+            from delegate.config import get_default_human
+            human = get_default_human(hc_home)
         except Exception:
-            boss = "boss"
-        if sender != boss and recipient != boss:
+            human = "boss"
+        if sender != human and recipient != human:
             logger.warning(
                 "Message from %s to %s has no task_id — consider using --task",
                 sender, recipient,

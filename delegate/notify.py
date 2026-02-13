@@ -1,6 +1,6 @@
 """Manager notifications for task rejections and merge conflicts.
 
-When a task is rejected by the human boss or hits a merge conflict,
+When a task is rejected by a human member or hits a merge conflict,
 these functions send a structured notification to the engineering manager's
 inbox so they can triage and take action.
 
@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from delegate.bootstrap import get_member_by_role
-from delegate.config import get_boss
+from delegate.config import get_default_human
 from delegate.mailbox import Message, deliver
 from delegate.task import format_task_id
 
@@ -33,17 +33,17 @@ def _now_iso() -> str:
 def _get_manager_name(hc_home: Path, team: str) -> str:
     """Look up the manager agent by role."""
     name = get_member_by_role(hc_home, team, "manager")
-    return name or "manager"
+    return name or "delegate"
 
 
 def _get_sender_name(hc_home: Path) -> str:
     """Return a valid sender for system notifications.
 
-    Uses the boss name since they are the human who triggers
+    Uses the human member name since they are the person who triggers
     rejections, and 'system' has no agent directory which would
     cause downstream routing failures.
     """
-    return get_boss(hc_home) or "boss"
+    return get_default_human(hc_home)
 
 
 def notify_rejection(

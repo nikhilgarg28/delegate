@@ -56,7 +56,7 @@ from delegate.paths import (
     team_dir as _team_dir,
     teams_dir as _teams_dir,
 )
-from delegate.config import get_boss
+from delegate.config import get_boss, get_default_human
 from delegate.task import list_tasks as _list_tasks, get_task as _get_task, get_task_diff as _get_task_diff, get_task_merge_preview as _get_merge_preview, get_task_commit_diffs as _get_commit_diffs, update_task as _update_task, change_status as _change_status, VALID_STATUSES, format_task_id
 from delegate.chat import get_messages as _get_messages, get_task_stats as _get_task_stats, get_agent_stats as _get_agent_stats, log_event as _log_event
 from delegate.mailbox import send as _send, read_inbox as _read_inbox, read_outbox as _read_outbox, count_unread as _count_unread
@@ -130,11 +130,15 @@ def _agent_current_task(hc_home: Path, team: str, agent_name: str, ip_tasks: lis
 
 
 def _list_team_agents(hc_home: Path, team: str) -> list[dict]:
-    """List AI agents for a team (excludes boss)."""
+    """List AI agents for a team (excludes human members)."""
     ad = _agents_dir(hc_home, team)
     agents = []
     if not ad.is_dir():
         return agents
+
+    # Build set of human member names for fast lookup
+    from delegate.config import get_human_members
+    human_names = {m["name"] for m in get_human_members(hc_home)}
 
     # Pre-load all in_progress tasks once (lightweight — avoids per-agent scans)
     try:
@@ -146,7 +150,11 @@ def _list_team_agents(hc_home: Path, team: str) -> list[dict]:
         state_file = d / "state.yaml"
         if not d.is_dir() or not state_file.exists():
             continue
+        # Skip human members
+        if d.name in human_names:
+            continue
         state = yaml.safe_load(state_file.read_text()) or {}
+        # Also skip legacy "boss" role agents
         if state.get("role") == "boss":
             continue
         unread = _count_unread(hc_home, team, d.name)
@@ -375,7 +383,7 @@ async def _daemon_loop(
         from datetime import datetime, timezone
 
         teams = _list_teams(hc_home)
-        boss_name = get_boss(hc_home) or "boss"
+        boss_name = get_default_human(hc_home)
         now_utc = datetime.now(timezone.utc)
 
         # Only greet the first team at startup
@@ -409,7 +417,7 @@ async def _daemon_loop(
                 break
 
             teams = _list_teams(hc_home)
-            boss_name = get_boss(hc_home)
+            boss_name = get_default_human(hc_home)
 
             for team in teams:
                 # Check shutdown flag before dispatching new tasks
@@ -635,9 +643,11 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
     @app.get("/config")
     def get_config():
-        """Return app configuration (boss name, etc.) for the frontend."""
+        """Return app configuration (human member, etc.) for the frontend."""
+        human = get_default_human(hc_home)
         return {
-            "boss_name": get_boss(hc_home) or "boss",
+            "human_name": human,
+            "boss_name": human,  # backward compat
             "hc_home": str(hc_home),
         }
 
@@ -842,7 +852,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         if attempt == 0:
             raise HTTPException(status_code=400, detail="Task has no active review attempt.")
 
-        boss_name = get_boss(hc_home) or "boss"
+        boss_name = get_default_human(hc_home)
         result = add_comment(
             hc_home, team, task_id, attempt,
             file=comment.file, body=comment.body, author=boss_name,
@@ -893,7 +903,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
         # Record verdict on the review
         attempt = task.get("review_attempt", 0)
-        boss_name = get_boss(hc_home) or "boss"
+        boss_name = get_default_human(hc_home)
         summary = body.summary if body else ""
         if attempt > 0:
             set_verdict(hc_home, team, task_id, attempt, "approved", summary=summary, reviewer=boss_name)
@@ -922,7 +932,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
         # Record verdict on the review
         attempt = task.get("review_attempt", 0)
-        boss_name = get_boss(hc_home) or "boss"
+        boss_name = get_default_human(hc_home)
         # Use reason as summary if no separate summary provided
         summary = body.summary or body.reason
         if attempt > 0:
@@ -1006,7 +1016,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     @app.post("/teams/{team}/messages")
     def post_team_message(team: str, msg: SendMessage):
         """Boss sends a message to any agent in the team."""
-        boss_name = get_boss(hc_home) or "boss"
+        boss_name = get_default_human(hc_home)
         team_agents = _list_team_agents(hc_home, team)
         agent_names = {a["name"] for a in team_agents}
         if msg.recipient not in agent_names:
@@ -1024,7 +1034,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         from datetime import datetime, timezone
         from delegate.bootstrap import get_member_by_role
 
-        boss_name = get_boss(hc_home) or "boss"
+        boss_name = get_default_human(hc_home)
         manager_name = get_member_by_role(hc_home, team, "manager")
 
         if not manager_name:
@@ -1146,7 +1156,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         """
         from delegate.db import get_connection
 
-        boss_name = get_boss(hc_home) or "boss"
+        boss_name = get_default_human(hc_home)
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
         conn = get_connection(hc_home, team)
@@ -1228,7 +1238,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 if task["status"] != "in_approval":
                     raise HTTPException(status_code=400, detail=f"Cannot approve task in '{task['status']}' status.")
                 attempt = task.get("review_attempt", 0)
-                boss_name = get_boss(hc_home) or "boss"
+                boss_name = get_default_human(hc_home)
                 summary = body.summary if body else ""
                 if attempt > 0:
                     set_verdict(hc_home, t, task_id, attempt, "approved", summary=summary, reviewer=boss_name)
@@ -1248,7 +1258,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 task = _get_task(hc_home, t, task_id)
                 _change_status(hc_home, t, task_id, "rejected")
                 attempt = task.get("review_attempt", 0)
-                boss_name = get_boss(hc_home) or "boss"
+                boss_name = get_default_human(hc_home)
                 summary = body.summary or body.reason
                 if attempt > 0:
                     set_verdict(hc_home, t, task_id, attempt, "rejected", summary=summary, reviewer=boss_name)
@@ -1287,7 +1297,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     def post_message(msg: SendMessage):
         """Boss sends a message (legacy — uses msg.team field)."""
         team = msg.team or _first_team(hc_home)
-        boss_name = get_boss(hc_home) or "boss"
+        boss_name = get_default_human(hc_home)
         team_agents = _list_team_agents(hc_home, team)
         agent_names = {a["name"] for a in team_agents}
         if msg.recipient not in agent_names:
