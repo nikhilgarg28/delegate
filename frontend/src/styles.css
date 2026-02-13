@@ -2005,7 +2005,7 @@ select option:hover {
 }
 .toast-error { border: 1px solid var(--semantic-red); }
 .toast-success { border: 1px solid var(--semantic-green); }
-.toast-info { border: 1px solid var(--border); }
+.toast-info { border: 1px solid var(--border-subtle); }
 .toast-message { flex: 1; word-break: break-word; }
 .toast-close {
   flex-shrink: 0;

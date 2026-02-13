@@ -529,3 +529,12 @@ function App() {
 
 // ── Mount ──
 render(<App />, document.getElementById("app"));
+
+// ── Test exports (for Playwright E2E tests) ──
+if (typeof window !== "undefined") {
+  window.__test__ = {
+    showToast,
+    showActionToast,
+    showReturnToast,
+  };
+}
