@@ -13,17 +13,18 @@ const TEAM = "testteam";
 
 // Helper function to set textarea value and trigger Preact's onInput event
 async function fillTextarea(page, text) {
-  await page.evaluate((text) => {
-    const textarea = document.querySelector(".chat-input-box textarea");
-    if (textarea) {
-      textarea.value = text;
-      // Trigger the input event that Preact listens to
-      const event = new Event('input', { bubbles: true });
-      textarea.dispatchEvent(event);
-    }
-  }, text);
+  const textarea = page.locator(".chat-input-box textarea");
+
+  // First, clear the textarea and click to focus it
+  await textarea.click();
+  await textarea.fill("");
+
+  // Type the text character by character to properly trigger all input events
+  // This is slower but ensures Preact's onInput is called for every change
+  await textarea.pressSequentially(text, { delay: 0 });
+
   // Give Preact time to update state and re-render
-  await page.waitForTimeout(100);
+  await page.waitForTimeout(200);
 }
 
 test.describe("Chat input UX", () => {
