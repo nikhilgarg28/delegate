@@ -221,6 +221,13 @@ export function ChatPanel() {
   const mic = useSpeechRecognition(inputRef);
   const muted = isMuted.value;
 
+  // Check if text contains markdown syntax we support
+  const hasMarkdown = useCallback((text) => {
+    if (!text) return false;
+    // Check for code blocks, inline code, bullet lists, or numbered lists
+    return /```|`[^`\n]+`|^\s*[-*+]\s+|^\s*\d+\.\s+/m.test(text);
+  }, []);
+
   // Render inline markdown subset (code blocks, inline code, lists)
   const renderInlineMarkdown = useCallback((text) => {
     if (!text) return '';
@@ -935,7 +942,7 @@ export function ChatPanel() {
         <div class="chat-input-wrapper">
           <textarea
             ref={inputRef}
-            class={!commandMode.value && inputVal ? "chat-input-has-overlay" : ""}
+            class={!commandMode.value && inputVal && hasMarkdown(inputVal) ? "chat-input-has-overlay" : ""}
             placeholder="Send a message..."
             rows="2"
             onKeyDown={handleKeydown}
@@ -958,7 +965,7 @@ export function ChatPanel() {
               }
             }}
           />
-          {!commandMode.value && inputVal && (
+          {!commandMode.value && inputVal && hasMarkdown(inputVal) && (
             <div
               class="chat-input-overlay"
               dangerouslySetInnerHTML={{ __html: renderInlineMarkdown(inputVal) }}
