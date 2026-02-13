@@ -223,11 +223,12 @@ def team() -> None:
 
 @team.command("add")
 @click.argument("name")
-@click.option("--manager", required=True, help="Name of the manager agent.")
+@click.option("--manager", default="delegate", show_default=True, help="Name of the manager/delegate agent.")
 @click.option(
     "--agents", required=True,
-    help="Comma-separated list of agents as name[:role].  "
-         "Examples: 'alex:devops,nikhil:designer,john,mark:backend'.  "
+    help="Number of agents (e.g. '3') or comma-separated names as name[:role].  "
+         "Examples: '3', 'alex:devops,nikhil:designer,john,mark:backend'.  "
+         "Numeric values auto-generate names (agent-1, agent-2, ...).  "
          "Agents without a role default to 'engineer'.",
 )
 @click.option(
@@ -252,17 +253,25 @@ def team_create(
 
     hc_home = _get_home(ctx)
 
-    # Parse "name:role" pairs — role defaults to "engineer"
+    # Parse agents: either a count or "name:role" pairs
     parsed_agents: list[tuple[str, str]] = []
-    for token in agents.split(","):
-        token = token.strip()
-        if not token:
-            continue
-        if ":" in token:
-            agent_name, role = token.split(":", 1)
-            parsed_agents.append((agent_name.strip(), role.strip()))
-        else:
-            parsed_agents.append((token, "engineer"))
+    agents_stripped = agents.strip()
+    if agents_stripped.isdigit():
+        # Numeric: auto-generate names
+        count = int(agents_stripped)
+        for i in range(1, count + 1):
+            parsed_agents.append((f"agent-{i}", "engineer"))
+    else:
+        # Parse "name:role" pairs — role defaults to "engineer"
+        for token in agents_stripped.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            if ":" in token:
+                agent_name, role = token.split(":", 1)
+                parsed_agents.append((agent_name.strip(), role.strip()))
+            else:
+                parsed_agents.append((token, "engineer"))
 
     bootstrap(
         hc_home,

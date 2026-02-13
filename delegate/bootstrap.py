@@ -122,14 +122,13 @@ def _prompt_extra_charter() -> str | None:
 def bootstrap(
     hc_home: Path,
     team_name: str,
-    manager: str = "manager",
+    manager: str = "delegate",
     agents: list[tuple[str, str]] | list[str] | None = None,
     interactive: bool = False,
 ) -> None:
     """Create the team directory structure under ``hc_home/teams/<team_name>/``.
 
-    The boss is NOT an agent — they are configured org-wide in config.yaml.
-    The boss's mailbox lives at ``hc_home/boss/`` (outside any team).
+    Human members are stored in ``hc_home/members/`` (outside any team).
     Base charter files are NOT copied — they are read from the installed package.
 
     Agent names must be unique within a team but may be reused across teams.
@@ -137,9 +136,10 @@ def bootstrap(
     Args:
         hc_home: Delegate home directory (~/.delegate).
         team_name: Name for the new team.
-        manager: Name of the manager agent.
+        manager: Name of the manager/delegate agent (default: ``"delegate"``).
         agents: List of ``(name, role)`` tuples **or** plain name strings
             (which default to role ``"engineer"``).
+            Can also be an integer-as-string to auto-generate names.
         interactive: If True, prompt for bios and charter overrides.
 
     Safe to call multiple times — does not overwrite existing files.
