@@ -36,6 +36,7 @@ import logging
 import mimetypes
 import os
 import shutil
+import signal as signal_mod
 import subprocess
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -429,6 +430,8 @@ def _start_esbuild_watch(frontend_dir: Path) -> subprocess.Popen | None:
     proc = subprocess.Popen(
         [node, build_js, "--watch"],
         cwd=str(frontend_dir),
+        # Put in its own process group so we can kill node + esbuild together
+        start_new_session=True,
     )
     return proc
 
@@ -469,14 +472,20 @@ async def _lifespan(app: FastAPI):
 
     yield
 
-    # Shut down esbuild watcher
+    # Shut down esbuild watcher (kill entire process group: node + esbuild)
     if esbuild_proc is not None:
         logger.info("Stopping esbuild watcher (PID %d)", esbuild_proc.pid)
-        esbuild_proc.terminate()
+        try:
+            os.killpg(os.getpgid(esbuild_proc.pid), signal_mod.SIGTERM)
+        except (OSError, ProcessLookupError):
+            pass
         try:
             esbuild_proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            esbuild_proc.kill()
+            try:
+                os.killpg(os.getpgid(esbuild_proc.pid), signal_mod.SIGKILL)
+            except (OSError, ProcessLookupError):
+                pass
 
     if task is not None:
         # Set shutdown flag before cancelling the daemon loop

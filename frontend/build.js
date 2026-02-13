@@ -66,6 +66,18 @@ async function build() {
         });
       }
     }
+
+    // Clean up esbuild child process on SIGINT / SIGTERM so it doesn't
+    // become orphaned when the parent (delegate server, uvicorn, etc.)
+    // shuts down or reloads.
+    const cleanup = async () => {
+      console.log("\nStopping esbuild watcher…");
+      await ctx.dispose();
+      process.exit(0);
+    };
+    process.on("SIGINT", cleanup);
+    process.on("SIGTERM", cleanup);
+
     console.log("Watching for changes...");
   } else {
     await ctx.rebuild();
