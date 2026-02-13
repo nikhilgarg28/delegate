@@ -64,17 +64,17 @@ class InReview(Stage):
 
 
 class InApproval(Stage):
-    """Waiting for human (boss) approval before merging."""
+    """Waiting for human approval before merging."""
 
     label = "In Approval"
     _transitions = {"merging", "rejected", "cancelled"}
 
     def enter(self, ctx):
-        # Create a review record for the boss.
-        ctx.create_review(reviewer=ctx.boss)
+        # Create a review record for the human.
+        ctx.create_review(reviewer=ctx.human)
 
     def assign(self, ctx):
-        return ctx.boss
+        return ctx.human
 
 
 class Merging(Stage):
@@ -122,7 +122,7 @@ class Done(Stage):
 
 
 class Rejected(Stage):
-    """Task was rejected by the boss during approval."""
+    """Task was rejected by the human during approval."""
 
     label = "Rejected"
 
@@ -172,7 +172,7 @@ class Cancelled(Stage):
 class Error(Stage):
     """Task entered an error state due to an unrecoverable action failure.
 
-    Assigned to the boss for manual resolution.
+    Assigned to the human for manual resolution.
     """
 
     label = "Error"
@@ -181,7 +181,7 @@ class Error(Stage):
     _transitions = {"todo", "in_progress", "cancelled"}
 
     def assign(self, ctx):
-        return ctx.boss
+        return ctx.human
 
 
 # ── Workflow registration ─────────────────────────────────────

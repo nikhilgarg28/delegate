@@ -14,14 +14,14 @@ from pathlib import Path
 # Ensure the project root is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from delegate.config import set_boss
+from delegate.config import add_member
 from delegate.bootstrap import bootstrap
 from delegate.task import create_task, change_status, attach_file, update_task
 from delegate.mailbox import send
 from delegate.chat import log_event
 
 
-BOSS = "testboss"
+HUMAN = "testboss"  # the human member name (kept as "testboss" for test compat)
 TEAM = "testteam"
 MANAGER = "edison"
 AGENTS = ["alice", "bob"]
@@ -30,8 +30,8 @@ AGENTS = ["alice", "bob"]
 def seed(hc_home: Path) -> None:
     """Populate hc_home with deterministic test data."""
 
-    # --- Global config ---
-    set_boss(hc_home, BOSS)
+    # --- Create human member ---
+    add_member(hc_home, HUMAN)
 
     # --- Bootstrap team ---
     bootstrap(hc_home, team_name=TEAM, manager=MANAGER, agents=AGENTS)
@@ -92,11 +92,11 @@ def seed(hc_home: Path) -> None:
     change_status(hc_home, TEAM, t3["id"], "done")
 
     # --- Messages ---
-    send(hc_home, TEAM, BOSS, MANAGER, "Please kick off the project.", task_id=t1["id"])
+    send(hc_home, TEAM, HUMAN, MANAGER, "Please kick off the project.", task_id=t1["id"])
     send(hc_home, TEAM, MANAGER, "alice", "Alice, start with the scaffolding.", task_id=t1["id"])
     send(hc_home, TEAM, "alice", MANAGER, "On it! I'll set up the directories.", task_id=t1["id"])
-    send(hc_home, TEAM, MANAGER, BOSS, "Project kicked off. Alice is on scaffolding.", task_id=t1["id"])
-    send(hc_home, TEAM, BOSS, MANAGER, "Great, also check T0002 status.")
+    send(hc_home, TEAM, MANAGER, HUMAN, "Project kicked off. Alice is on scaffolding.", task_id=t1["id"])
+    send(hc_home, TEAM, HUMAN, MANAGER, "Great, also check T0002 status.")
 
     # --- System events ---
     log_event(hc_home, TEAM, "Alice started working on T0001", task_id=t1["id"])

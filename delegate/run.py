@@ -19,7 +19,7 @@ import uvicorn
 
 from delegate.mailbox import send as mailbox_send
 from delegate.bootstrap import get_member_by_role
-from delegate.config import get_boss
+from delegate.config import get_default_human, migrate_boss_to_member
 from delegate.logging_setup import configure_logging
 
 logger = logging.getLogger("daemon")
@@ -51,13 +51,18 @@ def main():
     # --- Unified logging (file + console) ---
     configure_logging(hc_home, console=True)
 
+    # --- Migrate legacy boss config → members/ (one-time) ---
+    migrated = migrate_boss_to_member(hc_home)
+    if migrated:
+        logger.info("Migrated legacy boss '%s' to members/", migrated)
+
     # --- Send kick message (once, before uvicorn spawns workers) ---
     if args.kick:
         try:
-            boss_name = get_boss(hc_home) or "boss"
-            manager_name = get_member_by_role(hc_home, args.team, "manager") or "manager"
-            mailbox_send(hc_home, args.team, boss_name, manager_name, args.kick)
-            logger.info("Sent kick message from %s to %s: %s", boss_name, manager_name, args.kick[:80])
+            human_name = get_default_human(hc_home) or "human"
+            manager_name = get_member_by_role(hc_home, args.team, "manager") or "delegate"
+            mailbox_send(hc_home, args.team, human_name, manager_name, args.kick)
+            logger.info("Sent kick message from %s to %s: %s", human_name, manager_name, args.kick[:80])
         except Exception:
             logger.exception("Failed to send kick message")
 

@@ -103,7 +103,7 @@ def send(
             from delegate.config import get_default_human
             human = get_default_human(hc_home)
         except Exception:
-            human = "boss"
+            human = "human"
         if sender != human and recipient != human:
             logger.warning(
                 "Message from %s to %s has no task_id — consider using --task",

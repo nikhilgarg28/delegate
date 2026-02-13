@@ -330,7 +330,7 @@ def build_system_prompt(
     1. TEAM CHARTER — identical for all agents on the team (cache prefix)
     2. ROLE CHARTER — from charter/roles/<role>.md (shared per role)
     3. TEAM OVERRIDES — per-team customizations
-    4. AGENT IDENTITY — name, role, seniority, boss name
+    4. AGENT IDENTITY — name, role, seniority, human name
     5. COMMANDS — mailbox, task CLI (includes agent-specific paths)
     6. REFLECTIONS — inlined from notes/reflections.md (agent-specific)
     7. REFERENCE FILES — file pointers (journals, notes, shared, roster, bios)

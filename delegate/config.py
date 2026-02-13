@@ -35,6 +35,22 @@ def _write(hc_home: Path, data: dict) -> None:
 # Members (human identities — replaces the old boss model)
 # ---------------------------------------------------------------------------
 
+def migrate_boss_to_member(hc_home: Path) -> str | None:
+    """One-time migration: if ``config.yaml`` has a ``boss`` key but no
+    ``members/`` directory, create the member file automatically.
+
+    Returns the migrated name, or None if no migration was needed.
+    """
+    md = members_dir(hc_home)
+    if md.is_dir() and any(md.iterdir()):
+        return None  # members already exist
+    legacy_name = _read(hc_home).get("boss")
+    if not legacy_name:
+        return None  # nothing to migrate
+    add_member(hc_home, legacy_name)
+    return legacy_name
+
+
 def get_human_members(hc_home: Path) -> list[dict]:
     """Return all human members as a list of dicts.
 
@@ -57,13 +73,13 @@ def get_human_members(hc_home: Path) -> list[dict]:
 def get_default_human(hc_home: Path) -> str:
     """Return the name of the default (first) human member.
 
-    Falls back to the legacy ``config.yaml:boss`` field, then ``"boss"``.
+    Falls back to the legacy ``config.yaml:boss`` field, then ``"human"``.
     """
     members = get_human_members(hc_home)
     if members:
         return members[0]["name"]
     # Legacy fallback
-    return get_boss(hc_home) or "boss"
+    return get_boss(hc_home) or "human"
 
 
 def add_member(hc_home: Path, name: str, **extra) -> dict:
@@ -95,12 +111,15 @@ def remove_member(hc_home: Path, name: str) -> bool:
     return False
 
 
-# --- Boss (backward compat — delegates to member API) ---
+# --- Legacy boss helpers (backward compat — delegates to member API) ---
 
 def get_boss(hc_home: Path) -> str | None:
-    """Return the org-wide boss name, or None if not set.
+    """Return the primary human name, or None if not set.
 
-    Checks the members directory first, then falls back to config.yaml.
+    .. deprecated:: Use ``get_default_human`` instead.
+
+    Checks the members directory first, then falls back to
+    the legacy ``config.yaml:boss`` field.
     """
     members = get_human_members(hc_home)
     if members:
@@ -109,13 +128,13 @@ def get_boss(hc_home: Path) -> str | None:
 
 
 def set_boss(hc_home: Path, name: str) -> None:
-    """Set the org-wide boss name.
+    """Create a human member (and write legacy config.yaml key).
 
-    Creates a member file AND writes to config.yaml for backward compat.
+    .. deprecated:: Use ``add_member`` instead.
     """
     # Create member file
     add_member(hc_home, name)
-    # Legacy config.yaml
+    # Legacy config.yaml — kept so older code/tools can still read it
     data = _read(hc_home)
     data["boss"] = name
     _write(hc_home, data)

@@ -15,25 +15,26 @@ if _worktree_hc not in delegate.__path__:
     delegate.__path__.insert(0, _worktree_hc)
 
 from delegate.bootstrap import bootstrap
-from delegate.config import set_boss
+from delegate.config import add_member
 
 
 SAMPLE_MANAGER = "manager"
-SAMPLE_BOSS = "nikhil"
+SAMPLE_HUMAN = "nikhil"
+SAMPLE_BOSS = SAMPLE_HUMAN  # backward-compat alias used by some tests
 SAMPLE_WORKERS = ["alice", "bob"]
 SAMPLE_TEAM_NAME = "testteam"
 
 
 @pytest.fixture
 def sample_agents():
-    """Return a standard list of all agent (non-boss) names for testing."""
+    """Return a standard list of all AI agent names for testing."""
     return [SAMPLE_MANAGER] + list(SAMPLE_WORKERS)
 
 
 @pytest.fixture
 def all_members():
-    """Return all member names including boss."""
-    return [SAMPLE_MANAGER, SAMPLE_BOSS] + list(SAMPLE_WORKERS)
+    """Return all member names including the human."""
+    return [SAMPLE_MANAGER, SAMPLE_HUMAN] + list(SAMPLE_WORKERS)
 
 
 @pytest.fixture
@@ -45,8 +46,8 @@ def tmp_team(tmp_path):
     """
     hc_home = tmp_path / "hc"
     hc_home.mkdir()
-    # Set the boss name in config before bootstrap
-    set_boss(hc_home, SAMPLE_BOSS)
+    # Create the human member before bootstrap
+    add_member(hc_home, SAMPLE_HUMAN)
     bootstrap(hc_home, SAMPLE_TEAM_NAME, manager=SAMPLE_MANAGER, agents=SAMPLE_WORKERS)
     # Set DELEGATE_HOME so modules can find it
     old_env = os.environ.get("DELEGATE_HOME")

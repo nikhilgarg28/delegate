@@ -2,7 +2,7 @@
 
 Each time a task enters ``in_approval``, the ``review_attempt`` counter
 on the task is incremented and a new pending row is inserted into the
-``reviews`` table.  The boss can then:
+``reviews`` table.  The human reviewer can then:
 
 * Leave inline comments (file + optional line) via ``add_comment()``.
 * Render a verdict (approve / reject) with an optional summary via
@@ -153,7 +153,7 @@ def add_comment(
         file: Relative file path in the diff.
         line: Optional line number (None for general file-level comment).
         body: Comment text.
-        author: Who wrote the comment (typically the boss).
+        author: Who wrote the comment (typically the human reviewer).
 
     Returns the created comment as a dict.
     """

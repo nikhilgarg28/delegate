@@ -43,8 +43,8 @@ BossQueue = HumanQueue
 def route_once(
     hc_home: Path,
     team: str,
-    boss_queue: HumanQueue | None = None,
-    boss_name: str | None = None,
+    boss_queue: HumanQueue | None = None,  # deprecated — use human_queue
+    boss_name: str | None = None,  # deprecated — use human_name
     *,
     human_queue: HumanQueue | None = None,
     human_name: str | None = None,
@@ -55,12 +55,8 @@ def route_once(
     check for new unread messages addressed to the human and push them to
     the HumanQueue for web UI notifications.
 
-    Accepts both old (boss_queue/boss_name) and new (human_queue/human_name)
-    parameter names for backward compat.
-
     Returns the number of new human messages found in this cycle.
     """
-    # Resolve params (new names take priority)
     queue = human_queue or boss_queue
     name = human_name or boss_name
 

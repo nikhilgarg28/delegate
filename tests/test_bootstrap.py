@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 from delegate.bootstrap import bootstrap, add_agent, AGENT_SUBDIRS, get_member_by_role
-from delegate.config import set_boss, get_boss
+from delegate.config import add_member
 from delegate.paths import (
     team_dir, agents_dir, agent_dir, db_path, global_db_path,
     roster_path, boss_person_dir, base_charter_dir,
@@ -17,10 +17,10 @@ TEAM = "testteam"
 
 @pytest.fixture
 def hc(tmp_path):
-    """Return an hc_home with the boss name configured."""
+    """Return an hc_home with the human member configured."""
     hc_home = tmp_path / "hc"
     hc_home.mkdir()
-    set_boss(hc_home, "nikhil")
+    add_member(hc_home, "nikhil")
     return hc_home
 
 
@@ -80,7 +80,7 @@ def test_roster_shows_roles(tmp_team):
     """Roster shows role annotations for all members."""
     content = roster_path(tmp_team, TEAM).read_text()
     assert "(manager)" in content
-    assert "(boss)" in content
+    assert "(human)" in content
     assert "(engineer)" in content
 
 
@@ -181,7 +181,7 @@ def test_interactive_bios(tmp_path, monkeypatch):
     """Interactive mode prompts for bios and writes them."""
     hc_home = tmp_path / "hc"
     hc_home.mkdir()
-    set_boss(hc_home, "nikhil")
+    add_member(hc_home, "nikhil")
 
     # Order: additional charter prompt first, then bios for each member
     inputs = iter([
@@ -203,7 +203,7 @@ def test_interactive_extra_charter(tmp_path, monkeypatch):
     """Interactive mode can add additional charter material."""
     hc_home = tmp_path / "hc"
     hc_home.mkdir()
-    set_boss(hc_home, "nikhil")
+    add_member(hc_home, "nikhil")
 
     # Order: additional charter prompt first, then bios
     inputs = iter([
@@ -299,9 +299,9 @@ def test_add_agent_rejects_duplicate_on_team(tmp_team):
         add_agent(tmp_team, TEAM, "alice")
 
 
-def test_add_agent_rejects_boss_name(tmp_team):
-    """add_agent errors if the name conflicts with the boss name."""
-    with pytest.raises(ValueError, match="boss name"):
+def test_add_agent_rejects_human_member_name(tmp_team):
+    """add_agent errors if the name conflicts with a human member name."""
+    with pytest.raises(ValueError, match="human member name"):
         add_agent(tmp_team, TEAM, "nikhil")
 
 

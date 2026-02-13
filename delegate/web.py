@@ -56,7 +56,7 @@ from delegate.paths import (
     team_dir as _team_dir,
     teams_dir as _teams_dir,
 )
-from delegate.config import get_boss, get_default_human
+from delegate.config import get_default_human
 from delegate.task import list_tasks as _list_tasks, get_task as _get_task, get_task_diff as _get_task_diff, get_task_merge_preview as _get_merge_preview, get_task_commit_diffs as _get_commit_diffs, update_task as _update_task, change_status as _change_status, VALID_STATUSES, format_task_id
 from delegate.chat import get_messages as _get_messages, get_task_stats as _get_task_stats, get_agent_stats as _get_agent_stats, log_event as _log_event
 from delegate.mailbox import send as _send, read_inbox as _read_inbox, read_outbox as _read_outbox, count_unread as _count_unread
@@ -178,7 +178,7 @@ def _build_greeting(
     hc_home: Path,
     team: str,
     manager: str,
-    boss: str,
+    human: str,
     now_utc: "datetime",
 ) -> str:
     """Build a context-aware startup greeting from the manager.
@@ -377,13 +377,13 @@ async def _daemon_loop(
 
     # --- One-time startup: greeting from the first team's manager ---
     # Always sends on daemon startup. Other teams get greeted when
-    # the boss switches to them in the frontend for the first time.
+    # the human switches to them in the frontend for the first time.
     try:
         from delegate.task import list_tasks
         from datetime import datetime, timezone
 
         teams = _list_teams(hc_home)
-        boss_name = get_default_human(hc_home)
+        human_name = get_default_human(hc_home)
         now_utc = datetime.now(timezone.utc)
 
         # Only greet the first team at startup
@@ -392,17 +392,17 @@ async def _daemon_loop(
             manager_name = get_member_by_role(hc_home, team, "manager")
             if manager_name:
                 greeting = _build_greeting(
-                    hc_home, team, manager_name, boss_name, now_utc,
+                    hc_home, team, manager_name, human_name, now_utc,
                 )
                 send_message(
                     hc_home, team,
                     sender=manager_name,
-                    recipient=boss_name,
+                    recipient=human_name,
                     message=greeting,
                 )
                 logger.info(
                     "Manager %s sent startup greeting to %s | team=%s",
-                    manager_name, boss_name, team,
+                    manager_name, human_name, team,
                 )
     except Exception:
         logger.exception("Error during startup greeting")
@@ -417,7 +417,7 @@ async def _daemon_loop(
                 break
 
             teams = _list_teams(hc_home)
-            boss_name = get_default_human(hc_home)
+            human_name = get_default_human(hc_home)
 
             for team in teams:
                 # Check shutdown flag before dispatching new tasks
@@ -646,8 +646,8 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         """Return app configuration (human member, etc.) for the frontend."""
         human = get_default_human(hc_home)
         return {
-            "human_name": human,
             "boss_name": human,  # backward compat
+            "human_name": human,
             "hc_home": str(hc_home),
         }
 
@@ -852,10 +852,10 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         if attempt == 0:
             raise HTTPException(status_code=400, detail="Task has no active review attempt.")
 
-        boss_name = get_default_human(hc_home)
+        human_name = get_default_human(hc_home)
         result = add_comment(
             hc_home, team, task_id, attempt,
-            file=comment.file, body=comment.body, author=boss_name,
+            file=comment.file, body=comment.body, author=human_name,
             line=comment.line,
         )
         return result
@@ -903,10 +903,10 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
         # Record verdict on the review
         attempt = task.get("review_attempt", 0)
-        boss_name = get_default_human(hc_home)
+        human_name = get_default_human(hc_home)
         summary = body.summary if body else ""
         if attempt > 0:
-            set_verdict(hc_home, team, task_id, attempt, "approved", summary=summary, reviewer=boss_name)
+            set_verdict(hc_home, team, task_id, attempt, "approved", summary=summary, reviewer=human_name)
 
         updated = _update_task(hc_home, team, task_id, approval_status="approved")
         _log_event(hc_home, team, f"{format_task_id(task_id)} approved \u2713", task_id=task_id)
@@ -932,11 +932,11 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
         # Record verdict on the review
         attempt = task.get("review_attempt", 0)
-        boss_name = get_default_human(hc_home)
+        human_name = get_default_human(hc_home)
         # Use reason as summary if no separate summary provided
         summary = body.summary or body.reason
         if attempt > 0:
-            set_verdict(hc_home, team, task_id, attempt, "rejected", summary=summary, reviewer=boss_name)
+            set_verdict(hc_home, team, task_id, attempt, "rejected", summary=summary, reviewer=human_name)
 
         updated = _update_task(hc_home, team, task_id,
                                rejection_reason=body.reason,
@@ -1015,8 +1015,8 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
     @app.post("/teams/{team}/messages")
     def post_team_message(team: str, msg: SendMessage):
-        """Boss sends a message to any agent in the team."""
-        boss_name = get_default_human(hc_home)
+        """Human sends a message to any agent in the team."""
+        human_name = get_default_human(hc_home)
         team_agents = _list_team_agents(hc_home, team)
         agent_names = {a["name"] for a in team_agents}
         if msg.recipient not in agent_names:
@@ -1024,17 +1024,17 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 status_code=403,
                 detail=f"Recipient '{msg.recipient}' is not an agent in team '{team}'",
             )
-        _send(hc_home, team, boss_name, msg.recipient, msg.content)
+        _send(hc_home, team, human_name, msg.recipient, msg.content)
         return {"status": "queued"}
 
     @app.post("/teams/{team}/greet")
     def greet_team(team: str):
-        """Send a welcome greeting from the team's manager to the boss.
-        Called by the frontend when the boss switches to a team for the first time."""
+        """Send a welcome greeting from the team's manager to the human.
+        Called by the frontend when the human switches to a team for the first time."""
         from datetime import datetime, timezone
         from delegate.bootstrap import get_member_by_role
 
-        boss_name = get_default_human(hc_home)
+        human_name = get_default_human(hc_home)
         manager_name = get_member_by_role(hc_home, team, "manager")
 
         if not manager_name:
@@ -1044,16 +1044,16 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
             )
 
         now_utc = datetime.now(timezone.utc)
-        greeting = _build_greeting(hc_home, team, manager_name, boss_name, now_utc)
+        greeting = _build_greeting(hc_home, team, manager_name, human_name, now_utc)
         _send(
             hc_home, team,
             manager_name,
-            boss_name,
+            human_name,
             greeting,
         )
         logger.info(
             "Manager %s sent team-switch greeting to %s | team=%s",
-            manager_name, boss_name, team,
+            manager_name, human_name, team,
         )
         return {"status": "sent"}
 
@@ -1066,7 +1066,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
     @app.post("/teams/{team}/exec/shell")
     def exec_shell(team: str, req: ShellExecRequest):
-        """Execute a shell command for the boss (magic commands feature).
+        """Execute a shell command for the human (magic commands feature).
 
         Resolves CWD in priority order:
         1. Explicit req.cwd if provided
@@ -1152,17 +1152,17 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         """Persist a command and its result as a message in the DB.
 
         Commands are stored with type='command' and both sender and recipient
-        set to the boss name. The result is stored as JSON.
+        set to the human name. The result is stored as JSON.
         """
         from delegate.db import get_connection
 
-        boss_name = get_default_human(hc_home)
+        human_name = get_default_human(hc_home)
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
         conn = get_connection(hc_home, team)
         cursor = conn.execute(
             "INSERT INTO messages (sender, recipient, content, type, result, delivered_at) VALUES (?, ?, ?, 'command', ?, ?)",
-            (boss_name, boss_name, msg.command, json.dumps(msg.result), now)
+            (human_name, human_name, msg.command, json.dumps(msg.result), now)
         )
         conn.commit()
         msg_id = cursor.lastrowid
@@ -1238,10 +1238,10 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 if task["status"] != "in_approval":
                     raise HTTPException(status_code=400, detail=f"Cannot approve task in '{task['status']}' status.")
                 attempt = task.get("review_attempt", 0)
-                boss_name = get_default_human(hc_home)
+                human_name = get_default_human(hc_home)
                 summary = body.summary if body else ""
                 if attempt > 0:
-                    set_verdict(hc_home, t, task_id, attempt, "approved", summary=summary, reviewer=boss_name)
+                    set_verdict(hc_home, t, task_id, attempt, "approved", summary=summary, reviewer=human_name)
                 updated = _update_task(hc_home, t, task_id, approval_status="approved")
                 _log_event(hc_home, t, f"{format_task_id(task_id)} approved \u2713", task_id=task_id)
                 return updated
@@ -1258,10 +1258,10 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 task = _get_task(hc_home, t, task_id)
                 _change_status(hc_home, t, task_id, "rejected")
                 attempt = task.get("review_attempt", 0)
-                boss_name = get_default_human(hc_home)
+                human_name = get_default_human(hc_home)
                 summary = body.summary or body.reason
                 if attempt > 0:
-                    set_verdict(hc_home, t, task_id, attempt, "rejected", summary=summary, reviewer=boss_name)
+                    set_verdict(hc_home, t, task_id, attempt, "rejected", summary=summary, reviewer=human_name)
                 updated = _update_task(hc_home, t, task_id, rejection_reason=body.reason, approval_status="rejected")
                 from delegate.notify import notify_rejection
                 notify_rejection(hc_home, t, task, reason=body.reason)
@@ -1295,9 +1295,9 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
     @app.post("/api/messages")
     def post_message(msg: SendMessage):
-        """Boss sends a message (legacy — uses msg.team field)."""
+        """Human sends a message (legacy — uses msg.team field)."""
         team = msg.team or _first_team(hc_home)
-        boss_name = get_default_human(hc_home)
+        human_name = get_default_human(hc_home)
         team_agents = _list_team_agents(hc_home, team)
         agent_names = {a["name"] for a in team_agents}
         if msg.recipient not in agent_names:
@@ -1305,7 +1305,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 status_code=403,
                 detail=f"Recipient '{msg.recipient}' is not an agent in team '{team}'",
             )
-        _send(hc_home, team, boss_name, msg.recipient, msg.content)
+        _send(hc_home, team, human_name, msg.recipient, msg.content)
         return {"status": "queued"}
 
     # --- Agent endpoints (team-scoped) ---
@@ -1320,7 +1320,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
     @app.get("/teams/{team}/agents")
     def get_agents(team: str):
-        """List AI agents for a team (excludes boss)."""
+        """List AI agents for a team (excludes human members)."""
         return _list_team_agents(hc_home, team)
 
     @app.get("/teams/{team}/agents/{name}/stats")

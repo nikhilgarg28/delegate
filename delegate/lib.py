@@ -9,7 +9,7 @@ The ``Context`` object is passed to every ``enter``, ``exit``,
 - **Merge** — ``ctx.merge()``.
 - **Testing** — ``ctx.run_tests()``, ``ctx.run_script()``.
 - **Review** — ``ctx.create_review()``.
-- **Routing** — ``ctx.agents()``, ``ctx.pick()``, ``ctx.manager``, ``ctx.boss``.
+- **Routing** — ``ctx.agents()``, ``ctx.pick()``, ``ctx.manager``, ``ctx.human``.
 - **Communication** — ``ctx.notify()``, ``ctx.log()``.
 - **Control flow** — ``ctx.require()``, ``ctx.fail()``.
 
@@ -138,10 +138,15 @@ class Context:
         return name or "manager"
 
     @property
+    def human(self) -> str:
+        """The default human member name."""
+        from delegate.config import get_default_human
+        return get_default_human(self._hc_home) or "human"
+
+    @property
     def boss(self) -> str:
-        """The human boss name."""
-        from delegate.config import get_boss
-        return get_boss(self._hc_home) or "boss"
+        """Deprecated — use ``human`` instead."""
+        return self.human
 
     # ── Workspace ───────────────────────────────────────────────
 
@@ -523,7 +528,7 @@ class Context:
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
         msg = Message(
-            sender=self.boss,
+            sender=self.human,
             recipient=recipient,
             time=now,
             body=body,
@@ -556,7 +561,7 @@ class Context:
             raise GateError(message)
 
     def fail(self, message: str) -> None:
-        """Transition the task to the error state, assigned to the boss.
+        """Transition the task to the error state, assigned to the human.
 
         Raises ``ActionError`` which the runtime catches and handles.
         """

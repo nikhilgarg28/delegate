@@ -694,7 +694,7 @@ def merge_once(hc_home: Path, team: str) -> list[MergeResult]:
                 ready = True
             else:
                 logger.debug(
-                    "%s: needs boss approval (verdict=%s)",
+                    "%s: needs human approval (verdict=%s)",
                     task_id, review.get("verdict") if review else "no review",
                 )
         else:

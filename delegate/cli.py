@@ -9,7 +9,8 @@ Commands:
     delegate team list                               — list existing teams
     delegate team remove <name>                      — remove a team and all its data
     delegate agent add <team> <name>                 — add an agent to a team
-    delegate config set boss <name>                  — set org-wide boss name
+    delegate config set human <name>                 — set the human member name
+    delegate config set boss <name>                  — (deprecated) alias for 'config set human'
     delegate config set source-repo <path>           — set delegate source repo path
     delegate repo add <team> <path_or_url> [--name]  — register a repository for a team
     delegate repo list <team>                        — list repos for a team
@@ -103,6 +104,12 @@ def start(
         success(f"Loaded env file: {env_file}")
 
     hc_home = _get_home(ctx)
+
+    # Migrate legacy boss config → members/ (one-time)
+    from delegate.config import migrate_boss_to_member
+    migrated = migrate_boss_to_member(hc_home)
+    if migrated:
+        success(f"Migrated legacy boss '{migrated}' to members/")
 
     # Run doctor check first — suppress output if all checks pass
     checks = run_doctor()
@@ -486,7 +493,7 @@ def member_remove(ctx: click.Context, name: str, yes: bool) -> None:
 
 
 # ──────────────────────────────────────────────────────────────
-# delegate config set boss / source-repo
+# delegate config set human / boss / source-repo
 # ──────────────────────────────────────────────────────────────
 
 @main.group()
@@ -501,16 +508,28 @@ def config_set() -> None:
     pass
 
 
+def _set_human_name(hc_home: Path, name: str) -> None:
+    """Shared implementation for config set human/boss."""
+    from delegate.config import add_member
+
+    add_member(hc_home, name)
+    click.echo(f"Human member set to: {name}")
+
+
+@config_set.command("human")
+@click.argument("name")
+@click.pass_context
+def config_set_human(ctx: click.Context, name: str) -> None:
+    """Set the human member name."""
+    _set_human_name(_get_home(ctx), name)
+
+
 @config_set.command("boss")
 @click.argument("name")
 @click.pass_context
 def config_set_boss(ctx: click.Context, name: str) -> None:
-    """Set the org-wide boss name (creates a human member)."""
-    from delegate.config import set_boss
-
-    hc_home = _get_home(ctx)
-    set_boss(hc_home, name)
-    click.echo(f"Boss set to: {name} (member created)")
+    """(Deprecated) Alias for 'config set human'."""
+    _set_human_name(_get_home(ctx), name)
 
 
 @config_set.command("source-repo")

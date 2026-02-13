@@ -112,7 +112,7 @@ def list_ai_agents(hc_home: Path, team: str) -> list[str]:
         if not state_file.exists():
             continue
         state = yaml.safe_load(state_file.read_text()) or {}
-        # Also skip legacy "boss" role agents
+        # Also skip legacy "boss" role agents (pre-member model)
         if state.get("role") == "boss":
             continue
         agents.append(d.name)
@@ -135,16 +135,14 @@ def _write_worklog(ad: Path, lines: list[str]) -> None:
 def _select_batch(
     inbox: list[Message],
     max_size: int = MAX_BATCH_SIZE,
-    boss_name: str | None = None,
     *,
     human_name: str | None = None,
 ) -> list[Message]:
     """Select up to *max_size* messages from *inbox* that share the
     same ``task_id`` as the first message.
 
-    If *human_name* (or legacy *boss_name*) is provided, the first
-    human message (if any) determines the grouping anchor instead of
-    the oldest message.
+    If *human_name* is provided, the first human message (if any)
+    determines the grouping anchor instead of the oldest message.
 
     The inbox is assumed to be sorted by id (oldest first).
     Both ``task_id = None`` and ``task_id = N`` are valid grouping keys.
@@ -162,7 +160,7 @@ def _select_batch(
 
     # --- Determine the anchor (which task_id to batch for) ---
     # Human messages get priority: use the human's first message as anchor.
-    priority_name = human_name or boss_name
+    priority_name = human_name
     anchor = inbox[0]
     if priority_name:
         for msg in inbox:
@@ -357,7 +355,7 @@ async def run_turn(
     token_budget = state.get("token_budget")
     max_turns = max(1, token_budget // 4000) if token_budget else None
 
-    # --- Message selection: pick ≤5 with same task_id (boss first) ---
+    # --- Message selection: pick ≤5 with same task_id (human first) ---
     from delegate.config import get_default_human
     inbox = read_inbox(hc_home, team, agent, unread_only=True)
     batch = _select_batch(inbox, human_name=get_default_human(hc_home))

@@ -1,7 +1,7 @@
 """Bootstrap a new delegate team.
 
 Creates the team directory structure under ``~/.delegate/teams/<team_name>/``.
-The boss is NOT created as an agent — they are configured org-wide in config.yaml.
+Human members are stored in ``~/.delegate/members/`` (outside any team).
 
 Usage:
     python -m delegate.bootstrap <home> <team_name> --manager edison --agents alice,bob [--qa sarah]
@@ -29,11 +29,11 @@ from delegate.paths import (
 from delegate.config import get_boss, get_default_human, add_member
 
 
-def _detect_boss_name() -> str:
-    """Auto-detect boss name from ``git config user.name``.
+def _detect_human_name() -> str:
+    """Auto-detect human member name from ``git config user.name``.
 
     Returns the first name lowercased (e.g. "Nikhil Gupta" → "nikhil").
-    Falls back to ``"boss"`` if git config is not set or fails.
+    Falls back to ``"human"`` if git config is not set or fails.
     """
     try:
         result = subprocess.run(
@@ -45,10 +45,14 @@ def _detect_boss_name() -> str:
             first = full_name.split()[0].lower()
             # Sanitize: only keep alphanumeric chars
             first = "".join(c for c in first if c.isalnum())
-            return first if first else "boss"
+            return first if first else "human"
     except Exception:
         pass
-    return "boss"
+    return "human"
+
+
+# Backward-compat alias (will be removed in a future release)
+_detect_boss_name = _detect_human_name
 
 
 AGENT_SUBDIRS = [
@@ -74,23 +78,23 @@ def _default_state(role: str, seniority: str | None = None) -> dict:
 
 def make_roster(
     members: list[tuple[str, str]],
-    boss: str | None = None,
     humans: list[str] | None = None,
+    boss: str | None = None,  # deprecated, kept for backward compat
 ) -> str:
     """Generate roster.md content from a list of (name, role) pairs.
 
     Args:
         members: AI agent (name, role) pairs.
-        boss: Deprecated single boss name (backward compat).
         humans: List of human member names.
+        boss: Deprecated — use ``humans`` instead.
     """
     lines = ["# Team Roster\n"]
     # Human members
     if humans:
         for h in humans:
-            lines.append(f"- **{h}** (member)")
+            lines.append(f"- **{h}** (human)")
     elif boss:
-        lines.append(f"- **{boss}** (member)")
+        lines.append(f"- **{boss}** (human)")
     # AI agents
     for name, role in members:
         lines.append(f"- **{name}** ({role})")
@@ -176,11 +180,11 @@ def bootstrap(
     if len(names) != len(set(names)):
         raise ValueError(f"Duplicate names in team: {names}")
 
-    # Ensure agent names don't conflict with the boss
-    boss_name = get_boss(hc_home)
-    if boss_name and boss_name in names:
+    # Ensure agent names don't conflict with human member names
+    human_name = get_default_human(hc_home)
+    if human_name and human_name in names:
         raise ValueError(
-            f"Agent name '{boss_name}' conflicts with the org-wide boss name"
+            f"Agent name '{human_name}' conflicts with a human member name"
         )
 
     # Ensure top-level directories exist
@@ -226,11 +230,11 @@ def bootstrap(
     from delegate.config import get_human_members
     human_members = get_human_members(hc_home)
     human_names = [m["name"] for m in human_members]
-    # Fallback: if no members dir yet, try legacy boss
+    # Fallback: if no members dir yet, try legacy config
     if not human_names:
-        boss_name = get_boss(hc_home)
-        if boss_name:
-            human_names = [boss_name]
+        legacy_name = get_boss(hc_home)
+        if legacy_name:
+            human_names = [legacy_name]
     rp = _roster_path(hc_home, team_name)
     if not rp.exists():
         rp.write_text(make_roster(members, humans=human_names))
@@ -238,7 +242,7 @@ def bootstrap(
     # Scripts dir (for user-defined team scripts)
     (td / "scripts").mkdir(exist_ok=True)
 
-    # --- Agent bossies ---
+    # --- Agent directories ---
     agents_root = _agents_dir(hc_home, team_name)
     agents_root.mkdir(parents=True, exist_ok=True)
 
@@ -273,17 +277,15 @@ def bootstrap(
 
     # --- Human member (org-wide, outside any team) ---
     # Ensure at least one human member exists.
-    # Auto-detect from git config user.name (first name, lowercased), fall back to "boss".
-    from delegate.config import set_boss, get_human_members
-    boss_name = get_boss(hc_home)
-    if not boss_name:
-        boss_name = _detect_boss_name()
-        set_boss(hc_home, boss_name)  # creates member file + legacy config.yaml
-    else:
-        # Ensure member file exists for legacy boss
-        add_member(hc_home, boss_name)
+    # Auto-detect from git config user.name (first name, lowercased), fall back to "human".
+    from delegate.config import get_human_members
+    human_name = get_default_human(hc_home)
+    if not human_name or human_name == "human":
+        human_name = _detect_human_name()
+    # Ensure member file exists (idempotent)
+    add_member(hc_home, human_name)
 
-    # Legacy: keep boss dir for backward compat
+    # Legacy: keep boss dir for backward compat (will be removed in future)
     dd = _boss_person_dir(hc_home)
     dd.mkdir(parents=True, exist_ok=True)
 
@@ -314,7 +316,7 @@ def add_agent(
     Raises:
         FileNotFoundError: If the team does not exist.
         ValueError: If the agent name already exists on this team,
-            collides with another team's agent, or matches the boss name.
+            or matches a human member name.
     """
     if seniority is None:
         seniority = _default_seniority(role)
@@ -331,10 +333,10 @@ def add_agent(
     if member_dir.exists():
         raise ValueError(f"Agent '{agent_name}' already exists on team '{team_name}'")
 
-    boss_name = get_boss(hc_home)
-    if boss_name and agent_name == boss_name:
+    human_name = get_default_human(hc_home)
+    if human_name and agent_name == human_name:
         raise ValueError(
-            f"Agent name '{agent_name}' conflicts with the org-wide boss name"
+            f"Agent name '{agent_name}' conflicts with a human member name"
         )
 
     # --- create directory structure ---
