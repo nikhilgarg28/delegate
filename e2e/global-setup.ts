@@ -19,7 +19,7 @@ async function globalSetup() {
   // This handles both regular repos and git worktrees
   let projectRoot = path.resolve(__dirname, "..");
   const gitFile = path.join(projectRoot, ".git");
-  if (fs.existsSync(gitFile)) {
+  if (fs.existsSync(gitFile) && fs.statSync(gitFile).isFile()) {
     const gitContent = fs.readFileSync(gitFile, "utf-8").trim();
     if (gitContent.startsWith("gitdir: ")) {
       // This is a worktree — extract main repo path

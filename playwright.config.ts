@@ -17,7 +17,7 @@ import * as path from "path";
 // This handles both regular repos and git worktrees
 let repoRoot = __dirname;
 const gitFile = path.join(__dirname, ".git");
-if (fs.existsSync(gitFile)) {
+if (fs.existsSync(gitFile) && fs.statSync(gitFile).isFile()) {
   const gitContent = fs.readFileSync(gitFile, "utf-8").trim();
   if (gitContent.startsWith("gitdir: ")) {
     // This is a worktree — extract main repo path
