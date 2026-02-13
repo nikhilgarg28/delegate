@@ -105,12 +105,11 @@ test.describe("Magic command autocomplete", () => {
     const dropdown = page.locator(".command-autocomplete");
     await expect(dropdown).toBeVisible();
 
-    // Press Escape
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(300); // Allow time for command mode state to update
+    // Press Escape to dismiss the autocomplete
+    await textarea.press("Escape");
 
-    // Dropdown should be hidden
-    await expect(dropdown).not.toBeVisible();
+    // Dropdown should be hidden (commandMode set to false unmounts it)
+    await expect(dropdown).not.toBeVisible({ timeout: 2000 });
   });
 
   test("selecting command from autocomplete completes the input", async ({ page }) => {
@@ -177,8 +176,7 @@ test.describe("Shell command cwd visibility", () => {
     const initialValue = await cwdInput.inputValue();
     expect(initialValue).toBeTruthy();
 
-    // Change cwd value
-    await cwdInput.clear();
+    // Change cwd value (fill() clears first automatically)
     await cwdInput.fill("/tmp");
 
     // Value should persist

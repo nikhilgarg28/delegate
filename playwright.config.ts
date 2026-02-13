@@ -81,6 +81,7 @@ export default defineConfig({
     env: {
       ...process.env,
       DELEGATE_HOME: tmpDir,
+      PYTHONPATH: __dirname, // Ensure delegate package loads from worktree
     },
     timeout: 15_000,
   },

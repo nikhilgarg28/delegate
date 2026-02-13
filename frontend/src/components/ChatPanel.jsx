@@ -921,10 +921,8 @@ export function ChatPanel() {
       {/* Text selection tooltip */}
       <SelectionTooltip containerRef={logRef} chatInputRef={inputRef} />
 
-      {/* Command autocomplete dropdown - positioned relative to input box */}
-      <div class="chat-input-wrapper">
-        {/* Chat input — Cursor-style: textarea on top, toolbar on bottom */}
-        <div class={`chat-input-box ${commandMode.value ? 'command-mode' : ''}`}>
+      {/* Chat input — Cursor-style: textarea on top, toolbar on bottom */}
+      <div class={`chat-input-box ${commandMode.value ? 'command-mode' : ''}`}>
           {commandMode.value && (
             <CommandAutocomplete
               input={inputVal}
@@ -1027,7 +1025,6 @@ export function ChatPanel() {
             )}
           </button>
         </div>
-      </div>
       </div>
     </div>
   );
