@@ -3,7 +3,7 @@ import {
   currentTeam, teams, tasks, agents, agentStatsMap,
   activeTab, openPanel,
   agentActivityLog, agentTurnState, sidebarCollapsed,
-  navigate, navigateTab,
+  navigate, navigateTab, crossTeamActiveAgents,
 } from "../state.js";
 import {
   cap, taskIdStr, getAgentDotClass,
@@ -141,7 +141,9 @@ function getStatusVerb(taskStatus) {
 
 // ── Agent widget ──
 function AgentsWidget({ collapsed }) {
+  const team = currentTeam.value;
   const allAgents = agents.value;
+  const crossTeam = crossTeamActiveAgents.value;
   const allTasks = tasks.value;
   const statsMap = agentStatsMap.value;
   const turnState = agentTurnState.value;
@@ -149,8 +151,9 @@ function AgentsWidget({ collapsed }) {
 
   if (collapsed || !allAgents.length) return null;
 
-  // Compute status and sort agents
-  const agentsWithStatus = allAgents.map(a => {
+  // Compute status for current team agents
+  const currentTeamAgents = allAgents.filter(a => !a.team || a.team === team);
+  const agentsWithStatus = currentTeamAgents.map(a => {
     const turn = turnState[a.name];
     const inTurn = turn?.inTurn ?? false;
     const lastTaskId = turn?.taskId ?? null;
@@ -197,9 +200,28 @@ function AgentsWidget({ collapsed }) {
     return (a.agent.name || "").localeCompare(b.agent.name || "");
   });
 
+  // Compute status for cross-team agents (only active ones)
+  const crossTeamAgentsWithStatus = crossTeam.map(a => {
+    const turn = turnState[a.name];
+    const lastTaskId = turn?.taskId ?? null;
+    let taskStatus = null;
+    if (lastTaskId) {
+      const task = allTasks.find(t => t.id === lastTaskId);
+      if (task) taskStatus = task.status;
+    }
+    return {
+      agent: a,
+      status: "working",
+      displayTaskId: lastTaskId,
+      respondingTo: null,
+      taskStatus,
+    };
+  });
+
   return (
     <div class="sb-widget">
       <div class="sb-widget-header">Agents</div>
+      {/* Current team agents */}
       {sorted.map(({ agent: a, status, displayTaskId, respondingTo, taskStatus }) => {
         let dotClass = getAgentDotClass(a, allTasks, statsMap[a.name]);
 
@@ -264,6 +286,48 @@ function AgentsWidget({ collapsed }) {
           </div>
         );
       })}
+
+      {/* Cross-team active agents */}
+      {crossTeamAgentsWithStatus.length > 0 && (
+        <>
+          <div class="sb-agent-divider"></div>
+          {crossTeamAgentsWithStatus.map(({ agent: a, displayTaskId, taskStatus }) => {
+            const verb = taskStatus ? getStatusVerb(taskStatus) : null;
+            return (
+              <div
+                key={a.name}
+                class="sb-agent-row sb-agent-row-crossteam"
+              >
+                <div class="sb-agent-line1">
+                  <span class="sb-dot dot-active"></span>
+                  <span
+                    class="sb-agent-name"
+                    onClick={(e) => { e.stopPropagation(); openPanel("agent", a.name); }}
+                  >
+                    {cap(a.name)}
+                  </span>
+                  <span class="sb-agent-team-label">({a.team})</span>
+                  <span class="sb-agent-status">
+                    {displayTaskId && verb ? (
+                      <>
+                        {verb}{" "}
+                        <span
+                          class="sb-agent-task-link"
+                          onClick={(e) => { e.stopPropagation(); openPanel("task", displayTaskId); }}
+                        >
+                          {taskIdStr(displayTaskId)}
+                        </span>
+                      </>
+                    ) : (
+                      "working"
+                    )}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </>
+      )}
     </div>
   );
 }

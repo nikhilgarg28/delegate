@@ -155,6 +155,19 @@ export const openTaskCount = computed(() =>
   ).length
 );
 
+// Cross-team active agents: agents from other teams that are currently working/in-turn
+export const crossTeamActiveAgents = computed(() => {
+  const current = currentTeam.value;
+  const turnState = agentTurnState.value;
+  return agents.value.filter(a => {
+    // Only include agents from other teams
+    if (!a.team || a.team === current) return false;
+    // Only include if they're in a turn (active)
+    const turn = turnState[a.name];
+    return turn?.inTurn ?? false;
+  });
+});
+
 // ── Notification bell state ──
 export const bellPopoverOpen = signal(false);
 

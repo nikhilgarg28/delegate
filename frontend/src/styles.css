@@ -1193,6 +1193,113 @@ select option:hover {
 
 @media (max-width: 600px) { .agent-card-row3 { flex-wrap: wrap; gap: 8px; } }
 
+/* ── Agents page team filter ── */
+.agents-team-filter-wrap {
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+.agents-team-filter {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 100ms;
+}
+.agents-team-filter:hover {
+  border-color: var(--text-muted);
+}
+.agents-team-filter-label {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.agents-team-filter-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 150ms;
+}
+.agents-team-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 160px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  z-index: 300;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+.agents-team-option {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 100ms, color 100ms;
+}
+.agents-team-option:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.agents-team-option.active {
+  background: var(--bg-active);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* ── Team group headers ── */
+.agents-team-group {
+  margin-bottom: 20px;
+}
+.agents-team-group-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  padding-left: 4px;
+}
+
+/* ── Team badge on agent card ── */
+.agent-card-team-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  line-height: 1.4;
+  background: var(--bg-inset);
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+/* ── Cross-team agent styles in sidebar ── */
+.sb-agent-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 8px 0;
+}
+.sb-agent-row-crossteam {
+  opacity: 0.7;
+}
+.sb-agent-row-crossteam:hover {
+  opacity: 1;
+}
+.sb-agent-team-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
 /* ================================================================
    FilterBar (Linear-style composable filters)
    ================================================================ */

@@ -28,6 +28,11 @@ export async function fetchAgents(team) {
   return r.ok ? r.json() : [];
 }
 
+export async function fetchAgentsCrossTeam() {
+  const r = await fetch("/api/agents?team=all");
+  return r.ok ? r.json() : [];
+}
+
 export async function fetchMessages(team, params) {
   // Filter out undefined/null params
   const cleanParams = {};
