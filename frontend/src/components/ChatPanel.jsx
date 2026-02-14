@@ -137,7 +137,7 @@ function useSpeechRecognition(inputRef) {
         else interim += e.results[i][0].transcript;
       }
       if (inputRef.current) {
-        inputRef.current.value = baseTextRef.current + finalTextRef.current + interim;
+        inputRef.current.textContent = baseTextRef.current + finalTextRef.current + interim;
         inputRef.current.style.height = "auto";
         inputRef.current.style.height = inputRef.current.scrollHeight + "px";
       }
@@ -157,7 +157,7 @@ function useSpeechRecognition(inputRef) {
       recRef.current.stop();
     } else {
       const el = inputRef.current;
-      baseTextRef.current = el && el.value ? el.value + " " : "";
+      baseTextRef.current = el && el.textContent ? el.textContent + " " : "";
       finalTextRef.current = "";
       try { recRef.current.start(); } catch (e) { return; }
       setActive(true);
@@ -349,12 +349,12 @@ export function ChatPanel() {
     if (prevTeam && prevTeam !== team) {
       // Save draft from previous team
       if (inputRef.current) {
-        draftsByTeam.current[prevTeam] = inputRef.current.value;
+        draftsByTeam.current[prevTeam] = inputRef.current.textContent || "";
       }
       // Restore draft for new team
       const draft = draftsByTeam.current[team] || "";
       if (inputRef.current) {
-        inputRef.current.value = draft;
+        inputRef.current.textContent = draft;
         inputRef.current.style.height = "auto";
         inputRef.current.style.height = inputRef.current.scrollHeight + "px";
       }
@@ -653,14 +653,14 @@ export function ChatPanel() {
 
   const handleSend = useCallback(async () => {
     if (mic.active) mic.toggle();
-    const val = inputRef.current ? inputRef.current.value.trim() : "";
+    const val = inputRef.current ? (inputRef.current.textContent || "").trim() : "";
     if (!val || !team) return;
 
     // Check for command
     const cmd = parseCommand(val);
     if (cmd && COMMANDS[cmd.name]) {
       if (inputRef.current) {
-        inputRef.current.value = "";
+        inputRef.current.textContent = "";
         inputRef.current.style.height = "auto";
       }
       setInputVal("");
@@ -700,7 +700,7 @@ export function ChatPanel() {
       setMsgs(prev => [...prev, optimistic]);
       newestMsgTsRef.current = now;
 
-      if (inputRef.current) { inputRef.current.value = ""; inputRef.current.style.height = "auto"; }
+      if (inputRef.current) { inputRef.current.textContent = ""; inputRef.current.style.height = "auto"; }
       setInputVal("");
       setSendBtnActive(false);
       isAtBottomRef.current = true;
@@ -724,6 +724,13 @@ export function ChatPanel() {
       handleSend();
     }
   }, [handleSend]);
+
+  const handlePaste = useCallback((e) => {
+    // Strip HTML formatting on paste
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+  }, []);
 
   const toggleDirection = useCallback(() => {
     chatFilterDirection.value = direction === "one-way" ? "bidi" : "one-way";
@@ -921,14 +928,15 @@ export function ChatPanel() {
       {/* Text selection tooltip */}
       <SelectionTooltip containerRef={logRef} chatInputRef={inputRef} />
 
-      {/* Chat input — Cursor-style: textarea on top, toolbar on bottom */}
+      {/* Chat input — Cursor-style: contenteditable on top, toolbar on bottom */}
       <div class={`chat-input-box ${commandMode.value ? 'command-mode' : ''}`}>
           {commandMode.value && (
             <CommandAutocomplete
               input={inputVal}
+              inputRef={inputRef}
               onSelect={(cmd) => {
                 if (inputRef.current) {
-                  inputRef.current.value = `/${cmd.name} `;
+                  inputRef.current.textContent = `/${cmd.name} `;
                   inputRef.current.focus();
                   setInputVal(`/${cmd.name} `);
                   setSendBtnActive(true);
@@ -939,14 +947,14 @@ export function ChatPanel() {
               }}
             />
           )}
-          <textarea
+          <div
             ref={inputRef}
-            class={!commandMode.value && inputVal && hasMarkdown(inputVal) ? "chat-input-has-overlay" : ""}
-            placeholder="Send a message..."
-            rows="2"
+            class="chat-input"
+            contentEditable
             onKeyDown={handleKeydown}
+            onPaste={handlePaste}
             onInput={(e) => {
-              const val = e.target.value;
+              const val = e.target.textContent || "";
               e.target.style.height = "auto";
               e.target.style.height = e.target.scrollHeight + "px";
               setSendBtnActive(!!val.trim());
@@ -964,12 +972,6 @@ export function ChatPanel() {
               }
             }}
           />
-          {!commandMode.value && inputVal && hasMarkdown(inputVal) && (
-            <div
-              class="chat-input-overlay"
-              dangerouslySetInnerHTML={{ __html: renderInlineMarkdown(inputVal) }}
-            />
-          )}
         </div>
         {commandMode.value && parseCommand(inputVal)?.name === 'shell' && (
           <div class="chat-cwd-badge">

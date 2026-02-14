@@ -3,14 +3,16 @@ import { filterCommands, parseCommand } from "../commands.js";
 
 /**
  * Autocomplete dropdown for magic commands.
- * Appears above the input when in command mode.
+ * Appears inline at the cursor position when in command mode.
  * @param {Object} props
  * @param {string} props.input - Current input value
+ * @param {Object} props.inputRef - Ref to the contenteditable input element
  * @param {Function} props.onSelect - Called when a command is selected
  * @param {Function} props.onDismiss - Called when autocomplete should close
  */
-export function CommandAutocomplete({ input, onSelect, onDismiss }) {
+export function CommandAutocomplete({ input, inputRef, onSelect, onDismiss }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
   const dropdownRef = useRef();
 
   const parsed = parseCommand(input);
@@ -20,6 +22,35 @@ export function CommandAutocomplete({ input, onSelect, onDismiss }) {
   useEffect(() => {
     setSelectedIndex(0);
   }, [query]);
+
+  // Calculate cursor position for inline dropdown
+  useEffect(() => {
+    if (!inputRef.current || !commands.length) return;
+
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    const inputRect = inputRef.current.getBoundingClientRect();
+
+    // Position dropdown at cursor
+    // Check if there's more room below or above the cursor
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    let top, left;
+    if (spaceBelow >= 200 || spaceBelow > spaceAbove) {
+      // Show below cursor
+      top = rect.bottom - inputRect.top + 4;
+    } else {
+      // Show above cursor (dropdown will use max-height and position from bottom)
+      top = rect.top - inputRect.top - 4;
+    }
+    left = rect.left - inputRect.left;
+
+    setPosition({ top, left, showAbove: spaceBelow < 200 && spaceAbove > spaceBelow });
+  }, [inputRef, commands, input]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -58,8 +89,15 @@ export function CommandAutocomplete({ input, onSelect, onDismiss }) {
 
   if (!commands.length) return null;
 
+  const style = {
+    position: 'absolute',
+    top: position.showAbove ? 'auto' : `${position.top}px`,
+    bottom: position.showAbove ? `calc(100% - ${position.top}px)` : 'auto',
+    left: `${position.left}px`,
+  };
+
   return (
-    <div class="command-autocomplete" ref={dropdownRef}>
+    <div class="command-autocomplete" ref={dropdownRef} style={style}>
       {commands.map((cmd, idx) => (
         <div
           key={cmd.name}
