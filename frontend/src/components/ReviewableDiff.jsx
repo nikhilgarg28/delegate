@@ -432,7 +432,7 @@ export function ReviewableDiff({
   isReviewable = false,
 }) {
   const [localComments, setLocalComments] = useState([]);
-  const [showOld, setShowOld] = useState(false);
+  const [showOld, setShowOld] = useState(true);
 
   // Parse the unified diff
   const files = useMemo(() => {

@@ -1443,7 +1443,7 @@ select option:hover {
 .rc-diff-summary { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
 .rc-comment-badge { font-size: 11px; font-weight: 600; background: var(--bg-active); color: var(--text-secondary); padding: 2px 8px; border-radius: 10px; }
 .rc-old-toggle { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
-.rc-old-toggle input { margin-right: 4px; vertical-align: middle; }
+.rc-old-toggle input { margin-right: 4px; vertical-align: middle; accent-color: var(--text-muted); }
 
 .rc-file { border: 1px solid var(--border-subtle); border-radius: 6px; margin-bottom: 8px; overflow: hidden; }
 .rc-file-header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; background: var(--bg-hover); transition: background 100ms; }
@@ -1480,7 +1480,7 @@ select option:hover {
 .rc-comment-dimmed { opacity: 0.5; border-style: dashed; }
 .rc-comment-header { display: flex; align-items: center; gap: 6px; padding-bottom: 4px; margin-bottom: 4px; border-bottom: 1px solid var(--border-subtle); }
 .rc-comment-author { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; font-size: 12px; font-weight: 400; color: var(--text-primary); }
-.rc-comment-attempt { font-size: 10px; color: var(--text-faint); background: var(--bg-active); padding: 1px 5px; border-radius: 4px; }
+.rc-comment-attempt { font-size: 10px; color: var(--text-muted); background: var(--bg-active); padding: 1px 5px; border-radius: 4px; }
 .rc-comment-actions { margin-left: auto; display: flex; gap: 4px; opacity: 0; transition: opacity 100ms; }
 .rc-comment:hover .rc-comment-actions { opacity: 1; }
 .rc-comment-action { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 2px; border-radius: 3px; display: flex; align-items: center; }
