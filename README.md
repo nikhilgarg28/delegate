@@ -3,7 +3,8 @@
 </p>
 
 <p align="center">
-  <strong>You're one person. Delegate gives you a team.</strong>
+  <strong>Not a copilot. A team that ships.</strong><br>
+  <sub>AI agents that plan, code, review each other's work, and merge — running locally on your machine.</sub>
 </p>
 
 <p align="center">
