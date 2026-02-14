@@ -257,5 +257,7 @@ export function isInputFocused() {
   const el = document.activeElement;
   if (!el) return false;
   const tag = el.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.contentEditable === "true";
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  // contentEditable can be "true", "plaintext-only", or "inherit"/"false"
+  return el.isContentEditable === true;
 }

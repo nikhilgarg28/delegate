@@ -96,7 +96,7 @@ function App() {
       // r focuses chat input (when on Chat tab)
       if (e.key === "r" && !isHelpOpen() && panelStack.value.length === 0) {
         e.preventDefault();
-        const chatInput = document.querySelector(".chat-input-box textarea");
+        const chatInput = document.querySelector(".chat-input");
         if (chatInput) chatInput.focus();
         return;
       }
