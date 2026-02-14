@@ -191,7 +191,7 @@ def _build_greeting(
     """
     from datetime import datetime, timezone, timedelta
     from delegate.task import list_tasks
-    from delegate.mailbox import list_messages
+    from delegate.mailbox import read_inbox
 
     # Time-of-day awareness (use local time, not UTC)
     local_hour = datetime.now().hour
@@ -230,7 +230,7 @@ def _build_greeting(
                 away_parts.append(f"{len(completed_since)} task{'s' if len(completed_since) != 1 else ''} completed")
 
             # Messages to human since last_seen
-            messages = list_messages(hc_home, team, recipient=human)
+            messages = read_inbox(hc_home, team, human, unread_only=False)
             new_messages = [
                 m for m in messages
                 if datetime.fromisoformat(m["created_at"].replace("Z", "+00:00")) > last_seen
@@ -1080,7 +1080,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         """
         from datetime import datetime, timezone, timedelta
         from delegate.bootstrap import get_member_by_role
-        from delegate.mailbox import list_messages
+        from delegate.mailbox import read_inbox
 
         human_name = get_default_human(hc_home)
         manager_name = get_member_by_role(hc_home, team, "manager")
@@ -1095,7 +1095,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         # If so, skip the greeting to avoid noise
         now_utc = datetime.now(timezone.utc)
         try:
-            recent_messages = list_messages(hc_home, team, recipient=human_name)
+            recent_messages = read_inbox(hc_home, team, human_name, unread_only=False)
             cutoff = now_utc - timedelta(minutes=15)
             recent_manager_msg = any(
                 m["sender"] == manager_name and
