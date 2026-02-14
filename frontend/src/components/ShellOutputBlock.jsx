@@ -57,21 +57,24 @@ export function ShellOutputBlock({ result, onErrorState }) {
     const text = stderr ? `${stdout}\n\nstderr:\n${stderr}` : stdout;
     navigator.clipboard.writeText(text);
     const btn = e.currentTarget;
-    const orig = btn.textContent;
-    btn.textContent = '✓';
-    setTimeout(() => { btn.textContent = orig; }, 1500);
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '✓';
+    setTimeout(() => { btn.innerHTML = originalHTML; }, 1500);
   };
+
+  const ClipboardIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="5" width="9" height="9" rx="1.5" />
+      <path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5" />
+    </svg>
+  );
 
   return (
     <div class="shell-output-block">
-      <div class="shell-output-header">
-        <span class="shell-output-cwd">{cwd || '~'}</span>
-        <span class="shell-output-duration">{durationSec}s</span>
-        <button class="shell-copy-btn" onClick={handleCopy} title="Copy output">
-          Copy
-        </button>
-      </div>
       <div class="shell-output-body" ref={contentRef}>
+        <button class="shell-output-copy-icon" onClick={handleCopy} title="Copy output">
+          <ClipboardIcon />
+        </button>
         <pre class="shell-output-stdout">{displayContent}</pre>
         {shouldCollapse && !expanded && (
           <button class="shell-expand-btn" onClick={() => setExpanded(true)}>

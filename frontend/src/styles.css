@@ -2326,7 +2326,7 @@ select option:hover {
 
 /* Command message container */
 .msg-command {
-  padding: 8px 12px 8px 15px;
+  padding: 0;
   border-left: 1px solid var(--cmd-blue);
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -2342,8 +2342,10 @@ select option:hover {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  margin-bottom: 8px;
+  padding: 8px 12px 8px 15px;
+  margin-bottom: 0;
   font-size: 12px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .msg-command-sender {
@@ -2360,8 +2362,8 @@ select option:hover {
 /* Shell output block */
 .shell-output-block {
   background: var(--bg-inset);
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border: none;
+  border-radius: 0;
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
   overflow: hidden;
@@ -2371,7 +2373,7 @@ select option:hover {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 12px;
+  padding: 8px 12px 8px 15px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -2388,19 +2390,78 @@ select option:hover {
 }
 
 .shell-copy-btn {
-  padding: 4px 8px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-input);
-  border-radius: 4px;
+  padding: 4px;
+  background: transparent;
+  border: none;
   color: var(--text-secondary);
-  font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
 }
 
 .shell-copy-btn:hover {
+  color: var(--text-primary);
+}
+
+.shell-copy-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.shell-output-copy-icon {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px;
+  background: var(--bg-surface);
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+}
+
+.shell-output-copy-icon:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.shell-output-copy-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.msg-command-copy-icon {
+  padding: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+}
+
+.msg-command-copy-icon:hover {
+  color: var(--text-primary);
+}
+
+.msg-command-copy-icon svg {
+  width: 14px;
+  height: 14px;
 }
 
 .shell-output-body {

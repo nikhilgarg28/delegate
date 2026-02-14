@@ -27,13 +27,43 @@ import { parseCommand, filterCommands, COMMANDS } from "../commands.js";
 function CommandMessage({ message, parsed }) {
   const [hasError, setHasError] = useState(false);
 
+  const handleCommandCopy = (e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(message.content);
+    const btn = e.currentTarget;
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '✓';
+    setTimeout(() => { btn.innerHTML = originalHTML; }, 1500);
+  };
+
+  const ClipboardIcon = () => (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="5" width="9" height="9" rx="1.5" />
+      <path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5" />
+    </svg>
+  );
+
+  // For shell commands, include duration in header
+  const isShell = parsed?.name === 'shell';
+  const duration = isShell && message.result?.duration_ms
+    ? `${(message.result.duration_ms / 1000).toFixed(2)}s`
+    : null;
+
   return (
     <div class={`msg-command ${hasError ? 'msg-command-error' : ''}`}>
       <div class="msg-command-header">
         <span class="msg-command-sender">{cap(message.sender)}:</span>
         <span class="msg-command-text">{message.content}</span>
-        <span class="msg-task-sep">|</span>
-        <span class="msg-time">{fmtTimestamp(message.timestamp)}</span>
+        {duration && <span class="shell-output-duration">{duration}</span>}
+        {!duration && (
+          <>
+            <span class="msg-task-sep">|</span>
+            <span class="msg-time">{fmtTimestamp(message.timestamp)}</span>
+          </>
+        )}
+        <button class="msg-command-copy-icon" onClick={handleCommandCopy} title="Copy command">
+          <ClipboardIcon />
+        </button>
       </div>
       {parsed?.name === 'shell' && (
         <ShellOutputBlock result={message.result} onErrorState={setHasError} />
