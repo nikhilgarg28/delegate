@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "preact/hooks";
 import {
   currentTeam, diffPanelMode, diffPanelTarget, tasks,
   panelStack, pushPanel, closeAllPanels, popPanel,
-  agentActivityLog,
+  agentActivityLog, agents,
 } from "../state.js";
 import * as api from "../api.js";
 import {
@@ -73,17 +73,11 @@ function AgentView({ agentName }) {
   const team = currentTeam.value;
   const [tab, setTab] = useState("activity");
   const [tabData, setTabData] = useState({});
-  const [role, setRole] = useState("");
   const activityEndRef = useRef(null);
 
-  useEffect(() => {
-    if (!agentName || !team) return;
-    setTab("activity"); setTabData({});
-    api.fetchAgents(team).then(agents => {
-      const a = agents.find(x => x.name === agentName);
-      if (a) setRole(cap(a.role));
-    }).catch(() => {});
-  }, [agentName, team]);
+  // Get role directly from agents signal (no async fetch needed)
+  const agent = agents.value.find(x => x.name === agentName);
+  const role = agent?.role ? cap(agent.role) : "";
 
   const switchTab = useCallback((t) => {
     setTab(t);
@@ -390,7 +384,7 @@ export function DiffPanel() {
           <button class="diff-panel-close" onClick={close}>&times;</button>
         </div>
         {mode === "diff" && <DiffView taskId={target} />}
-        {mode === "agent" && <AgentView agentName={target} />}
+        {mode === "agent" && <AgentView key={target} agentName={target} />}
         {mode === "file" && <FileView filePath={target} />}
       </div>
       <div class={"diff-backdrop" + (isOpen ? " open" : "")} onClick={close}></div>
