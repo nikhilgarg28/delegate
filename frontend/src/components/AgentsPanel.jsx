@@ -165,15 +165,18 @@ export function AgentsPanel() {
               >
                 All teams
               </div>
-              {teamList.map(t => (
-                <div
-                  key={t}
-                  class={"agents-team-option" + (selectedTeam === t ? " active" : "")}
-                  onClick={() => selectTeam(t)}
-                >
-                  {t}
-                </div>
-              ))}
+              {teamList.map(t => {
+                const teamName = typeof t === "object" ? t.name : t;
+                return (
+                  <div
+                    key={teamName}
+                    class={"agents-team-option" + (selectedTeam === teamName ? " active" : "")}
+                    onClick={() => selectTeam(teamName)}
+                  >
+                    {teamName}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

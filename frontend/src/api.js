@@ -12,11 +12,12 @@ export async function fetchTeams() {
   const r = await fetch("/teams");
   if (!r.ok) return [];
   const data = await r.json();
-  // Backend may return [{name, team_id, ...}] or plain ["name", ...].
+  // Backend returns [{name, team_id, agent_count, task_count, human_count, created_at}, ...]
   if (data.length > 0 && typeof data[0] === "object") {
-    return data.map(t => t.name);
+    return data;  // Return full objects
   }
-  return data;
+  // Fallback for plain string arrays
+  return data.map(name => ({ name, agent_count: 0, task_count: 0, human_count: 0 }));
 }
 
 export async function fetchTasks(team) {

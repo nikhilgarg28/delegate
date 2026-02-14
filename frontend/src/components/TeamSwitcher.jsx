@@ -18,20 +18,23 @@ export function TeamSwitcher({ open, onClose }) {
   const allAgents = agents.value;
 
   // Filter teams by search query
-  // Note: tasks/agents are from current team only, so we can only show counts for current team
+  // For current team, use live data (more accurate). For other teams, use /teams snapshot.
   const filteredTeams = teamList
-    .filter(t => t.toLowerCase().includes(query.toLowerCase()))
+    .filter(t => {
+      const name = typeof t === "object" ? t.name : t;
+      return name.toLowerCase().includes(query.toLowerCase());
+    })
     .map(t => {
-      const isCurrent = t === currentTeamVal;
-      const teamTasks = isCurrent ? allTasks : [];
-      const teamAgents = isCurrent ? allAgents : [];
-      const openCount = teamTasks.filter(
-        task => task.status === "todo" || task.status === "in_progress" || task.status === "in_review"
-      ).length;
+      const teamObj = typeof t === "object" ? t : { name: t };
+      const name = teamObj.name;
+      const isCurrent = name === currentTeamVal;
       return {
-        name: t,
-        agentCount: teamAgents.length,
-        taskCount: openCount,
+        name,
+        agentCount: isCurrent ? allAgents.length : (teamObj.agent_count || 0),
+        taskCount: isCurrent
+          ? allTasks.filter(task => ["todo", "in_progress", "in_review"].includes(task.status)).length
+          : (teamObj.task_count || 0),
+        humanCount: teamObj.human_count || 0,
         isCurrent,
       };
     });
@@ -119,6 +122,12 @@ export function TeamSwitcher({ open, onClose }) {
                 <div class="team-switcher-item-name">{cap(team.name)}</div>
                 <div class="team-switcher-item-meta">
                   {team.agentCount} {team.agentCount === 1 ? "agent" : "agents"}
+                  {team.humanCount > 0 && (
+                    <>
+                      {" • "}
+                      {team.humanCount} {team.humanCount === 1 ? "human" : "humans"}
+                    </>
+                  )}
                   {" • "}
                   {team.taskCount} {team.taskCount === 1 ? "task" : "tasks"}
                 </div>

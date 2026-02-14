@@ -872,7 +872,10 @@ export function ChatPanel() {
 
   // Team selector options
   const teamOptions = useMemo(() => {
-    return teamList.map(t => ({ value: t, label: cap(t) }));
+    return teamList.map(t => {
+      const name = typeof t === "object" ? t.name : t;
+      return { value: name, label: cap(name) };
+    });
   }, [teamList]);
 
   const handleTeamChange = useCallback((newTeam) => {

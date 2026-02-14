@@ -165,14 +165,17 @@ function App() {
         const teamList = await api.fetchTeams();
         teams.value = teamList;
 
+        // Extract team names for comparison (handle both objects and strings)
+        const teamNames = teamList.map(t => typeof t === "object" ? t.name : t);
+
         // If URL didn't set a valid team, check localStorage or navigate to the first team
-        if (teamList.length > 0 && !currentTeam.value) {
+        if (teamNames.length > 0 && !currentTeam.value) {
           const lastTeam = localStorage.getItem("delegate-last-team");
-          const targetTeam = lastTeam && teamList.includes(lastTeam) ? lastTeam : teamList[0];
+          const targetTeam = lastTeam && teamNames.includes(lastTeam) ? lastTeam : teamNames[0];
           navigate(targetTeam, "chat");
-        } else if (teamList.length > 0 && !teamList.includes(currentTeam.value)) {
+        } else if (teamNames.length > 0 && !teamNames.includes(currentTeam.value)) {
           // URL had an invalid team — fix it
-          navigate(teamList[0], activeTab.value || "chat");
+          navigate(teamNames[0], activeTab.value || "chat");
         }
       } catch (e) { }
     })();
@@ -400,7 +403,8 @@ function App() {
 
     const connections = {};
 
-    for (const team of list) {
+    for (const teamObj of list) {
+      const team = typeof teamObj === "object" ? teamObj.name : teamObj;
       // Ensure backing store slots exist
       if (!_pt.activity[team])    _pt.activity[team]    = {};
       if (!_pt.activityLog[team]) _pt.activityLog[team] = [];

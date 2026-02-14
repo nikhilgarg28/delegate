@@ -673,6 +673,10 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 "SELECT name, team_id, created_at FROM teams ORDER BY created_at ASC"
             ).fetchall()
 
+            # Build set of human member names for fast lookup
+            from delegate.config import get_human_members
+            human_names = {m["name"] for m in get_human_members(hc_home)}
+
             result = []
             for row in teams_rows:
                 team_name = row["name"]
@@ -688,12 +692,21 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                     (team_name,)
                 ).fetchone()[0]
 
+                # Count humans that have a directory in this team's agents dir
+                human_count = 0
+                team_agents_dir = _agents_dir(hc_home, team_name)
+                if team_agents_dir.is_dir():
+                    for d in team_agents_dir.iterdir():
+                        if d.is_dir() and d.name in human_names:
+                            human_count += 1
+
                 result.append({
                     "name": team_name,
                     "team_id": team_id,
                     "created_at": created_at,
                     "agent_count": agent_count,
                     "task_count": task_count,
+                    "human_count": human_count,
                 })
 
             return result
