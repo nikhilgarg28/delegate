@@ -5,8 +5,9 @@ import { handleCopyClick } from "../utils.js";
  * Renders shell command output in the chat.
  * @param {Object} props
  * @param {Object|null} props.result - { stdout, stderr, exit_code, cwd, duration_ms } or null if running
+ * @param {Function} [props.onErrorState] - Optional callback called with error state (true/false)
  */
-export function ShellOutputBlock({ result }) {
+export function ShellOutputBlock({ result, onErrorState }) {
   const [expanded, setExpanded] = useState(false);
   const [shouldCollapse, setShouldCollapse] = useState(false);
   const contentRef = useRef();
@@ -40,6 +41,13 @@ export function ShellOutputBlock({ result }) {
   const hasError = exit_code !== 0 || !!error;
   const durationSec = (duration_ms / 1000).toFixed(2);
 
+  // Notify parent of error state
+  useEffect(() => {
+    if (onErrorState) {
+      onErrorState(hasError);
+    }
+  }, [hasError, onErrorState]);
+
   const lines = stdout.split('\n');
   const displayContent = (shouldCollapse && !expanded) ? lines.slice(0, 20).join('\n') : stdout;
   const lineCount = lines.length;
@@ -55,7 +63,7 @@ export function ShellOutputBlock({ result }) {
   };
 
   return (
-    <div class={`shell-output-block ${hasError ? 'error' : ''}`}>
+    <div class="shell-output-block">
       <div class="shell-output-header">
         <span class="shell-output-cwd">{cwd || '~'}</span>
         <span class="shell-output-duration">{durationSec}s</span>

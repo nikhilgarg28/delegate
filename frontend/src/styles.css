@@ -2298,6 +2298,10 @@ select option:hover {
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.msg-command.msg-command-error {
+  border-left-color: var(--semantic-red);
+}
+
 .msg-command:last-child { border-bottom: none; }
 .msg-command:hover { background: rgba(255, 255, 255, 0.02); }
 
@@ -2328,10 +2332,6 @@ select option:hover {
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
   overflow: hidden;
-}
-
-.shell-output-block.error {
-  border-color: var(--semantic-red);
 }
 
 .shell-output-header {

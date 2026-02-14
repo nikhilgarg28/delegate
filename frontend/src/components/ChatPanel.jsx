@@ -22,6 +22,26 @@ import { ShellOutputBlock } from "./ShellOutputBlock.jsx";
 import { StatusBlock } from "./StatusBlock.jsx";
 import { parseCommand, filterCommands, COMMANDS } from "../commands.js";
 
+// ── Command message wrapper to track error state ──
+function CommandMessage({ message, parsed }) {
+  const [hasError, setHasError] = useState(false);
+
+  return (
+    <div class={`msg-command ${hasError ? 'msg-command-error' : ''}`}>
+      <div class="msg-command-header">
+        <span class="msg-command-sender">{cap(message.sender)}:</span>
+        <span class="msg-command-text">{message.content}</span>
+        <span class="msg-task-sep">|</span>
+        <span class="msg-time">{fmtTimestamp(message.timestamp)}</span>
+      </div>
+      {parsed?.name === 'shell' && (
+        <ShellOutputBlock result={message.result} onErrorState={setHasError} />
+      )}
+      {parsed?.name === 'status' && <StatusBlock result={message.result} />}
+    </div>
+  );
+}
+
 // ── Linked content with event delegation ──
 function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
   const handler = useCallback((e) => {
@@ -939,18 +959,7 @@ export function ChatPanel() {
           }
           if (m.type === "command") {
             const parsed = parseCommand(m.content);
-            return (
-              <div key={m.id || i} class="msg-command">
-                <div class="msg-command-header">
-                  <span class="msg-command-sender">{cap(m.sender)}:</span>
-                  <span class="msg-command-text">{m.content}</span>
-                  <span class="msg-task-sep">|</span>
-                  <span class="msg-time">{fmtTimestamp(m.timestamp)}</span>
-                </div>
-                {parsed?.name === 'shell' && <ShellOutputBlock result={m.result} />}
-                {parsed?.name === 'status' && <StatusBlock result={m.result} />}
-              </div>
-            );
+            return <CommandMessage key={m.id || i} message={m} parsed={parsed} />;
           }
           const contentHtml = linkifyFilePaths(linkifyTaskRefs(renderMarkdown(m.content)));
           const senderLower = m.sender.toLowerCase();
