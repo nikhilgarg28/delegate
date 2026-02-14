@@ -785,7 +785,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 14px;
+  padding: 8px 14px 4px;
   font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   font-size: 12px;
   min-height: 26px;
