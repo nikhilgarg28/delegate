@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "preact/hooks";
 import {
-  currentTeam, tasks, taskPanelId, knownAgentNames, humanName,
+  tasks, taskPanelId, knownAgentNames, humanName,
   panelStack, pushPanel, closeAllPanels, popPanel, taskTeamFilter,
 } from "../state.js";
 import * as api from "../api.js";
@@ -15,13 +15,14 @@ import { showToast } from "../toast.js";
 import { CopyBtn } from "./CopyBtn.jsx";
 
 // ── Per-task stale-while-revalidate cache ──
-// Keyed by "team:taskId" → { stats, diffRaw, mergePreviewRaw, currentReview, oldComments, activityRaw }
+// Keyed by taskId → { stats, diffRaw, mergePreviewRaw, currentReview, oldComments, activityRaw }
 // Data is served from cache instantly on panel open, then revalidated in the background.
+// Note: Task IDs are globally unique, so no team prefix needed.
 const _cache = new Map();
-function _cacheKey(team, id) { return `${team}:${id}`; }
-function _getCache(team, id) { return _cache.get(_cacheKey(team, id)) || {}; }
-function _setCache(team, id, patch) {
-  const key = _cacheKey(team, id);
+function _cacheKey(id) { return `${id}`; }
+function _getCache(id) { return _cache.get(_cacheKey(id)) || {}; }
+function _setCache(id, patch) {
+  const key = _cacheKey(id);
   _cache.set(key, { ...(_cache.get(key) || {}), ...patch });
 }
 
@@ -58,15 +59,17 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
 // ── Retry merge button (compact, inline) ──
 function RetryMergeButton({ task }) {
   const [loading, setLoading] = useState(false);
-  const team = currentTeam.value;
 
   const handleRetry = async () => {
     if (loading) return;
     setLoading(true);
     try {
-      await api.retryMerge(team, task.id);
-      const refreshed = await api.fetchTasks(team);
-      tasks.value = refreshed;
+      await api.retryMergeGlobal(task.id);
+      // Refresh task list - task.team is available if needed
+      if (task.team) {
+        const refreshed = await api.fetchTasks(task.team);
+        tasks.value = refreshed;
+      }
     } catch (err) {
       alert("Retry failed: " + err.message);
     } finally {
@@ -140,7 +143,7 @@ function ApprovalBar({ task, currentReview, onAction }) {
   const handleApprove = async () => {
     setLoading(true);
     try {
-      await api.approveTask(currentTeam.value, task.id, summary);
+      await api.approveTaskGlobal(task.id, summary);
       setResult("approved");
       if (onAction) onAction();
     } catch (e) {
@@ -153,7 +156,7 @@ function ApprovalBar({ task, currentReview, onAction }) {
   const handleReject = async () => {
     setLoading(true);
     try {
-      await api.rejectTask(currentTeam.value, task.id, summary || "(no reason)", summary);
+      await api.rejectTaskGlobal(task.id, summary || "(no reason)", summary);
       setResult("rejected");
       if (onAction) onAction();
     } catch (e) {
@@ -381,7 +384,6 @@ function ChangesTab({ task, diffRaw, currentReview, oldComments, stats }) {
   const [commitsData, setCommitsData] = useState(null);
   const [commitsExpanded, setCommitsExpanded] = useState(false);
   const [commitsLoading, setCommitsLoading] = useState(false);
-  const team = currentTeam.value;
   const t = task;
   const isReviewable = t && t.status === "in_approval";
 
@@ -395,14 +397,14 @@ function ChangesTab({ task, diffRaw, currentReview, oldComments, stats }) {
   useEffect(() => {
     if (!commitsExpanded || commitsData !== null) return;
     setCommitsLoading(true);
-    api.fetchTaskCommits(team, t.id).then(data => {
+    api.fetchTaskCommitsGlobal(t.id).then(data => {
       setCommitsData(data);
     }).catch(() => {
       setCommitsData({ commit_diffs: {} });
     }).finally(() => {
       setCommitsLoading(false);
     });
-  }, [commitsExpanded, commitsData, team, t.id]);
+  }, [commitsExpanded, commitsData, t.id]);
 
   const allCommits = useMemo(() => {
     if (!commitsData) return [];
@@ -540,7 +542,6 @@ function ActivityTab({ taskId, task, activityRaw, onLoadActivity }) {
   const [posting, setPosting] = useState(false);
   const [showingAll, setShowingAll] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const team = currentTeam.value;
   const human = humanName.value || "human";
   const agentNames = knownAgentNames.value || [];
 
@@ -587,7 +588,7 @@ function ActivityTab({ taskId, task, activityRaw, onLoadActivity }) {
     setLoadingMore(true);
     try {
       // Fetch without limit to get all activity
-      const allActivity = await api.fetchTaskActivity(team, taskId, null);
+      const allActivity = await api.fetchTaskActivityGlobal(taskId, null);
       setTimeline(transformActivity(allActivity));
       setShowingAll(true);
     } catch (e) {
@@ -602,7 +603,7 @@ function ActivityTab({ taskId, task, activityRaw, onLoadActivity }) {
     if (!body || posting) return;
     setPosting(true);
     try {
-      await api.postTaskComment(team, taskId, human, body);
+      await api.postTaskCommentGlobal(taskId, human, body);
       setCommentText("");
       // Trigger refresh from parent
       if (onLoadActivity) onLoadActivity();
@@ -696,7 +697,6 @@ function ActivityTab({ taskId, task, activityRaw, onLoadActivity }) {
 // ── Main TaskSidePanel ──
 export function TaskSidePanel() {
   const id = taskPanelId.value;
-  const team = currentTeam.value;
   const allTasks = tasks.value;
 
   const [task, setTask] = useState(null);
@@ -724,11 +724,11 @@ export function TaskSidePanel() {
   // If we have cached data for this task, show it immediately;
   // then always re-fetch in the background to ensure freshness.
   useEffect(() => {
-    if (id === null || !team) { setTask(null); return; }
+    if (id === null) { setTask(null); return; }
     setActiveTab("overview");
 
     // ── Restore from cache (instant) ──
-    const c = _getCache(team, id);
+    const c = _getCache(id);
     setStats(c.stats ?? null);
     setDiffRaw(c.diffRaw ?? null);
     setDiffLoaded(!!c.diffRaw);
@@ -753,12 +753,12 @@ export function TaskSidePanel() {
     // ── Revalidate in background ──
     (async () => {
       try {
-        const s = await api.fetchTaskStats(team, id);
+        const s = await api.fetchTaskStatsGlobal(id);
         setStats(s);
-        _setCache(team, id, { stats: s });
+        _setCache(id, { stats: s });
       } catch (e) { }
     })();
-  }, [id, team]);
+  }, [id]);
 
   // Sync task from signal when SSE pushes updates
   useEffect(() => {
@@ -769,15 +769,15 @@ export function TaskSidePanel() {
 
   // Load review data eagerly (needed by approval bar in header) — also cached
   useEffect(() => {
-    if (id === null || !team) return;
+    if (id === null) return;
     (async () => {
       try {
-        const review = await api.fetchCurrentReview(team, id);
+        const review = await api.fetchCurrentReviewGlobal(id);
         setCurrentReview(review);
-        _setCache(team, id, { currentReview: review });
+        _setCache(id, { currentReview: review });
       } catch (e) { }
       try {
-        const reviews = await api.fetchReviews(team, id);
+        const reviews = await api.fetchReviewsGlobal(id);
         if (reviews.length > 1) {
           const latest = reviews[reviews.length - 1];
           const old = [];
@@ -789,81 +789,84 @@ export function TaskSidePanel() {
             }
           }
           setOldComments(old);
-          _setCache(team, id, { oldComments: old });
+          _setCache(id, { oldComments: old });
         }
       } catch (e) { }
     })();
-  }, [id, team, task && task.review_attempt]);
+  }, [id, task && task.review_attempt]);
 
   // Lazy load diff when Changes tab first visited — stale-while-revalidate
   useEffect(() => {
-    if (!visitedTabs.changes || id === null || !team) return;
+    if (!visitedTabs.changes || id === null) return;
     // If we already have cached data we showed it immediately above.
     // Always re-fetch to ensure freshness (unless this is the initial
     // load from a cold cache, which the diffLoaded flag already guards).
-    if (diffLoaded && _getCache(team, id).diffRaw) {
+    if (diffLoaded && _getCache(id).diffRaw) {
       // Already showing stale data — revalidate in background
-      api.fetchTaskDiff(team, id).then(data => {
+      api.fetchTaskDiffGlobal(id).then(data => {
         const raw = flattenDiffDict(data.diff);
         setDiffRaw(raw);
-        _setCache(team, id, { diffRaw: raw });
+        _setCache(id, { diffRaw: raw });
       }).catch(() => {});
       return;
     }
     setDiffLoaded(true);
-    api.fetchTaskDiff(team, id).then(data => {
+    api.fetchTaskDiffGlobal(id).then(data => {
       const raw = flattenDiffDict(data.diff);
       setDiffRaw(raw);
-      _setCache(team, id, { diffRaw: raw });
+      _setCache(id, { diffRaw: raw });
     }).catch(() => {});
-  }, [visitedTabs.changes, diffLoaded, id, team]);
+  }, [visitedTabs.changes, diffLoaded, id]);
 
   // Lazy load merge preview when Merge Preview tab first visited — stale-while-revalidate
   useEffect(() => {
-    if (!visitedTabs.merge || id === null || !team) return;
-    if (mergePreviewLoaded && _getCache(team, id).mergePreviewRaw) {
-      api.fetchTaskMergePreview(team, id).then(data => {
+    if (!visitedTabs.merge || id === null) return;
+    if (mergePreviewLoaded && _getCache(id).mergePreviewRaw) {
+      api.fetchTaskMergePreviewGlobal(id).then(data => {
         const raw = flattenDiffDict(data.diff);
         setMergePreviewRaw(raw);
-        _setCache(team, id, { mergePreviewRaw: raw });
+        _setCache(id, { mergePreviewRaw: raw });
       }).catch(() => {});
       return;
     }
     setMergePreviewLoaded(true);
-    api.fetchTaskMergePreview(team, id).then(data => {
+    api.fetchTaskMergePreviewGlobal(id).then(data => {
       const raw = flattenDiffDict(data.diff);
       setMergePreviewRaw(raw);
-      _setCache(team, id, { mergePreviewRaw: raw });
+      _setCache(id, { mergePreviewRaw: raw });
     }).catch(() => {});
-  }, [visitedTabs.merge, mergePreviewLoaded, id, team]);
+  }, [visitedTabs.merge, mergePreviewLoaded, id]);
 
   // Lazy load activity when Activity tab first visited — stale-while-revalidate
   const loadActivity = useCallback(() => {
-    if (id === null || !team) return;
-    api.fetchTaskActivity(team, id, 50).then(raw => {
+    if (id === null) return;
+    api.fetchTaskActivityGlobal(id, 50).then(raw => {
       setActivityRaw(raw);
-      _setCache(team, id, { activityRaw: raw });
+      _setCache(id, { activityRaw: raw });
     }).catch(() => {
       setActivityRaw([]);
     });
-  }, [id, team]);
+  }, [id]);
 
   useEffect(() => {
-    if (!visitedTabs.activity || id === null || !team) return;
-    if (activityLoaded && _getCache(team, id).activityRaw) {
+    if (!visitedTabs.activity || id === null) return;
+    if (activityLoaded && _getCache(id).activityRaw) {
       // Already showing stale data — revalidate in background
       loadActivity();
       return;
     }
     setActivityLoaded(true);
     loadActivity();
-  }, [visitedTabs.activity, activityLoaded, id, team, loadActivity]);
+  }, [visitedTabs.activity, activityLoaded, id, loadActivity]);
 
   const close = useCallback(() => { closeAllPanels(); }, []);
 
   const handleAction = useCallback(() => {
-    if (team) api.fetchTasks(team).then(list => { tasks.value = list; });
-  }, [team]);
+    // Refresh task list using task's team (task object has team field)
+    if (task && task.team) {
+      api.fetchTasks(task.team).then(list => { tasks.value = list; });
+    }
+  }, [task]);
 
   if (id === null) return null;
 
