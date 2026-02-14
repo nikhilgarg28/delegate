@@ -299,17 +299,17 @@ def recent_processed(
     try:
         if from_sender:
             rows = conn.execute(
-                "SELECT * FROM messages WHERE type = 'chat' AND recipient = ? AND sender = ? "
+                "SELECT * FROM messages WHERE type = 'chat' AND team = ? AND recipient = ? AND sender = ? "
                 "AND processed_at IS NOT NULL "
                 "ORDER BY id DESC LIMIT ?",
-                (agent, from_sender, limit),
+                (team, agent, from_sender, limit),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM messages WHERE type = 'chat' AND recipient = ? "
+                "SELECT * FROM messages WHERE type = 'chat' AND team = ? AND recipient = ? "
                 "AND processed_at IS NOT NULL "
                 "ORDER BY id DESC LIMIT ?",
-                (agent, limit),
+                (team, agent, limit),
             ).fetchall()
     finally:
         conn.close()
@@ -339,19 +339,19 @@ def recent_conversation(
     try:
         if peer:
             rows = conn.execute(
-                "SELECT * FROM messages WHERE type = 'chat' AND "
+                "SELECT * FROM messages WHERE type = 'chat' AND team = ? AND "
                 "((recipient = ? AND sender = ? AND processed_at IS NOT NULL) "
                 " OR (sender = ? AND recipient = ?)) "
                 "ORDER BY id DESC LIMIT ?",
-                (agent, peer, agent, peer, limit),
+                (team, agent, peer, agent, peer, limit),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM messages WHERE type = 'chat' AND "
+                "SELECT * FROM messages WHERE type = 'chat' AND team = ? AND "
                 "((recipient = ? AND processed_at IS NOT NULL) "
                 "OR sender = ?) "
                 "ORDER BY id DESC LIMIT ?",
-                (agent, agent, limit),
+                (team, agent, agent, limit),
             ).fetchall()
     finally:
         conn.close()
@@ -366,8 +366,8 @@ def has_unread(hc_home: Path, team: str, agent: str) -> bool:
     conn = get_connection(hc_home, team)
     try:
         row = conn.execute(
-            "SELECT 1 FROM messages WHERE type = 'chat' AND recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL LIMIT 1",
-            (agent,),
+            "SELECT 1 FROM messages WHERE type = 'chat' AND team = ? AND recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL LIMIT 1",
+            (team, agent),
         ).fetchone()
     finally:
         conn.close()
@@ -383,7 +383,8 @@ def agents_with_unread(hc_home: Path, team: str) -> list[str]:
     try:
         rows = conn.execute(
             "SELECT DISTINCT recipient FROM messages "
-            "WHERE type = 'chat' AND delivered_at IS NOT NULL AND processed_at IS NULL",
+            "WHERE type = 'chat' AND team = ? AND delivered_at IS NOT NULL AND processed_at IS NULL",
+            (team,),
         ).fetchall()
     finally:
         conn.close()
@@ -395,8 +396,8 @@ def count_unread(hc_home: Path, team: str, agent: str) -> int:
     conn = get_connection(hc_home, team)
     try:
         row = conn.execute(
-            "SELECT COUNT(*) FROM messages WHERE type = 'chat' AND recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL",
-            (agent,),
+            "SELECT COUNT(*) FROM messages WHERE type = 'chat' AND team = ? AND recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL",
+            (team, agent),
         ).fetchone()
     finally:
         conn.close()
