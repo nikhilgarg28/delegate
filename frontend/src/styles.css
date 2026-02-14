@@ -733,7 +733,7 @@ body {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 4px 12px 4px 15px;
+  padding: 4px 32px 4px 15px;
   margin: 2px 0;
   border-left: 3px solid var(--text-faint);
   border-bottom: 1px solid var(--border-subtle);
@@ -742,7 +742,7 @@ body {
 .msg-event:hover { background: rgba(255, 255, 255, 0.02); }
 .msg-event-text { flex: 1; color: var(--text-muted); font-size: 12px; line-height: 1.4; }
 .msg-event-time { color: var(--text-faint); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
-.msg-event-sep { color: var(--text-faint); font-size: 12px; flex-shrink: 0; }
+.msg-event-sep { color: var(--text-faint); font-size: 12px; flex-shrink: 0; margin-left: auto; }
 
 /* Task separator and badge (left side, next to sender) */
 .msg-task-sep { color: var(--text-faint); font-size: 12px; flex-shrink: 0; }
