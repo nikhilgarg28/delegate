@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "preact/hooks";
 import {
   actionItems, bellPopoverOpen, awaySummary,
-  openPanel, navigateTab
+  openPanel, navigateTab, isInputFocused
 } from "../state.js";
 import { taskIdStr, fmtRelativeTime, fmtStatus } from "../utils.js";
 
@@ -73,6 +73,7 @@ export function NotificationPopover() {
         handleClose();
         return;
       }
+      if (isInputFocused()) return;
 
       if (e.key === "j" || e.key === "ArrowDown") {
         e.preventDefault();

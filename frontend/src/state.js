@@ -249,3 +249,13 @@ export function getLastGreeted() {
 export function updateLastGreeted() {
   localStorage.setItem(LS_GREETED_KEY, new Date().toISOString());
 }
+
+// ── Keyboard helpers ──
+
+/** True when the active element is a text input, textarea, select, or contentEditable. */
+export function isInputFocused() {
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.contentEditable === "true";
+}

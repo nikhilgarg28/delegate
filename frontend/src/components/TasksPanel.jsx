@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "preact/hooks";
-import { currentTeam, tasks, activeTab, openPanel, taskTeamFilter, teams, getWorkflowStages } from "../state.js";
+import { currentTeam, tasks, activeTab, openPanel, taskTeamFilter, teams, getWorkflowStages, isInputFocused } from "../state.js";
 import { cap, fmtStatus, taskIdStr } from "../utils.js";
 import { playTaskSound } from "../audio.js";
 import { FilterBar, applyFilters } from "./FilterBar.jsx";
@@ -236,7 +236,7 @@ export function TasksPanel() {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (activeTab.value !== "tasks") return;
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (isInputFocused()) return;
 
       const len = flatTaskList.length;
       if (len === 0) return;

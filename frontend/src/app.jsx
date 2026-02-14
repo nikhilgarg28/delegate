@@ -11,6 +11,7 @@ import {
   actionItemCount, awaySummary, getLastSeen, updateLastSeen,
   getLastGreeted, updateLastGreeted,
   fetchWorkflows,
+  isInputFocused,
 } from "./state.js";
 import * as api from "./api.js";
 import { Sidebar } from "./components/Sidebar.jsx";
@@ -79,12 +80,6 @@ function App() {
   // ── Keyboard shortcuts ──
   useEffect(() => {
     const handler = (e) => {
-      const isInputFocused = () => {
-        const el = document.activeElement;
-        if (!el) return false;
-        const tag = el.tagName.toLowerCase();
-        return tag === "input" || tag === "textarea" || tag === "select" || el.contentEditable === "true";
-      };
       // Help overlay blocks all shortcuts (user is reading help)
       const isHelpOpen = () => helpOverlayOpen.value;
 
@@ -137,7 +132,7 @@ function App() {
         if (micBtn) micBtn.click();
         return;
       }
-      if (e.key === "?" && !isInputFocused()) { helpOverlayOpen.value = !helpOverlayOpen.value; return; }
+      if (e.key === "?") { helpOverlayOpen.value = !helpOverlayOpen.value; return; }
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         teamSwitcherOpen.value = !teamSwitcherOpen.value;
