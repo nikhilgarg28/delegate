@@ -16,9 +16,15 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
 class CustomBuildHook(BuildHookInterface):
     def initialize(self, version: str, build_data: dict) -> None:
+        import os
+
         root = Path(self.root)
         frontend_dir = root / "frontend"
         build_js = frontend_dir / "build.js"
+
+        if os.environ.get("SKIP_FRONTEND_BUILD", ""):
+            self.app.display_info("SKIP_FRONTEND_BUILD set — skipping frontend build")
+            return
 
         if not build_js.is_file():
             # No frontend source (e.g. sdist without frontend/) — skip

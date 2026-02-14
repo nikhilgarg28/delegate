@@ -38,6 +38,8 @@ jobs:
           uv venv .venv
           uv pip install -e . --python .venv/bin/python
           uv pip install pytest pytest-asyncio httpx --python .venv/bin/python
+        env:
+          SKIP_FRONTEND_BUILD: "1"
 
       - name: Run pytest
         run: .venv/bin/python -m pytest tests/ -x -q
@@ -61,14 +63,6 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Create venv and install
-        run: |
-          uv venv .venv
-          uv pip install -e . --python .venv/bin/python
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -77,6 +71,14 @@ jobs:
 
       - name: Install Node dependencies
         run: npm ci
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Create venv and install
+        run: |
+          uv venv .venv
+          uv pip install -e . --python .venv/bin/python
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps ${{ matrix.browser }}
