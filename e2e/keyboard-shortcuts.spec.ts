@@ -29,10 +29,16 @@ const TEAM = "testteam";
 const waitForEffects = (page: import("@playwright/test").Page) =>
   page.evaluate(() => new Promise<void>(r => setTimeout(r, 100)));
 
+// Ensure no input element is focused so global shortcuts can fire.
+// The contentEditable chat input may be auto-focused on page load.
+const blurActiveElement = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => (document.activeElement as HTMLElement)?.blur?.());
+
 test.describe("Keyboard shortcuts", () => {
   test("c navigates to Chat tab", async ({ page }) => {
     await page.goto(`/${TEAM}/tasks`);
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Tasks");
+    await blurActiveElement(page);
 
     await page.keyboard.press("c");
     await expect(page).toHaveURL(new RegExp(`/${TEAM}/chat`));
@@ -42,6 +48,7 @@ test.describe("Keyboard shortcuts", () => {
   test("t navigates to Tasks tab", async ({ page }) => {
     await page.goto(`/${TEAM}/chat`);
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
+    await blurActiveElement(page);
 
     await page.keyboard.press("t");
     await expect(page).toHaveURL(new RegExp(`/${TEAM}/tasks`));
@@ -51,6 +58,7 @@ test.describe("Keyboard shortcuts", () => {
   test("a navigates to Agents tab", async ({ page }) => {
     await page.goto(`/${TEAM}/chat`);
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
+    await blurActiveElement(page);
 
     await page.keyboard.press("a");
     await expect(page).toHaveURL(new RegExp(`/${TEAM}/agents`));
@@ -61,6 +69,7 @@ test.describe("Keyboard shortcuts", () => {
     await page.goto(`/${TEAM}/chat`);
     // Wait for page to be ready (keyboard handler registered in useEffect)
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
+    await blurActiveElement(page);
 
     // Sidebar should start expanded
     const sidebar = page.locator(".sb");
@@ -79,6 +88,7 @@ test.describe("Keyboard shortcuts", () => {
     await page.goto(`/${TEAM}/chat`);
     // Wait for page to be ready (keyboard handler registered in useEffect)
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
+    await blurActiveElement(page);
 
     // Help overlay should not be visible initially
     const helpOverlay = page.locator(".help-overlay");
@@ -97,6 +107,7 @@ test.describe("Keyboard shortcuts", () => {
     await page.goto(`/${TEAM}/chat`);
     // Wait for page to be ready (keyboard handler registered in useEffect)
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
+    await blurActiveElement(page);
 
     // Open help overlay with '?'
     await page.keyboard.press("?");
@@ -112,9 +123,10 @@ test.describe("Keyboard shortcuts", () => {
     await page.goto(`/${TEAM}/chat`);
     // Wait for page to be ready (keyboard handler registered in useEffect)
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
+    await blurActiveElement(page);
 
-    // Chat input should not be focused initially
-    const chatInput = page.locator('textarea[placeholder="Send a message..."]');
+    // Chat input (contentEditable div) should not be focused initially
+    const chatInput = page.locator(".chat-input");
     await expect(chatInput).not.toBeFocused();
 
     // Press 'r' to focus
@@ -122,18 +134,19 @@ test.describe("Keyboard shortcuts", () => {
     await expect(chatInput).toBeFocused();
   });
 
-  test("/ focuses search input", async ({ page }) => {
+  test("/ expands and focuses search input", async ({ page }) => {
     await page.goto(`/${TEAM}/chat`);
     // Wait for page to be ready (keyboard handler registered in useEffect)
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
+    await blurActiveElement(page);
 
-    // Search input should not be focused initially
-    const searchInput = page.locator(".filter-search");
-    await expect(searchInput).not.toBeFocused();
-
-    // Press '/' to focus search
+    // Press '/' to expand search and focus input
     await page.keyboard.press("/");
     await waitForEffects(page);
+
+    // Search input should now be visible and focused
+    const searchInput = page.locator(".filter-search");
+    await expect(searchInput).toBeVisible({ timeout: 2_000 });
     await expect(searchInput).toBeFocused();
   });
 
@@ -141,9 +154,10 @@ test.describe("Keyboard shortcuts", () => {
     await page.goto(`/${TEAM}/chat`);
     // Wait for page to be ready (keyboard handler registered in useEffect)
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
+    await blurActiveElement(page);
 
-    // Focus the chat input with 'r'
-    const chatInput = page.locator('textarea[placeholder="Send a message..."]');
+    // Focus the chat input (contentEditable div) with 'r'
+    const chatInput = page.locator(".chat-input");
     await page.keyboard.press("r");
     await expect(chatInput).toBeFocused();
 
@@ -177,11 +191,13 @@ test.describe("Keyboard shortcuts", () => {
     await expect(page.locator(".task-row").first()).toBeVisible({
       timeout: 5_000,
     });
+    await blurActiveElement(page);
 
     // Open a task panel
     await page.locator(".task-row").first().click();
     const panel = page.locator(".task-panel");
     await expect(panel).toBeVisible({ timeout: 3_000 });
+    await blurActiveElement(page);
 
     // Press 'c' to navigate to Chat — should work even with panel open
     await page.keyboard.press("c");
@@ -195,11 +211,13 @@ test.describe("Keyboard shortcuts", () => {
     await expect(page.locator(".task-row").first()).toBeVisible({
       timeout: 5_000,
     });
+    await blurActiveElement(page);
 
     // Open a task panel
     await page.locator(".task-row").first().click();
     const panel = page.locator(".task-panel");
     await expect(panel).toBeVisible({ timeout: 3_000 });
+    await blurActiveElement(page);
 
     const sidebar = page.locator(".sb");
     await expect(sidebar).not.toHaveClass(/sb-collapsed/);
@@ -220,6 +238,7 @@ test.describe("Keyboard shortcuts", () => {
     await page.goto(`/${TEAM}/chat`);
     // Wait for page to be ready (keyboard handler registered in useEffect)
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
+    await blurActiveElement(page);
 
     // Open help overlay
     await page.keyboard.press("?");
@@ -275,13 +294,14 @@ test.describe("Keyboard shortcuts", () => {
     await expect(page).toHaveURL(new RegExp(`/${TEAM}/tasks`));
   });
 
-  test("shortcuts respect input focus — don't trigger when typing", async ({
+  test("shortcuts respect input focus — don't trigger when typing in contentEditable", async ({
     page,
   }) => {
     await page.goto(`/${TEAM}/chat`);
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
 
-    // Focus chat input
-    const chatInput = page.locator('textarea[placeholder="Send a message..."]');
+    // Focus the contentEditable chat input
+    const chatInput = page.locator(".chat-input");
     await chatInput.click();
     await expect(chatInput).toBeFocused();
 
@@ -292,8 +312,40 @@ test.describe("Keyboard shortcuts", () => {
     await expect(page).toHaveURL(new RegExp(`/${TEAM}/chat`));
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
 
-    // Input should contain 't'
-    await expect(chatInput).toHaveValue("t");
+    // Input should contain 't' (contentEditable uses textContent)
+    await expect(chatInput).toHaveText("t");
+  });
+
+  test("shortcuts don't fire when typing various keys in chat input", async ({
+    page,
+  }) => {
+    await page.goto(`/${TEAM}/chat`);
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
+
+    const chatInput = page.locator(".chat-input");
+    await chatInput.click();
+    await expect(chatInput).toBeFocused();
+
+    // Type 's' — should NOT toggle sidebar
+    const sidebar = page.locator(".sb");
+    const hadCollapsed = await sidebar.evaluate(el => el.classList.contains("sb-collapsed"));
+    await page.keyboard.type("s");
+    // Sidebar state should not change
+    if (hadCollapsed) {
+      await expect(sidebar).toHaveClass(/sb-collapsed/);
+    } else {
+      await expect(sidebar).not.toHaveClass(/sb-collapsed/);
+    }
+
+    // Type '/' — should NOT open search, should type into input
+    await page.keyboard.type("/");
+    await expect(chatInput).toBeFocused(); // still focused on chat input
+    await expect(chatInput).toHaveText("s/");
+
+    // Type 'c' — should NOT navigate to chat (already there, but verify URL is stable)
+    await page.keyboard.type("c");
+    await expect(page).toHaveURL(new RegExp(`/${TEAM}/chat`));
+    await expect(chatInput).toHaveText("s/c");
   });
 
   test("Enter opens selected task in tasks panel", async ({ page }) => {

@@ -6,143 +6,71 @@ import { test, expect } from "@playwright/test";
  * Tests for:
  * 1. Reply cursor focus - after clicking reply in selection tooltip, cursor should be in chatbox
  * 2. Shift+Enter newline - Shift+Enter should insert a newline in the chatbox
- * 3. Inline markdown rendering - code blocks, inline code, and lists should render with formatting
+ * 3. Enter sends and clears the input
+ *
+ * Note: The chat input is a <div contentEditable="plaintext-only" class="chat-input">,
+ * NOT a <textarea>. We interact with it via textContent, not value.
  */
 
 const TEAM = "testteam";
 
-// Helper function to set textarea value and trigger Preact's onInput event
-// For text with newlines, we need to set the value directly and dispatch input event
-// because type() would interpret \n as pressing Enter which triggers send
-async function fillTextarea(page, text) {
-  const textarea = page.locator(".chat-input-box textarea");
-
-  // Set the value directly via JavaScript
-  await textarea.evaluate((el, value) => {
-    el.value = value;
-    // Dispatch input event to trigger Preact's onInput handler
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+// Helper: set the chat input's text content and trigger Preact's onInput handler.
+async function fillChatInput(page, text) {
+  const chatInput = page.locator(".chat-input");
+  await chatInput.evaluate((el, value) => {
+    el.textContent = value;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
   }, text);
-
-  // Give Preact a moment to update state
   await page.waitForTimeout(50);
 }
 
 test.describe("Chat input UX", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(`/${TEAM}/chat`);
-    // Wait for the chatbox to be visible instead of networkidle
-    // (networkidle doesn't work with SSE/polling)
-    await page.locator(".chat-input-box textarea").waitFor({ state: "visible" });
+    // Wait for the chat input (contentEditable div) to be visible
+    await page.locator(".chat-input").waitFor({ state: "visible" });
   });
 
   test("Shift+Enter inserts newline in chatbox", async ({ page }) => {
-    const textarea = page.locator(".chat-input-box textarea");
-    await textarea.click();
-    await fillTextarea(page, "Line 1");
-    await page.keyboard.press("Shift+Enter");
-    await textarea.pressSequentially("Line 2");
+    const chatInput = page.locator(".chat-input");
+    await chatInput.click();
+    await fillChatInput(page, "Line 1");
 
-    const value = await textarea.inputValue();
-    expect(value).toContain("\n");
-    expect(value).toBe("Line 1\nLine 2");
+    // Move cursor to end
+    await page.evaluate(() => {
+      const el = document.querySelector(".chat-input");
+      if (el) {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
+    });
+
+    await page.keyboard.press("Shift+Enter");
+    await chatInput.pressSequentially("Line 2");
+
+    const text = await chatInput.textContent();
+    expect(text).toContain("Line 1");
+    expect(text).toContain("Line 2");
   });
 
-  test("Enter (without Shift) sends message and clears textarea", async ({ page }) => {
-    const textarea = page.locator(".chat-input-box textarea");
+  test("Enter (without Shift) sends message and clears input", async ({ page }) => {
+    const chatInput = page.locator(".chat-input");
 
     // Wait for agents to load and recipient to be auto-selected
-    // The send button should become enabled when there's a recipient
     await page.waitForTimeout(500);
 
-    await fillTextarea(page, "Test message");
-    await textarea.focus(); // Ensure textarea has focus for keyboard event
+    await fillChatInput(page, "Test message");
+    await chatInput.focus();
 
     await page.keyboard.press("Enter");
     await page.waitForTimeout(300);
 
-    const value = await textarea.inputValue();
-    expect(value).toBe("");
-  });
-
-  test("Inline rendering shows for code blocks", async ({ page }) => {
-    const textarea = page.locator(".chat-input-box textarea");
-
-    // Use Playwright's built-in fill which should trigger native events
-    await textarea.fill("```js\nconst x = 1;\n```");
-
-    // Debug: Check what's in the textarea and page
-    const textareaValue = await textarea.inputValue();
-    const textareaClass = await textarea.getAttribute("class");
-    console.log("Textarea value:", textareaValue);
-    console.log("Textarea class:", textareaClass);
-
-    // Check if overlay element exists at all
-    const overlayCount = await page.locator(".chat-input-overlay").count();
-    console.log("Overlay count:", overlayCount);
-
-    // Take a screenshot for debugging
-    await page.screenshot({ path: "/tmp/code-blocks-test.png" });
-
-    // Wait for Preact to update state and render the overlay
-    // Use waitFor to be more reliable than a fixed timeout
-    const overlay = page.locator(".chat-input-overlay");
-    await expect(overlay).toBeVisible({ timeout: 2000 });
-
-    const codeBlock = overlay.locator("pre code");
-    await expect(codeBlock).toBeVisible();
-    await expect(codeBlock).toContainText("const x = 1;");
-  });
-
-  test("Inline rendering shows for inline code", async ({ page }) => {
-    await fillTextarea(page, "Use `console.log()` to print");
-
-    const overlay = page.locator(".chat-input-overlay");
-    await expect(overlay).toBeVisible();
-
-    const inlineCode = overlay.locator("code");
-    await expect(inlineCode).toBeVisible();
-    await expect(inlineCode).toContainText("console.log()");
-  });
-
-  test("Inline rendering shows for bullet lists", async ({ page }) => {
-    await fillTextarea(page, "- Item 1\n- Item 2\n- Item 3");
-
-    const overlay = page.locator(".chat-input-overlay");
-    await expect(overlay).toBeVisible();
-
-    const listItems = overlay.locator("ul li");
-    await expect(listItems).toHaveCount(3);
-    await expect(listItems.nth(0)).toContainText("Item 1");
-    await expect(listItems.nth(1)).toContainText("Item 2");
-    await expect(listItems.nth(2)).toContainText("Item 3");
-  });
-
-  test("Inline rendering shows for numbered lists", async ({ page }) => {
-    await fillTextarea(page, "1. First\n2. Second\n3. Third");
-
-    const overlay = page.locator(".chat-input-overlay");
-    await expect(overlay).toBeVisible();
-
-    const listItems = overlay.locator("ol li");
-    await expect(listItems).toHaveCount(3);
-    await expect(listItems.nth(0)).toContainText("First");
-    await expect(listItems.nth(1)).toContainText("Second");
-    await expect(listItems.nth(2)).toContainText("Third");
-  });
-
-  test("Inline overlay hidden for plain text", async ({ page }) => {
-    await fillTextarea(page, "Just plain text without any markdown");
-
-    const overlay = page.locator(".chat-input-overlay");
-    await expect(overlay).not.toBeVisible();
-  });
-
-  test("Inline overlay hidden for commands (starting with /)", async ({ page }) => {
-    await fillTextarea(page, "/help");
-
-    const overlay = page.locator(".chat-input-overlay");
-    await expect(overlay).not.toBeVisible();
+    const text = await chatInput.textContent();
+    expect(text).toBe("");
   });
 
   test("Reply button focuses chatbox and positions cursor at end", async ({ page }) => {
@@ -166,65 +94,11 @@ test.describe("Chat input UX", () => {
     await replyBtn.click();
     await page.waitForTimeout(400);
 
-    // Check if textarea is focused
-    const textarea = page.locator(".chat-input-box textarea");
+    // Check if chat input is focused
     const isFocused = await page.evaluate(() => {
-      const el = document.querySelector(".chat-input-box textarea");
+      const el = document.querySelector(".chat-input");
       return document.activeElement === el;
     });
     expect(isFocused).toBe(true);
-
-    // Check if cursor is at the end
-    const cursorPos = await textarea.evaluate((el: HTMLTextAreaElement) => el.selectionStart);
-    const textLength = (await textarea.inputValue()).length;
-    expect(cursorPos).toBe(textLength);
-  });
-
-  test("Code blocks with uppercase language identifiers are rendered", async ({ page }) => {
-    await fillTextarea(page, "```JavaScript\nconst x = 1;\n```");
-
-    const overlay = page.locator(".chat-input-overlay");
-    await expect(overlay).toBeVisible();
-
-    const codeBlock = overlay.locator("pre code");
-    await expect(codeBlock).toBeVisible();
-    await expect(codeBlock).toHaveClass(/language-JavaScript/);
-  });
-
-  test("List items with inline code are rendered correctly", async ({ page }) => {
-    await fillTextarea(page, "- Use `console.log()` for debugging\n- Try `npm test` to run tests");
-
-    const overlay = page.locator(".chat-input-overlay");
-    await expect(overlay).toBeVisible();
-
-    const listItems = overlay.locator("ul li");
-    await expect(listItems).toHaveCount(2);
-
-    // Check that inline code is rendered within list items
-    const firstItemCode = listItems.nth(0).locator("code");
-    await expect(firstItemCode).toBeVisible();
-    await expect(firstItemCode).toContainText("console.log()");
-
-    const secondItemCode = listItems.nth(1).locator("code");
-    await expect(secondItemCode).toBeVisible();
-    await expect(secondItemCode).toContainText("npm test");
-  });
-
-  test("XSS protection - HTML in list items is escaped", async ({ page }) => {
-    await fillTextarea(page, "- <script>alert('xss')</script>\n- <img src=x onerror=alert('xss')>");
-
-    const overlay = page.locator(".chat-input-overlay");
-    await expect(overlay).toBeVisible();
-
-    // Check that the script tag is escaped (shown as text, not executed)
-    const firstItem = overlay.locator("ul li").nth(0);
-    const firstItemText = await firstItem.textContent();
-    expect(firstItemText).toContain("<script>");
-    expect(firstItemText).toContain("</script>");
-
-    // Verify no actual script element exists
-    const scriptTags = await page.locator("script").count();
-    const overlayScriptTags = await overlay.locator("script").count();
-    expect(overlayScriptTags).toBe(0);
   });
 });

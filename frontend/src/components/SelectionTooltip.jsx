@@ -94,35 +94,36 @@ export function SelectionTooltip({ containerRef, chatInputRef }) {
     const lines = selectedText.split("\n");
     const blockquote = lines.map(line => `> ${line}`).join("\n");
 
-    const textarea = chatInputRef.current;
-    const currentValue = textarea.value.trim();
+    const el = chatInputRef.current;
+    const currentValue = (el.textContent || "").trim();
 
-    if (currentValue) {
-      // Append to existing text
-      textarea.value = currentValue + "\n\n" + blockquote + "\n\n";
-    } else {
-      // Set as new text
-      textarea.value = blockquote + "\n\n";
-    }
+    const newValue = currentValue
+      ? currentValue + "\n\n" + blockquote + "\n\n"
+      : blockquote + "\n\n";
 
-    // Auto-resize the textarea
-    textarea.style.height = "auto";
-    textarea.style.height = textarea.scrollHeight + "px";
+    el.textContent = newValue;
+
+    // Auto-resize
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
 
     // Clear selection and hide tooltip
     window.getSelection().removeAllRanges();
     hideTooltip();
 
-    // Trigger input event to update React state in ChatPanel
-    const inputEvent = new Event('input', { bubbles: true });
-    textarea.dispatchEvent(inputEvent);
+    // Trigger input event to update Preact state in ChatPanel
+    el.dispatchEvent(new Event("input", { bubbles: true }));
 
     // Focus and place cursor at the end AFTER state update completes
-    // Using setTimeout with a small delay ensures this happens after all Preact rendering
     setTimeout(() => {
-      textarea.focus();
-      const length = textarea.value.length;
-      textarea.setSelectionRange(length, length);
+      el.focus();
+      // Move cursor to end of contentEditable
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
     }, 50);
   }, [selectedText, chatInputRef, hideTooltip]);
 

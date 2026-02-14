@@ -112,7 +112,7 @@ def seed(hc_home: Path) -> None:
         description="Set up basic infrastructure for the project.",
         priority="high",
     )
-    send(hc_home, TEAM2, BOSS, "charlie", "Please coordinate with dana on setup.")
+    send(hc_home, TEAM2, HUMAN, "charlie", "Please coordinate with dana on setup.")
     log_event(hc_home, TEAM2, "Team created")
 
     print(f"Seeded {hc_home} with teams '{TEAM}' and '{TEAM2}', 4 tasks total, 6 messages, 3 events")
