@@ -4,6 +4,7 @@ import {
   chatFilterDirection, openPanel,
   knownAgentNames, isMuted, humanName, expandedMessages,
   commandMode, commandCwd, teams, navigate,
+  loadTeamCwd, saveTeamCwd, loadTeamHistory, addToHistory,
 } from "../state.js";
 import * as api from "../api.js";
 import {
@@ -246,6 +247,11 @@ export function ChatPanel() {
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
 
+  // Command history state
+  const [historyIndex, setHistoryIndex] = useState(-1); // -1 = not navigating history
+  const historyRef = useRef([]); // Current team's command history
+  const draftInputRef = useRef(''); // Store current draft when navigating history
+
   const direction = chatFilterDirection.value;
   const logRef = useRef();
   const inputRef = useRef();
@@ -423,6 +429,15 @@ export function ChatPanel() {
       commandMode.value = draft.startsWith('/');
       if (!draft.startsWith('/')) commandCwd.value = '';
     }
+
+    // Load CWD and command history for the current team
+    if (team) {
+      commandCwd.value = loadTeamCwd(team);
+      historyRef.current = loadTeamHistory(team);
+      setHistoryIndex(-1); // Reset history navigation
+      draftInputRef.current = ''; // Clear draft
+    }
+
     lastTeamRef.current = team;
   }, [team]);
 
@@ -706,6 +721,12 @@ export function ChatPanel() {
       // Persist to DB
       const saved = await api.saveCommand(team, cmd.raw, result);
 
+      // Add to command history (only shell commands, skip if it was an error)
+      if (cmd.name === 'shell' && cmd.args && (!result.error || result.exit_code === 0)) {
+        addToHistory(team, cmd.args);
+        historyRef.current = loadTeamHistory(team); // Reload history
+      }
+
       // Update placeholder with real result
       setMsgs(prev => prev.map(m =>
         m.id === placeholderId ? { ...m, id: saved.id, result } : m
@@ -734,6 +755,8 @@ export function ChatPanel() {
       setInputVal("");
       setSendBtnActive(false);
       commandMode.value = false;
+      setHistoryIndex(-1); // Reset history navigation
+      draftInputRef.current = '';
       await executeCommand(cmd);
       return;
     }
@@ -799,6 +822,8 @@ export function ChatPanel() {
       }
       setInputVal("");
       setSendBtnActive(false);
+      setHistoryIndex(-1); // Reset history navigation
+      draftInputRef.current = '';
       return;
     }
 
@@ -822,11 +847,82 @@ export function ChatPanel() {
       }
     }
 
+    // Command history navigation (ArrowUp/ArrowDown in shell command mode)
+    // Only when autocomplete is NOT visible and we're in shell command mode
+    if (!ac.visible && commandMode.value) {
+      const currentVal = inputRef.current?.textContent || "";
+      const cmd = parseCommand(currentVal);
+
+      if (cmd && cmd.name === 'shell') {
+        const history = historyRef.current;
+
+        if (e.key === "ArrowUp" && history.length > 0) {
+          e.preventDefault();
+
+          // Save current draft if we're starting to navigate history
+          if (historyIndex === -1) {
+            draftInputRef.current = cmd.args || '';
+          }
+
+          // Move back in history
+          const newIndex = historyIndex === -1 ? history.length - 1 : Math.max(0, historyIndex - 1);
+          setHistoryIndex(newIndex);
+
+          // Populate input with historical command
+          const historicalCmd = history[newIndex];
+          const newVal = `/shell ${historicalCmd}`;
+          if (inputRef.current) {
+            inputRef.current.textContent = newVal;
+            inputRef.current.style.height = "auto";
+            inputRef.current.style.height = inputRef.current.scrollHeight + "px";
+            moveCursorToEnd(inputRef.current);
+          }
+          setInputVal(newVal);
+          setSendBtnActive(!!historicalCmd.trim());
+          return;
+        }
+
+        if (e.key === "ArrowDown" && historyIndex !== -1) {
+          e.preventDefault();
+
+          if (historyIndex === history.length - 1) {
+            // At the newest entry, restore the draft
+            setHistoryIndex(-1);
+            const newVal = draftInputRef.current ? `/shell ${draftInputRef.current}` : '/shell ';
+            if (inputRef.current) {
+              inputRef.current.textContent = newVal;
+              inputRef.current.style.height = "auto";
+              inputRef.current.style.height = inputRef.current.scrollHeight + "px";
+              moveCursorToEnd(inputRef.current);
+            }
+            setInputVal(newVal);
+            setSendBtnActive(!!draftInputRef.current.trim());
+            draftInputRef.current = '';
+          } else {
+            // Move forward in history
+            const newIndex = historyIndex + 1;
+            setHistoryIndex(newIndex);
+            const historicalCmd = history[newIndex];
+            const newVal = `/shell ${historicalCmd}`;
+            if (inputRef.current) {
+              inputRef.current.textContent = newVal;
+              inputRef.current.style.height = "auto";
+              inputRef.current.style.height = inputRef.current.scrollHeight + "px";
+              moveCursorToEnd(inputRef.current);
+            }
+            setInputVal(newVal);
+            setSendBtnActive(!!historicalCmd.trim());
+          }
+          return;
+        }
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-  }, [handleSend]);
+  }, [handleSend, historyIndex]);
 
   const handlePaste = useCallback((e) => {
     // Strip HTML formatting on paste
@@ -1084,7 +1180,10 @@ export function ChatPanel() {
               const cmd = parseCommand(val);
               if (cmd && cmd.name === 'shell' && cmd.args.includes('-d')) {
                 const match = cmd.args.match(/-d\s+(\S+)/);
-                if (match) commandCwd.value = match[1];
+                if (match) {
+                  commandCwd.value = match[1];
+                  saveTeamCwd(team, match[1]);
+                }
               }
             }}
           />
@@ -1097,7 +1196,10 @@ export function ChatPanel() {
               class="chat-cwd-input"
               value={commandCwd.value || '~'}
               placeholder="~"
-              onInput={(e) => { commandCwd.value = e.target.value; }}
+              onInput={(e) => {
+                commandCwd.value = e.target.value;
+                saveTeamCwd(team, e.target.value);
+              }}
             />
           </div>
         )}

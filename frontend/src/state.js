@@ -174,6 +174,81 @@ export const expandedMessages = signal(new Set());
 export const commandMode = signal(false);
 export const commandCwd = signal('');  // current working directory for shell commands
 
+// ── Per-team CWD persistence ──
+const CWD_STORAGE_KEY = "delegate_cwds";
+
+/** Load CWD for a team from localStorage. */
+export function loadTeamCwd(team) {
+  if (!team) return '';
+  try {
+    const stored = localStorage.getItem(CWD_STORAGE_KEY);
+    if (!stored) return '';
+    const cwds = JSON.parse(stored);
+    return cwds[team] || '';
+  } catch {
+    return '';
+  }
+}
+
+/** Save CWD for a team to localStorage. */
+export function saveTeamCwd(team, cwd) {
+  if (!team) return;
+  try {
+    const stored = localStorage.getItem(CWD_STORAGE_KEY);
+    const cwds = stored ? JSON.parse(stored) : {};
+    cwds[team] = cwd;
+    localStorage.setItem(CWD_STORAGE_KEY, JSON.stringify(cwds));
+  } catch {
+    // Silently fail
+  }
+}
+
+// ── Per-team command history ──
+const HISTORY_STORAGE_PREFIX = "delegate_cmd_history_";
+const MAX_HISTORY_SIZE = 50;
+
+/** Load command history for a team from localStorage. */
+export function loadTeamHistory(team) {
+  if (!team) return [];
+  try {
+    const stored = localStorage.getItem(HISTORY_STORAGE_PREFIX + team);
+    if (!stored) return [];
+    return JSON.parse(stored);
+  } catch {
+    return [];
+  }
+}
+
+/** Save command history for a team to localStorage. */
+export function saveTeamHistory(team, history) {
+  if (!team) return;
+  try {
+    localStorage.setItem(HISTORY_STORAGE_PREFIX + team, JSON.stringify(history));
+  } catch {
+    // Silently fail
+  }
+}
+
+/** Add a command to history (deduplicates consecutive commands). */
+export function addToHistory(team, command) {
+  if (!team || !command) return;
+  const history = loadTeamHistory(team);
+
+  // Don't add if it's the same as the last command
+  if (history.length > 0 && history[history.length - 1] === command) {
+    return;
+  }
+
+  history.push(command);
+
+  // Keep only last MAX_HISTORY_SIZE commands
+  if (history.length > MAX_HISTORY_SIZE) {
+    history.shift();
+  }
+
+  saveTeamHistory(team, history);
+}
+
 // ── Agent activity (live tool usage from SSE) ──
 // { agentName: { tool, detail, timestamp } } — last activity per agent
 export const agentLastActivity = signal({});
