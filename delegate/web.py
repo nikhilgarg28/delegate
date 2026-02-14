@@ -174,6 +174,62 @@ def _list_team_agents(hc_home: Path, team: str) -> list[dict]:
 # Startup greeting — dynamic, time-aware message from manager
 # ---------------------------------------------------------------------------
 
+def _build_first_run_greeting(
+    hc_home: Path,
+    team: str,
+    manager: str,
+    human: str,
+    agent_count: int,
+    has_repos: bool,
+    has_api_key: bool,
+) -> str:
+    """Build the welcome message shown on first ever session.
+
+    Introduces Delegate and guides the user to their first action.
+    """
+    lines: list[str] = []
+
+    lines.append(
+        f"Hi {human}! I'm your delegate — I manage a team of "
+        f"{agent_count} engineer{'s' if agent_count != 1 else ''} "
+        f"ready to build software for you."
+    )
+
+    lines.append("")  # blank line
+
+    if has_repos:
+        lines.append(
+            "Tell me what you'd like built and I'll plan the work, "
+            "assign it to the team, manage code reviews, and merge it in."
+        )
+    else:
+        lines.append(
+            "To get started, I need a repo to work in. "
+            "Just tell me the path — for example: "
+            '"Please add the repo at /path/to/my-project"'
+        )
+
+    lines.append("")
+
+    # Tips
+    tips = [
+        "Send me a task in plain English and I'll handle the rest",
+        "Use `/shell <cmd>` to run any shell command right here",
+        "Press `?` to see all keyboard shortcuts",
+    ]
+    for tip in tips:
+        lines.append(f"• {tip}")
+
+    if not has_api_key:
+        lines.append("")
+        lines.append(
+            "⚠️ No API key detected — set `ANTHROPIC_API_KEY` or use "
+            "`--env-file` to enable the AI agents."
+        )
+
+    return "\n".join(lines)
+
+
 def _build_greeting(
     hc_home: Path,
     team: str,
@@ -252,7 +308,7 @@ def _build_greeting(
         status_parts.append(f"{len(failed)} with merge issues")
 
     # Assemble
-    lines = [f"{time_greeting} — {manager.capitalize()} here, your team manager."]
+    lines = [f"{time_greeting} — I'm your delegate, managing this team."]
 
     if away_parts:
         lines.append("While you were away: " + ", ".join(away_parts) + ".")
@@ -1088,12 +1144,16 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         """Send a welcome greeting from the team's manager to the human.
         Called by the frontend after meaningful absence (30+ min).
 
+        On the very first session (zero messages in the team DB), sends a
+        special first-run welcome that introduces Delegate.
+
         Args:
             last_seen: ISO timestamp of when user was last active (optional)
         """
         from datetime import datetime, timezone, timedelta
         from delegate.bootstrap import get_member_by_role
         from delegate.mailbox import read_inbox
+        from delegate.repo import list_repos
 
         human_name = get_default_human(hc_home)
         manager_name = get_member_by_role(hc_home, team, "manager")
@@ -1104,9 +1164,43 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 detail=f"No manager found for team '{team}'",
             )
 
+        now_utc = datetime.now(timezone.utc)
+
+        # ── First-run detection ──
+        # If there are zero messages for this team, this is the very first
+        # session.  Send the special onboarding welcome instead.
+        try:
+            all_messages = _get_messages(hc_home, team, limit=1)
+            is_first_run = len(all_messages) == 0
+        except Exception:
+            is_first_run = False
+
+        if is_first_run:
+            # Count AI agents (excluding manager)
+            ai_agents = [
+                a for a in _list_team_agents(hc_home, team)
+                if a.get("role") != "manager"
+            ]
+            has_repos = bool(list_repos(hc_home, team))
+            has_api_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+            greeting = _build_first_run_greeting(
+                hc_home, team, manager_name, human_name,
+                agent_count=len(ai_agents),
+                has_repos=has_repos,
+                has_api_key=has_api_key,
+            )
+            _send(hc_home, team, manager_name, human_name, greeting)
+            logger.info(
+                "First-run welcome sent by %s to %s | team=%s | agents=%d | repos=%s | key=%s",
+                manager_name, human_name, team,
+                len(ai_agents), has_repos, has_api_key,
+            )
+            return {"status": "sent"}
+
+        # ── Regular greeting ──
         # Check if manager sent a message to human in the last 15 minutes
         # If so, skip the greeting to avoid noise
-        now_utc = datetime.now(timezone.utc)
         try:
             recent_messages = read_inbox(hc_home, team, human_name, unread_only=False)
             cutoff = now_utc - timedelta(minutes=15)

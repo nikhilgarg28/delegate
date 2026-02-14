@@ -65,6 +65,104 @@ def doctor() -> None:
 
 
 # ──────────────────────────────────────────────────────────────
+# First-run auto-setup
+# ──────────────────────────────────────────────────────────────
+
+DEFAULT_TEAM = "default"
+DEFAULT_AGENT_COUNT = 5
+
+
+def _detect_git_repo() -> Path | None:
+    """If the CWD is inside a git repository, return the repo root."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            root = Path(result.stdout.strip())
+            if root.is_dir() and (root / ".git").exists():
+                return root
+    except Exception:
+        pass
+    return None
+
+
+def _auto_setup(hc_home: Path, success) -> None:
+    """One-time first-run setup: create team, agents, and optionally register CWD repo.
+
+    Only runs when no teams exist yet.  Idempotent.
+
+    Human member creation is handled by ``bootstrap()`` which auto-detects
+    the name from ``git config user.name`` (first name, lowercased).
+    """
+    from delegate.bootstrap import bootstrap, _detect_human_name
+    from delegate.config import get_default_human
+    from delegate.names import pick_names
+    from delegate.paths import teams_dir
+
+    # If teams already exist, nothing to do
+    tdir = teams_dir(hc_home)
+    if tdir.is_dir() and any(tdir.iterdir()):
+        return
+
+    # Resolve human name (bootstrap will create the member file)
+    human_name = get_default_human(hc_home)
+    if not human_name or human_name == "human":
+        human_name = _detect_human_name()
+
+    # Pick random agent names, excluding human + manager
+    exclude = {human_name, "delegate"}
+    agent_names = pick_names(DEFAULT_AGENT_COUNT, exclude)
+    agents = [(n, "engineer") for n in agent_names]
+
+    # Try to name the team after the CWD git repo
+    team_name = DEFAULT_TEAM
+    detected_repo = _detect_git_repo()
+    if detected_repo:
+        import re
+        candidate = detected_repo.name.lower().replace(" ", "-")
+        candidate = re.sub(r"[^\w\-.]", "_", candidate)
+        if candidate:
+            team_name = candidate
+
+    # Create the team (also creates human member via bootstrap)
+    bootstrap(hc_home, team_name=team_name, manager="delegate", agents=agents)
+    success(f"Created team '{team_name}' with delegate + {DEFAULT_AGENT_COUNT} agents ({human_name})")
+
+    # Register default workflow
+    try:
+        from delegate.workflow import register_workflow, get_latest_version
+
+        builtin = Path(__file__).parent / "workflows" / "default.py"
+        if builtin.is_file() and get_latest_version(hc_home, team_name, "default") is None:
+            register_workflow(hc_home, team_name, builtin)
+            success("Registered default workflow")
+    except Exception as exc:
+        from delegate.fmt import warn
+        warn(f"Could not register default workflow: {exc}")
+
+    # Auto-detect and register CWD repo
+    if detected_repo:
+        try:
+            from delegate.repo import register_repo
+
+            repo_name = register_repo(hc_home, team_name, str(detected_repo))
+            success(f"Detected and registered repo: {repo_name}")
+        except Exception as exc:
+            from delegate.fmt import warn
+            warn(f"Could not register detected repo: {exc}")
+    else:
+        click.echo()
+        click.echo("  No git repo detected in current directory.")
+        click.echo("  Tell me which repo to work on in chat, or run:")
+        click.echo("    delegate repo add <team> /path/to/repo")
+        click.echo()
+
+
+# ──────────────────────────────────────────────────────────────
 # delegate start / stop / status
 # ──────────────────────────────────────────────────────────────
 
@@ -128,6 +226,9 @@ def start(
     click.echo()
     auth_display = get_auth_display()
     success(f"Auth: {auth_display}")
+
+    # ── Auto-setup: bootstrap on first run ──────────────────────
+    _auto_setup(hc_home, success)
 
     url = f"http://localhost:{port}"
 
@@ -279,7 +380,7 @@ def team_create(
         human_name = get_default_human(hc_home)
         if human_name:
             exclude.add(human_name)
-        exclude.add(manager)
+        exclude.add("delegate")
 
         # Collect all existing agent names across all teams
         tdir = teams_dir(hc_home)
@@ -337,7 +438,7 @@ def team_create(
             warn(f"Could not register repo '{repo_path}': {exc}")
 
     # Show team members
-    labels = [f"{manager} (manager)"]
+    labels = ["delegate (manager)"]
     for aname, arole in parsed_agents:
         labels.append(f"{aname} ({arole})" if arole != "engineer" else aname)
     success(f"Members: {', '.join(labels)}")
