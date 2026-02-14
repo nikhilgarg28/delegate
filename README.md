@@ -87,7 +87,7 @@ def my_workflow():
     return [Todo, InProgress, InReview, Deploy, Done]
 ```
 
-**Mix models by role.** Use Opus for the manager and senior engineers, Sonnet for juniors. Expensive models make decisions; cheap models do the volume work. Configure per agent.
+**Mix models by role.** By default, the manager runs on Claude Opus and engineers run on Claude Sonnet — strong reasoning where it matters, cost-efficient execution everywhere else. Configurable per agent.
 
 **Team charter in markdown.** Edit a markdown file to set review standards, communication norms, and team values. Ship two presets — "quality first" (stricter reviews, more tests) and "ship fast" (lighter process, faster iteration) — or write your own.
 
@@ -195,7 +195,7 @@ npx playwright test
 
 ## About
 
-Delegate is built by a solo developer as a side project. No VC funding, no growth targets — just a tool I wanted for myself and decided to open-source. MIT licensed, free forever.
+Delegate is built by a solo developer as a side project — and built *with* Delegate. No VC funding, no growth targets — just a tool I wanted for myself and decided to open-source. MIT licensed, free forever.
 
 If you find it useful, star the repo or say hi in an issue. Bug reports and contributions are welcome.
 
