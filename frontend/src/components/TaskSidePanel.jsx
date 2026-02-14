@@ -198,21 +198,6 @@ function ApprovalBar({ task, currentReview, onAction }) {
     }
   };
 
-  const handleKeyDown = (e) => {
-    e.stopPropagation();
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const ctrlOrCmd = isMac ? e.metaKey : e.ctrlKey;
-
-    if (ctrlOrCmd && e.key === 'Enter' && !loading) {
-      e.preventDefault();
-      if (e.shiftKey) {
-        handleReject();
-      } else {
-        handleApprove();
-      }
-    }
-  };
-
   return (
     <div class="task-approval-bar">
       <textarea
@@ -225,7 +210,7 @@ function ApprovalBar({ task, currentReview, onAction }) {
           e.target.style.height = e.target.scrollHeight + 'px';
         }}
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleKeyDown}
+        onKeyDown={(e) => e.stopPropagation()}
         rows="3"
       />
       <div class="task-approval-bar-actions">
