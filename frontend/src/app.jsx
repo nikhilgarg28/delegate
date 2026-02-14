@@ -94,14 +94,14 @@ function App() {
       }
       if (isInputFocused()) return;
       // r focuses chat input (when on Chat tab)
-      if (e.key === "r" && !isHelpOpen() && panelStack.value.length === 0) {
+      if (e.key === "r" && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && !isHelpOpen() && panelStack.value.length === 0) {
         e.preventDefault();
         const chatInput = document.querySelector(".chat-input");
         if (chatInput) chatInput.focus();
         return;
       }
       // / focuses search (when on Chat tab)
-      if (e.key === "/" && !isHelpOpen() && panelStack.value.length === 0) {
+      if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey && !isHelpOpen() && panelStack.value.length === 0) {
         e.preventDefault();
         const searchExpandBtn = document.querySelector(".filter-search-icon-btn");
         const searchInput = document.querySelector(".filter-search");
@@ -114,19 +114,19 @@ function App() {
         return;
       }
       // Tab navigation and sidebar toggle work even with side panels open
-      if (e.key === "s" && !isHelpOpen()) {
+      if (e.key === "s" && !e.metaKey && !e.ctrlKey && !e.altKey && !isHelpOpen()) {
         sidebarCollapsed.value = !sidebarCollapsed.value;
         localStorage.setItem("delegate-sidebar-collapsed", sidebarCollapsed.value ? "true" : "false");
         return;
       }
-      if (e.key === "n" && !isHelpOpen()) {
+      if (e.key === "n" && !e.metaKey && !e.ctrlKey && !e.altKey && !isHelpOpen()) {
         bellPopoverOpen.value = !bellPopoverOpen.value;
         return;
       }
-      if (e.key === "c" && !isHelpOpen()) { navigateTab("chat"); return; }
-      if (e.key === "t" && !isHelpOpen()) { navigateTab("tasks"); return; }
-      if (e.key === "a" && !isHelpOpen()) { navigateTab("agents"); return; }
-      if (e.key === "m" && !isHelpOpen()) {
+      if (e.key === "c" && !e.metaKey && !e.ctrlKey && !e.altKey && !isHelpOpen()) { navigateTab("chat"); return; }
+      if (e.key === "t" && !e.metaKey && !e.ctrlKey && !e.altKey && !isHelpOpen()) { navigateTab("tasks"); return; }
+      if (e.key === "a" && !e.metaKey && !e.ctrlKey && !e.altKey && !isHelpOpen()) { navigateTab("agents"); return; }
+      if (e.key === "m" && !e.metaKey && !e.ctrlKey && !e.altKey && !isHelpOpen()) {
         e.preventDefault();
         const micBtn = document.querySelector(".chat-tool-btn[title*='recording'], .chat-tool-btn[title='Voice input']");
         if (micBtn) micBtn.click();
