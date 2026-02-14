@@ -56,6 +56,18 @@ export function TeamSwitcher({ open, onClose }) {
     }
   }, [open]);
 
+  const selectTeam = useCallback((teamName) => {
+    const current = currentTeam.value;
+    if (teamName !== current) {
+      const currentTab = activeTab.value || "chat";
+      navigate(teamName, currentTab);
+      if (currentTab === "tasks") {
+        taskTeamFilter.value = teamName;
+      }
+    }
+    onClose();
+  }, [onClose]);
+
   // Keyboard navigation - only re-register when modal opens/closes
   useEffect(() => {
     if (!open) return;
@@ -90,18 +102,6 @@ export function TeamSwitcher({ open, onClose }) {
       selected.scrollIntoView({ block: "nearest" });
     }
   }, [selectedIndex, open]);
-
-  const selectTeam = useCallback((teamName) => {
-    const current = currentTeam.value;
-    if (teamName !== current) {
-      const currentTab = activeTab.value || "chat";
-      navigate(teamName, currentTab);
-      if (currentTab === "tasks") {
-        taskTeamFilter.value = teamName;
-      }
-    }
-    onClose();
-  }, [onClose]);
 
   if (!open) return null;
 
