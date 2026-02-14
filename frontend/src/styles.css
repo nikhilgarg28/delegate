@@ -1227,12 +1227,13 @@ select option:hover {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 4px;
+  padding: 4px 10px;
   border: 1px solid var(--border-default);
-  border-radius: 6px;
+  border-radius: 12px;
   background: var(--bg-surface);
   cursor: pointer;
+  font-size: 12px;
   user-select: none;
   transition: border-color 100ms;
 }
