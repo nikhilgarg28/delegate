@@ -38,7 +38,7 @@ def shared_repo(tmp_path):
     """Create a git repo that can be registered by both teams."""
     repo_dir = tmp_path / "shared_repo"
     repo_dir.mkdir()
-    subprocess.run(["git", "init"], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo_dir, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True, capture_output=True)
 
