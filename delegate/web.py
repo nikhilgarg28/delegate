@@ -1017,7 +1017,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                      merge_attempts=0, status_detail="")
         # Transition to merging with manager as assignee
         from delegate.bootstrap import get_member_by_role
-        manager = get_member_by_role(hc_home, team, "manager") or "manager"
+        manager = get_member_by_role(hc_home, team, "manager") or "delegate"
         updated = transition_task(hc_home, team, task_id, "merging", manager)
         return updated
 

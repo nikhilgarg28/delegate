@@ -5,7 +5,7 @@ Commands:
     delegate start [--port N] [--env-file .env]       — start delegate (web UI + agents)
     delegate stop                                    — stop running delegate
     delegate status                                  — check if delegate is running
-    delegate team add <name> --manager M --agents a:role,b --repo /path  — create a new team
+    delegate team add <name> --agents a:role,b --repo /path  — create a new team
     delegate team list                               — list existing teams
     delegate team remove <name>                      — remove a team and all its data
     delegate agent add <team> <name>                 — add an agent to a team
@@ -235,7 +235,6 @@ def team() -> None:
 
 @team.command("add")
 @click.argument("name")
-@click.option("--manager", default="delegate", show_default=True, help="Name of the manager/delegate agent.")
 @click.option(
     "--agents", required=True,
     help="Number of agents (e.g. '3') or comma-separated names as name[:role].  "
@@ -253,7 +252,6 @@ def team() -> None:
 def team_create(
     ctx: click.Context,
     name: str,
-    manager: str,
     agents: str,
     repos: tuple[str, ...],
     interactive: bool,
@@ -310,7 +308,7 @@ def team_create(
     bootstrap(
         hc_home,
         team_name=name,
-        manager=manager,
+        manager="delegate",
         agents=parsed_agents,
         interactive=interactive,
     )

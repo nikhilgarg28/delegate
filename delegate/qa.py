@@ -448,7 +448,7 @@ def _report_result(hc_home: Path, team: str, req: ReviewRequest, result: ReviewR
         logger.warning("Could not send result to %s", req.requester)
 
     # Report to manager
-    manager_name = get_member_by_role(hc_home, team, "manager") or "manager"
+    manager_name = get_member_by_role(hc_home, team, "manager") or "delegate"
     try:
         send(hc_home, team, qa_name, manager_name, message)
     except ValueError:

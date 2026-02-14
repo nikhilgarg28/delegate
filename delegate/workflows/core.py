@@ -113,7 +113,7 @@ class Context:
         """The team's manager agent name."""
         from delegate.bootstrap import get_member_by_role
         name = get_member_by_role(self._hc_home, self._team, "manager")
-        return name or "manager"
+        return name or "delegate"
 
     @property
     def human(self) -> str:

@@ -600,7 +600,7 @@ def merge_task(
 def _get_manager_name(hc_home: Path, team: str) -> str:
     """Look up the manager agent name for this team."""
     from delegate.bootstrap import get_member_by_role
-    return get_member_by_role(hc_home, team, "manager") or "manager"
+    return get_member_by_role(hc_home, team, "manager") or "delegate"
 
 
 def _handle_merge_failure(
