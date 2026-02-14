@@ -267,7 +267,13 @@ function CommitList({ commits, multiRepo }) {
             {isOpen && (
               <div class="commit-diff">
                 {c.diff && c.diff !== "(empty diff)" ? (
-                  <div dangerouslySetInnerHTML={{ __html: diff2HtmlRender(c.diff, { outputFormat: "line-by-line", drawFileList: false, matching: "lines" }) }} />
+                  <ReviewableDiff
+                    diffRaw={c.diff}
+                    taskId={null}
+                    currentComments={[]}
+                    oldComments={[]}
+                    isReviewable={false}
+                  />
                 ) : (
                   <div class="diff-empty">Empty diff</div>
                 )}
@@ -379,6 +385,7 @@ function ChangesTab({ task, diffRaw, currentReview, oldComments, stats }) {
   const [showFileList, setShowFileList] = useState(false);
   const [commitsData, setCommitsData] = useState(null);
   const [commitsExpanded, setCommitsExpanded] = useState(false);
+  const [commitsLoading, setCommitsLoading] = useState(false);
   const team = currentTeam.value;
   const t = task;
   const isReviewable = t && t.status === "in_approval";
@@ -392,10 +399,13 @@ function ChangesTab({ task, diffRaw, currentReview, oldComments, stats }) {
   // Lazy-load commits when expanded
   useEffect(() => {
     if (!commitsExpanded || commitsData !== null) return;
+    setCommitsLoading(true);
     api.fetchTaskCommits(team, t.id).then(data => {
       setCommitsData(data);
     }).catch(() => {
       setCommitsData({ commit_diffs: {} });
+    }).finally(() => {
+      setCommitsLoading(false);
     });
   }, [commitsExpanded, commitsData, team, t.id]);
 
@@ -478,7 +488,7 @@ function ChangesTab({ task, diffRaw, currentReview, oldComments, stats }) {
           <span>Commits</span>
         </div>
         {commitsExpanded && (
-          commitsData === null
+          commitsLoading
             ? <div class="diff-empty">Loading commits...</div>
             : !allCommits.length
               ? <div class="diff-empty">No commits recorded</div>
