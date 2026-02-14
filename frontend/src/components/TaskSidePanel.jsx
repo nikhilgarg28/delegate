@@ -354,12 +354,7 @@ function OverviewTab({ task, stats }) {
                     class="task-attachment-name clickable-file"
                     onClick={(e) => {
                       e.stopPropagation();
-                      const isHtmlFile = /\.html?$/i.test(fname);
-                      if (isHtmlFile) {
-                        window.open(`/teams/${currentTeam.value}/files/raw?path=${encodeURIComponent(toApiPath(fpath, currentTeam.value))}`, "_blank");
-                      } else {
-                        pushPanel("file", fpath);
-                      }
+                      pushPanel("file", fpath);
                     }}
                   >
                     {fname}

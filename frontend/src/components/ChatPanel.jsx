@@ -88,13 +88,7 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
     if (fileLink) {
       e.stopPropagation();
       const fpath = fileLink.dataset.filePath;
-      const fname = fpath.split("/").pop();
-      const isHtmlFile = /\.html?$/i.test(fname);
-      if (isHtmlFile) {
-        window.open(`/teams/${currentTeam.value}/files/raw?path=${encodeURIComponent(toApiPath(fpath, currentTeam.value))}`, "_blank");
-      } else {
-        openPanel("file", fpath);
-      }
+      openPanel("file", fpath);
       return;
     }
   }, []);

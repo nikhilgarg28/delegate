@@ -322,19 +322,28 @@ function FileView({ filePath }) {
           : (ext === "md" || ext === "markdown")
             ? <div class="file-viewer-content md-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(fileData.content) }} />
           : isHtml && fileData.content
-            ? <div class="file-viewer-content" style={{ padding: "40px 20px", textAlign: "center" }}>
-                <div style={{ fontSize: "14px", color: "var(--text-secondary)", marginBottom: "16px" }}>
-                  HTML files are opened in a new browser tab
+            ? <div class="file-viewer-html-container">
+                <div class="file-viewer-html-toolbar">
+                  <button
+                    class="file-viewer-open-tab-btn"
+                    title="Open in new tab"
+                    onClick={() => {
+                      window.open(`/teams/${currentTeam.value}/files/raw?path=${encodeURIComponent(toApiPath(filePath, currentTeam.value))}`, "_blank");
+                    }}
+                  >
+                    {/* External link icon - simple SVG */}
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M6 3H3v10h10v-3" />
+                      <path d="M9 2h5v5" />
+                      <path d="M14 2L7 9" />
+                    </svg>
+                  </button>
                 </div>
-                <button
-                  class="diff-panel-close-btn"
-                  style={{ padding: "8px 16px" }}
-                  onClick={() => {
-                    window.open(`/teams/${currentTeam.value}/files/raw?path=${encodeURIComponent(toApiPath(filePath, currentTeam.value))}`, "_blank");
-                  }}
-                >
-                  Open in New Tab
-                </button>
+                <iframe
+                  class="file-viewer-iframe"
+                  src={`/teams/${currentTeam.value}/files/raw?path=${encodeURIComponent(toApiPath(filePath, currentTeam.value))}`}
+                  sandbox="allow-same-origin"
+                />
               </div>
             : <div class="file-viewer-content"><pre class="file-viewer-code"><code>{fileData.content}</code></pre></div>
         }
