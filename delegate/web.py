@@ -39,7 +39,7 @@ import shutil
 import signal as signal_mod
 import subprocess
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
@@ -245,7 +245,6 @@ def _build_greeting(
     - Active in-progress tasks (brief status summary)
     - Activity since last_seen (if provided and recent)
     """
-    from datetime import datetime, timezone, timedelta
     from delegate.task import list_tasks
     from delegate.mailbox import read_inbox
 
@@ -1150,7 +1149,6 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         Args:
             last_seen: ISO timestamp of when user was last active (optional)
         """
-        from datetime import datetime, timezone, timedelta
         from delegate.bootstrap import get_member_by_role
         from delegate.mailbox import read_inbox
         from delegate.repo import list_repos
@@ -1260,8 +1258,8 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 COALESCE(SUM(cost_usd), 0) as total_cost,
                 COUNT(DISTINCT task_id) as task_count
             FROM sessions
-            WHERE started_at >= ?
-        """, (midnight_today.isoformat(),)).fetchone()
+            WHERE started_at >= ? AND team = ?
+        """, (midnight_today.isoformat(), team)).fetchone()
 
         today_cost = today_rows[0] or 0.0
         today_task_count = today_rows[1] or 0
@@ -1273,8 +1271,8 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 COALESCE(SUM(cost_usd), 0) as total_cost,
                 COUNT(DISTINCT task_id) as task_count
             FROM sessions
-            WHERE started_at >= ?
-        """, (monday_this_week.isoformat(),)).fetchone()
+            WHERE started_at >= ? AND team = ?
+        """, (monday_this_week.isoformat(), team)).fetchone()
 
         week_cost = week_rows[0] or 0.0
         week_task_count = week_rows[1] or 0
@@ -1288,11 +1286,11 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 SUM(s.cost_usd) as total_cost
             FROM sessions s
             LEFT JOIN tasks t ON s.task_id = t.id
-            WHERE s.task_id IS NOT NULL
+            WHERE s.task_id IS NOT NULL AND s.team = ?
             GROUP BY s.task_id
             ORDER BY total_cost DESC
             LIMIT 3
-        """).fetchall()
+        """, (team,)).fetchall()
 
         top_tasks = [
             {
