@@ -2738,7 +2738,7 @@ select option:hover {
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 4px;
+  padding: 6px;
   border-radius: 4px;
   transition: color 100ms, background 100ms;
 }
