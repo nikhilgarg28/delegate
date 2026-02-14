@@ -273,13 +273,24 @@ def team_create(
         count = int(agents_stripped)
         from delegate.names import pick_names
         from delegate.config import get_default_human
+        from delegate.runtime import list_ai_agents
+        from delegate.paths import teams_dir
 
-        # Exclude human member name and manager name
+        # Exclude human member name, manager name, and all existing agent names
         exclude = set()
         human_name = get_default_human(hc_home)
         if human_name:
             exclude.add(human_name)
         exclude.add(manager)
+
+        # Collect all existing agent names across all teams
+        tdir = teams_dir(hc_home)
+        if tdir.is_dir():
+            for team_path in tdir.iterdir():
+                if team_path.is_dir():
+                    team_name = team_path.name
+                    agent_names = list_ai_agents(hc_home, team_name)
+                    exclude.update(agent_names)
 
         chosen = pick_names(count, exclude)
         for name in chosen:
