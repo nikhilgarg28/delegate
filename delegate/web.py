@@ -1240,6 +1240,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     @app.get("/teams/{team}/cost-summary")
     def get_cost_summary(team: str):
         """Return cost analytics: today, this week, and top tasks by cost."""
+        from delegate.db import get_connection
         conn = get_connection(hc_home, team)
         now_utc = datetime.now(timezone.utc)
 
