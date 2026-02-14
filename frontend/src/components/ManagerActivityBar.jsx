@@ -1,4 +1,4 @@
-import { useEffect } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { managerTurnContext, agentLastActivity, agents } from "../state.js";
 import { taskIdStr } from "../utils.js";
 
@@ -9,6 +9,43 @@ function cap(str) {
 function truncate(str, maxLen) {
   if (!str || str.length <= maxLen) return str;
   return str.slice(0, maxLen) + "\u2026";
+}
+
+const THINKING_WORDS = [
+  "thinking",
+  "pondering",
+  "noodling",
+  "considering",
+  "mulling",
+  "reasoning",
+  "deliberating",
+  "reflecting",
+  "processing",
+  "contemplating",
+];
+
+// CyclingVerb component cycles through thinking synonyms with animated transition
+function CyclingVerb() {
+  const [index, setIndex] = useState(0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsTransitioning(true);
+      setTimeout(() => {
+        setIndex((prev) => (prev + 1) % THINKING_WORDS.length);
+        setIsTransitioning(false);
+      }, 200);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <span class={"cycling-verb" + (isTransitioning ? " cycling-out" : " cycling-in")}>
+      {THINKING_WORDS[index]}…
+    </span>
+  );
 }
 
 export function ManagerActivityBar() {
@@ -85,7 +122,11 @@ export function ManagerActivityBar() {
     }
   }
   if (!status) {
-    status = <span class="mgr-status mgr-thinking">thinking…</span>;
+    status = (
+      <span class="mgr-status mgr-thinking">
+        <CyclingVerb />
+      </span>
+    );
   }
 
   return (

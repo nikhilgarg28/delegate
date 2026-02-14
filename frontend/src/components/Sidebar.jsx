@@ -1,4 +1,4 @@
-import { useCallback } from "preact/hooks";
+import { useCallback, useState, useEffect } from "preact/hooks";
 import {
   currentTeam, teams, tasks, agents, agentStatsMap,
   activeTab, openPanel,
@@ -9,6 +9,43 @@ import {
 import {
   cap, taskIdStr, getAgentDotClass,
 } from "../utils.js";
+
+const THINKING_WORDS = [
+  "thinking",
+  "pondering",
+  "noodling",
+  "considering",
+  "mulling",
+  "reasoning",
+  "deliberating",
+  "reflecting",
+  "processing",
+  "contemplating",
+];
+
+// CyclingVerb component cycles through thinking synonyms with animated transition
+function CyclingVerb() {
+  const [index, setIndex] = useState(0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsTransitioning(true);
+      setTimeout(() => {
+        setIndex((prev) => (prev + 1) % THINKING_WORDS.length);
+        setIsTransitioning(false);
+      }, 200);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <span class={"cycling-verb" + (isTransitioning ? " cycling-out" : " cycling-in")}>
+      {THINKING_WORDS[index]}…
+    </span>
+  );
+}
 
 // ── SVG Icons ──
 function ChatIcon() {
@@ -187,6 +224,12 @@ function AgentsWidget({ collapsed }) {
 
                 const verb = taskStatus ? getStatusVerb(taskStatus) : null;
 
+                // Check if agent has recent tool activity (within 10s)
+                const hasRecentToolActivity = agentActivities.length > 0 && agentActivities[0].tool;
+
+                // Show cycling verb when: working status, no specific verb, and no recent tool activity
+                const showCyclingVerb = status === "working" && !verb && !hasRecentToolActivity;
+
                 return (
                   <div
                     key={a.name}
@@ -217,6 +260,8 @@ function AgentsWidget({ collapsed }) {
                                   {taskIdStr(displayTaskId)}
                                 </span>
                               </>
+                            ) : showCyclingVerb ? (
+                              <CyclingVerb />
                             ) : (
                               status
                             )}

@@ -884,7 +884,27 @@ body {
 .mgr-sender { color: var(--text-secondary); }
 .mgr-status { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
 .mgr-tool { font-weight: 600; color: var(--text-secondary); }
-.mgr-thinking { }
+.mgr-thinking {
+  display: inline-block;
+  overflow: hidden;
+  min-width: 140px; /* Accommodate longest word: "contemplating..." */
+}
+
+/* Cycling verb animation - vertical slide + fade */
+.cycling-verb {
+  display: inline-block;
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.cycling-verb.cycling-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cycling-verb.cycling-out {
+  opacity: 0;
+  transform: translateY(-4px);
+}
 
 /* ================================================================
    Chat input — Cursor-style
