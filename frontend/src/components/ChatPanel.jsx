@@ -732,6 +732,17 @@ export function ChatPanel() {
     document.execCommand('insertText', false, text);
   }, []);
 
+  // Move cursor to end of contenteditable element
+  const moveCursorToEnd = useCallback((el) => {
+    if (!el) return;
+    const range = document.createRange();
+    const sel = window.getSelection();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }, []);
+
   const toggleDirection = useCallback(() => {
     chatFilterDirection.value = direction === "one-way" ? "bidi" : "one-way";
   }, [direction]);
@@ -936,9 +947,11 @@ export function ChatPanel() {
               inputRef={inputRef}
               onSelect={(cmd) => {
                 if (inputRef.current) {
-                  inputRef.current.textContent = `/${cmd.name} `;
+                  const newVal = `/${cmd.name} `;
+                  inputRef.current.textContent = newVal;
+                  moveCursorToEnd(inputRef.current);
                   inputRef.current.focus();
-                  setInputVal(`/${cmd.name} `);
+                  setInputVal(newVal);
                   setSendBtnActive(true);
                 }
               }}
@@ -950,7 +963,7 @@ export function ChatPanel() {
           <div
             ref={inputRef}
             class="chat-input"
-            contentEditable
+            contentEditable="plaintext-only"
             onKeyDown={handleKeydown}
             onPaste={handlePaste}
             onInput={(e) => {
