@@ -43,7 +43,7 @@ function CollapseIcon({ collapsed }) {
 }
 function DelegateChevron() {
   return (
-    <svg width="20" height="20" viewBox="0 0 600 660" aria-label="Expand sidebar">
+    <svg width="18" height="18" viewBox="0 0 600 660" aria-label="Expand sidebar">
       <path fill="#4ade80" d="M85 65V152L395 304Q414 313 430.5 319.5Q447 326 455 328Q446 330 429 337Q412 344 395 352L85 505V595L515 380V280Z"/>
     </svg>
   );
@@ -59,7 +59,7 @@ const NAV_ITEMS = [
 function Logo() {
   return (
     <div class="sb-logo">
-      <svg viewBox="0 0 288 92.8" width="110" height="36" aria-label="delegate">
+      <svg viewBox="0 0 288 92.8" width="120" height="40" aria-label="delegate">
         <g transform="translate(24,60.8) scale(0.04,-0.04)" fill="#4ade80">
           <path d="M85 65V152L395 304Q414 313 430.5 319.5Q447 326 455 328Q446 330 429 337Q412 344 395 352L85 505V595L515 380V280Z"/>
           <path transform="translate(1200,0)" d="M268-10Q186-10 136.5 45Q87 100 87 194V355Q87 450 136 505Q185 560 268 560Q330 560 370.5 529Q411 498 419 445H420L418 570V730H508V0H418V105H417Q410 51 370 20.5Q330-10 268-10ZM298 68Q354 68 386 103Q418 138 418 200V350Q418 412 386 447Q354 482 298 482Q241 482 209 452.5Q177 423 177 355V195Q177 128 209 98Q241 68 298 68Z"/>
