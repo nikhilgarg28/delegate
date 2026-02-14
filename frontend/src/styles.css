@@ -30,11 +30,11 @@ html, body { height: 100%; }
   --border-focus:   #007fd4;
 
   /* ── Text ── */
-  --text-primary:   #bababa;
+  --text-primary:   #c4c4c4;
   --text-secondary: #858585;
-  --text-muted:     #5a5a5a;
+  --text-muted:     #6a6a6a;
   --text-faint:     #3e3e3e;
-  --text-heading:   #d0d0d0;
+  --text-heading:   #c4c4c4;
 
   /* ── Accent — used very sparingly ── */
   --accent:        #569cd6;
@@ -651,16 +651,26 @@ body {
 
 /* Messages */
 .msg {
-  padding: 8px 12px;
+  padding: 8px 12px 8px 15px;
   border-bottom: 1px solid var(--border-subtle);
+  border-left: 3px solid transparent;
   transition: background 100ms;
 }
 .msg:last-child { border-bottom: none; }
 .msg:hover { background: rgba(255, 255, 255, 0.02); }
 
-/* Non-human messages: dimmed content for visual hierarchy */
-.msg-content-dim {
-  opacity: 0.6;
+/* Left border indicators by message type */
+.msg-boss {
+  border-left-color: var(--accent);
+}
+
+/* Boss vs non-boss content hierarchy (color-based, no opacity) */
+.content-boss {
+  color: var(--text-primary);
+}
+
+.content-regular {
+  color: var(--text-muted);
 }
 
 .msg-body { min-width: 0; }
@@ -674,8 +684,11 @@ body {
   transition: text-decoration 100ms;
 }
 .msg-sender:hover { text-decoration: underline; }
-.msg-recipient { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; color: var(--text-muted); font-size: 11px; }
-.msg-time { color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; margin-left: auto; flex-shrink: 0; }
+.msg-sender-boss {
+  font-weight: 600;
+}
+.msg-recipient { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; color: var(--text-muted); font-size: 12px; }
+.msg-time { color: var(--text-faint); font-size: 12px; font-variant-numeric: tabular-nums; margin-left: auto; flex-shrink: 0; }
 .msg-checkmark { flex-shrink: 0; margin-left: 4px; min-width: 16px; display: inline-block; text-align: left; }
 .msg-content { color: var(--text-primary); font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 
@@ -716,16 +729,26 @@ body {
 }
 
 /* Event messages */
-.msg-event { display: flex; align-items: flex-start; gap: 12px; padding: 4px 12px; margin: 2px 0; }
-.msg-event-icon { width: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--text-faint); padding-top: 1px; }
+.msg-event {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 12px 4px 15px;
+  margin: 2px 0;
+  border-left: 3px solid var(--text-faint);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.msg-event:last-child { border-bottom: none; }
+.msg-event:hover { background: rgba(255, 255, 255, 0.02); }
 .msg-event-text { flex: 1; color: var(--text-muted); font-size: 12px; line-height: 1.4; }
-.msg-event-time { color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; margin-left: auto; padding-right: 28px; /* 28px = checkmark 16px + checkmark margin 4px + header gap 8px */ }
+.msg-event-time { color: var(--text-faint); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
+.msg-event-sep { color: var(--text-faint); font-size: 12px; flex-shrink: 0; }
 
 /* Task separator and badge (left side, next to sender) */
-.msg-task-sep { color: var(--text-faint); font-size: 11px; flex-shrink: 0; }
+.msg-task-sep { color: var(--text-faint); font-size: 12px; flex-shrink: 0; }
 .msg-task-badge {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   color: var(--text-muted);
@@ -2386,20 +2409,26 @@ select option:hover {
 
 /* Command message container */
 .msg-command {
-  margin: 16px 0;
+  padding: 8px 12px 8px 15px;
+  border-left: 3px solid var(--semantic-green);
+  border-bottom: 1px solid var(--border-subtle);
 }
+
+.msg-command:last-child { border-bottom: none; }
+.msg-command:hover { background: rgba(255, 255, 255, 0.02); }
 
 .msg-command-header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
   margin-bottom: 8px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .msg-command-sender {
-  font-weight: 600;
-  color: var(--text-heading);
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  font-weight: 400;
+  color: var(--text-primary);
 }
 
 .msg-command-text {

@@ -59,7 +59,7 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
 // ── Collapsible long message ──
 const COLLAPSE_THRESHOLD = 90; // ~4 lines at 14px * 1.6 line-height = 89.6px
 
-function CollapsibleMessage({ html, messageId, isHuman }) {
+function CollapsibleMessage({ html, messageId, isBoss }) {
   const contentRef = useRef();
   const [isLong, setIsLong] = useState(false);
   const isExpanded = expandedMessages.value.has(messageId);
@@ -94,7 +94,7 @@ function CollapsibleMessage({ html, messageId, isHuman }) {
 
   const wrapperClass = "msg-content-wrapper" + (isLong && !isExpanded ? " collapsed" : "");
 
-  const contentClass = isHuman ? "msg-content md-content" : "msg-content md-content msg-content-dim";
+  const contentClass = isBoss ? "msg-content md-content content-boss" : "msg-content md-content content-regular";
 
   return (
     <>
@@ -844,12 +844,8 @@ export function ChatPanel() {
             const eventHtml = agentifyRefs(linkifyFilePaths(linkifyTaskRefs(esc(m.content))), agNames);
             return (
               <div key={m.id || i} class="msg-event">
-                <div class="msg-event-icon">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 7a6 6 0 1 0 2-4.5" /><polyline points="1 1 1 3.5 3.5 3.5" />
-                  </svg>
-                </div>
                 <LinkedDiv class="msg-event-text" html={eventHtml} />
+                <span class="msg-event-sep">|</span>
                 <span class="msg-event-time">{fmtTimestamp(m.timestamp)}</span>
               </div>
             );
@@ -859,8 +855,9 @@ export function ChatPanel() {
             return (
               <div key={m.id || i} class="msg-command">
                 <div class="msg-command-header">
-                  <span class="msg-command-sender">{cap(m.sender)}</span>
+                  <span class="msg-command-sender">{cap(m.sender)}:</span>
                   <span class="msg-command-text">{m.content}</span>
+                  <span class="msg-task-sep">|</span>
                   <span class="msg-time">{fmtTimestamp(m.timestamp)}</span>
                 </div>
                 {parsed?.name === 'shell' && <ShellOutputBlock result={m.result} />}
@@ -873,12 +870,15 @@ export function ChatPanel() {
           const human = (humanName.value || "human").toLowerCase();
           const isHuman = senderLower === human;
           const isToHuman = (m.recipient || "").toLowerCase() === human;
+          const isBoss = isHuman || isToHuman;
+          const msgClass = isBoss ? "msg msg-boss" : "msg";
+          const senderClass = isBoss ? "msg-sender msg-sender-boss copyable" : "msg-sender copyable";
           return (
-            <div key={m.id || i} class="msg">
+            <div key={m.id || i} class={msgClass}>
               <div class="msg-body">
                 <div class="msg-header">
                   <span
-                    class="msg-sender copyable"
+                    class={senderClass}
                     onClick={() => { openPanel("agent", m.sender); }}
                   >
                     {cap(m.sender)}<CopyBtn text={m.sender} />
@@ -899,7 +899,7 @@ export function ChatPanel() {
                   <span class="msg-time" dangerouslySetInnerHTML={{ __html: fmtTimestamp(m.timestamp) }} />
                   <span class="msg-checkmark" dangerouslySetInnerHTML={{ __html: msgStatusIcon(m) }} />
                 </div>
-                <CollapsibleMessage html={contentHtml} messageId={m.id} isHuman={isHuman || isToHuman} />
+                <CollapsibleMessage html={contentHtml} messageId={m.id} isBoss={isBoss} />
               </div>
             </div>
           );
