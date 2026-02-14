@@ -2867,14 +2867,14 @@ select option:hover {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  border-left: 1px solid transparent;
+  border-left: 2px solid transparent;
 }
 .notif-item:hover {
   background: var(--bg-hover);
 }
 .notif-item.highlighted {
   background: var(--bg-hover);
-  border-left-color: var(--accent);
+  border-left-color: var(--text-secondary);
 }
 
 .notif-item-main {
