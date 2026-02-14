@@ -301,20 +301,92 @@ def test_add_agent_rejects_duplicate_on_team(tmp_team):
 
 def test_add_agent_rejects_human_member_name(tmp_team):
     """add_agent errors if the name conflicts with a human member name."""
-    with pytest.raises(ValueError, match="human member name"):
+    with pytest.raises(ValueError, match='Name "nikhil" conflicts with a human member. Names must be globally unique.'):
         add_agent(tmp_team, TEAM, "nikhil")
 
 
-def test_add_agent_allows_cross_team_same_name(hc):
-    """add_agent allows the same name on a different team."""
+def test_add_agent_rejects_cross_team_same_name(hc):
+    """add_agent errors if the agent name already exists on another team (global uniqueness)."""
     bootstrap(hc, "team1", manager="mgr1", agents=["alice"])
     bootstrap(hc, "team2", manager="mgr2", agents=["bob"])
-    # "alice" is already on team1 — should be fine on team2
-    add_agent(hc, "team2", "alice")
-    assert (agents_dir(hc, "team2") / "alice").is_dir()
+    # "alice" is already on team1 — should fail on team2
+    with pytest.raises(ValueError, match='Agent name "alice" already exists on team "team1". Names must be globally unique.'):
+        add_agent(hc, "team2", "alice")
 
 
 def test_add_agent_team_not_found(hc):
     """add_agent errors if the team doesn't exist."""
     with pytest.raises(FileNotFoundError, match="does not exist"):
         add_agent(hc, "nonexistent", "charlie")
+
+
+# ──────────────────────────────────────────────────────────────
+# Global uniqueness tests
+# ──────────────────────────────────────────────────────────────
+
+def test_bootstrap_rejects_cross_team_duplicate_agent(hc):
+    """bootstrap rejects creating a team with an agent name that exists on another team."""
+    bootstrap(hc, "team1", manager="mgr1", agents=["alice", "bob"])
+    # Try to create team2 with "alice" who already exists on team1
+    with pytest.raises(ValueError, match='Agent name "alice" already exists on team "team1". Names must be globally unique.'):
+        bootstrap(hc, "team2", manager="mgr2", agents=["alice", "charlie"])
+
+
+def test_bootstrap_rejects_manager_name_conflict(hc):
+    """bootstrap rejects creating a team with a manager name that exists on another team."""
+    bootstrap(hc, "team1", manager="edison", agents=["alice"])
+    # Try to create team2 with manager "edison" who already exists on team1
+    with pytest.raises(ValueError, match='Agent name "edison" already exists on team "team1". Names must be globally unique.'):
+        bootstrap(hc, "team2", manager="edison", agents=["bob"])
+
+
+def test_bootstrap_rejects_agent_conflicting_with_human(hc):
+    """bootstrap rejects agent names that conflict with human member names."""
+    # hc fixture already has "nikhil" as a human member
+    with pytest.raises(ValueError, match='Name "nikhil" conflicts with a human member. Names must be globally unique.'):
+        bootstrap(hc, "team1", manager="mgr", agents=["nikhil"])
+
+
+def test_add_agent_rejects_human_member_conflict_global(hc):
+    """add_agent rejects names that conflict with human members (global check)."""
+    from delegate.config import add_member
+    bootstrap(hc, "team1", manager="mgr1", agents=["alice"])
+    # Add another human member
+    add_member(hc, "sarah")
+    # Try to add agent with the same name as the human member
+    with pytest.raises(ValueError, match='Name "sarah" conflicts with a human member. Names must be globally unique.'):
+        add_agent(hc, "team1", "sarah")
+
+
+def test_get_all_agent_names(hc):
+    """get_all_agent_names returns a mapping of agent_name -> team_name across all teams."""
+    from delegate.bootstrap import get_all_agent_names
+    bootstrap(hc, "team1", manager="mgr1", agents=["alice", "bob"])
+    bootstrap(hc, "team2", manager="mgr2", agents=["charlie"])
+
+    all_agents = get_all_agent_names(hc)
+    assert all_agents == {
+        "mgr1": "team1",
+        "alice": "team1",
+        "bob": "team1",
+        "mgr2": "team2",
+        "charlie": "team2",
+    }
+
+
+def test_get_all_agent_names_empty(hc):
+    """get_all_agent_names returns empty dict when no teams exist."""
+    from delegate.bootstrap import get_all_agent_names
+    assert get_all_agent_names(hc) == {}
+
+
+def test_get_all_member_names(hc):
+    """get_all_member_names returns all human member names."""
+    from delegate.bootstrap import get_all_member_names
+    from delegate.config import add_member
+    # hc fixture already has "nikhil" as a member
+    add_member(hc, "sarah")
+    add_member(hc, "john")
+
+    all_members = get_all_member_names(hc)
+    assert all_members == {"nikhil", "sarah", "john"}

@@ -310,34 +310,14 @@ class TestUniquenessEnforcement:
         with pytest.raises(ValueError, match="conflicts with.*human member"):
             bootstrap(hc, team_name="gamma", manager=DIRECTOR, agents=["dave"])
 
-    def test_same_name_across_teams_accepted(self, hc):
-        """Agent names can be reused across different teams."""
-        # "alice" is already in team alpha — should be fine in a new team
-        bootstrap(hc, team_name="gamma", manager="alice", agents=["bob"])
-        assert agent_dir(hc, "gamma", "alice").is_dir()
-        assert agent_dir(hc, "gamma", "bob").is_dir()
+    def test_same_name_across_teams_rejected(self, hc):
+        """Agent names must be globally unique — reuse across teams is rejected."""
+        # "alice" is already in team alpha — should fail in a new team
+        with pytest.raises(ValueError, match='Agent name "alice" already exists on team "alpha". Names must be globally unique.'):
+            bootstrap(hc, team_name="gamma", manager="alice", agents=["bob"])
 
     def test_unique_names_across_teams_accepted(self, hc):
-        """Teams with completely unique names are also accepted."""
+        """Teams with completely unique names are accepted."""
         bootstrap(hc, team_name="gamma", manager="frank", agents=["grace"])
         assert agent_dir(hc, "gamma", "frank").is_dir()
         assert agent_dir(hc, "gamma", "grace").is_dir()
-
-    def test_cross_team_same_name_messaging_isolated(self, hc):
-        """Messages to same-named agents on different teams are isolated."""
-        # Create gamma team with an agent named "alice" (same as alpha)
-        bootstrap(hc, team_name="gamma", manager="gamma_mgr", agents=["alice"])
-
-        # Send messages to "alice" on each team
-        send(hc, TEAM_A, "edison", "alice", "Alpha message for alice")
-        send(hc, "gamma", "gamma_mgr", "alice", "Gamma message for alice")
-
-        # Each alice should only see her team's message
-        alpha_inbox = read_inbox(hc, TEAM_A, "alice")
-        gamma_inbox = read_inbox(hc, "gamma", "alice")
-
-        assert len(alpha_inbox) == 1
-        assert "Alpha message" in alpha_inbox[0].body
-
-        assert len(gamma_inbox) == 1
-        assert "Gamma message" in gamma_inbox[0].body

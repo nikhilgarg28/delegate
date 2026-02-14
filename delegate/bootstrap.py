@@ -26,7 +26,31 @@ from delegate.paths import (
     members_dir as _members_dir,
     base_charter_dir,
 )
-from delegate.config import get_boss, get_default_human, add_member
+from delegate.config import get_boss, get_default_human, add_member, get_human_members
+
+
+def get_all_agent_names(hc_home: Path) -> dict[str, str]:
+    """Return a mapping of agent_name -> team_name for all agents across all teams."""
+    teams_dir_path = _teams_dir(hc_home)
+    result = {}
+    if not teams_dir_path.is_dir():
+        return result
+    for team_dir_obj in sorted(teams_dir_path.iterdir()):
+        if not team_dir_obj.is_dir():
+            continue
+        agents_dir_obj = team_dir_obj / "agents"
+        if not agents_dir_obj.is_dir():
+            continue
+        for agent_dir_obj in sorted(agents_dir_obj.iterdir()):
+            if not agent_dir_obj.is_dir():
+                continue
+            result[agent_dir_obj.name] = team_dir_obj.name
+    return result
+
+
+def get_all_member_names(hc_home: Path) -> set[str]:
+    """Return all human member names."""
+    return {m["name"] for m in get_human_members(hc_home)}
 
 
 def _detect_human_name() -> str:
@@ -150,7 +174,7 @@ def bootstrap(
     Human members are stored in ``hc_home/members/`` (outside any team).
     Base charter files are NOT copied — they are read from the installed package.
 
-    Agent names must be unique within a team but may be reused across teams.
+    Agent names must be globally unique across all teams and cannot conflict with human member names.
 
     Args:
         hc_home: Delegate home directory (~/.delegate).
@@ -180,12 +204,26 @@ def bootstrap(
     if len(names) != len(set(names)):
         raise ValueError(f"Duplicate names in team: {names}")
 
-    # Ensure agent names don't conflict with human member names
+    # Legacy check for default human - will also be caught by global check below
+    # Kept for backward compatibility and to provide consistent error messages
     human_name = get_default_human(hc_home)
     if human_name and human_name in names:
         raise ValueError(
-            f"Agent name '{human_name}' conflicts with a human member name"
+            f"Name \"{human_name}\" conflicts with a human member. Names must be globally unique."
         )
+
+    # Check global uniqueness across all teams
+    existing_agents = get_all_agent_names(hc_home)
+    existing_humans = get_all_member_names(hc_home)
+    all_existing = set(existing_agents.keys()) | existing_humans
+    for name, _ in members:
+        if name in all_existing:
+            if name in existing_agents:
+                # Allow re-bootstrapping the same team (idempotent)
+                if existing_agents[name] != team_name:
+                    raise ValueError(f"Agent name \"{name}\" already exists on team \"{existing_agents[name]}\". Names must be globally unique.")
+            else:
+                raise ValueError(f"Name \"{name}\" conflicts with a human member. Names must be globally unique.")
 
     # Ensure top-level directories exist
     hc_home.mkdir(parents=True, exist_ok=True)
@@ -314,8 +352,8 @@ def add_agent(
 
     Raises:
         FileNotFoundError: If the team does not exist.
-        ValueError: If the agent name already exists on this team,
-            or matches a human member name.
+        ValueError: If the agent name already exists globally (on any team)
+            or conflicts with a human member name.
     """
     if seniority is None:
         seniority = _default_seniority(role)
@@ -329,14 +367,19 @@ def add_agent(
     member_dir = agents_root / agent_name
 
     # --- name validation ---
+    # Check global uniqueness
+    existing_agents = get_all_agent_names(hc_home)
+    existing_humans = get_all_member_names(hc_home)
+    if agent_name in existing_agents:
+        other_team = existing_agents[agent_name]
+        if other_team != team_name:
+            raise ValueError(f"Agent name \"{agent_name}\" already exists on team \"{other_team}\". Names must be globally unique.")
+    if agent_name in existing_humans:
+        raise ValueError(f"Name \"{agent_name}\" conflicts with a human member. Names must be globally unique.")
+
+    # Check if agent already exists on this team (filesystem check)
     if member_dir.exists():
         raise ValueError(f"Agent '{agent_name}' already exists on team '{team_name}'")
-
-    human_name = get_default_human(hc_home)
-    if human_name and agent_name == human_name:
-        raise ValueError(
-            f"Agent name '{agent_name}' conflicts with a human member name"
-        )
 
     # --- create directory structure ---
     member_dir.mkdir(parents=True, exist_ok=True)
