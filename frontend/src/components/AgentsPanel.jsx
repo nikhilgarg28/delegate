@@ -152,12 +152,12 @@ export function AgentsPanel() {
         Object.keys(agentsByTeam).sort().map(teamName => (
           <div key={teamName} class="agents-team-group">
             <div class="agents-team-group-header">{teamName}</div>
-            {agentsByTeam[teamName].map(a => renderAgentCard(a, false))}
+            {agentsByTeam[teamName].map(a => renderAgentCard(a, true))}
           </div>
         ))
       ) : (
         // Single team view
-        displayAgents.map(a => renderAgentCard(a, false))
+        displayAgents.map(a => renderAgentCard(a, true))
       )}
     </div>
   );
