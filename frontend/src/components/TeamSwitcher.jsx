@@ -83,7 +83,7 @@ export function TeamSwitcher({ open, onClose }) {
   const selectTeam = useCallback((teamName) => {
     const current = currentTeam.value;
     if (teamName !== current) {
-      const currentTab = activeTab.value;
+      const currentTab = activeTab.value || "chat";
       navigate(teamName, currentTab);
       if (currentTab === "tasks") {
         taskTeamFilter.value = teamName;

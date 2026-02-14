@@ -152,7 +152,7 @@ function App() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  // ── Bootstrap: fetch config + teams, then fix URL if needed ──
+  // ── Bootstrap: fetch config + teams, set initial team from localStorage ──
   useEffect(() => {
     (async () => {
       try {
@@ -168,14 +168,15 @@ function App() {
         // Extract team names for comparison (handle both objects and strings)
         const teamNames = teamList.map(t => typeof t === "object" ? t.name : t);
 
-        // If URL didn't set a valid team, check localStorage or navigate to the first team
+        // Set currentTeam from localStorage or default to first team
         if (teamNames.length > 0 && !currentTeam.value) {
           const lastTeam = localStorage.getItem("delegate-last-team");
           const targetTeam = lastTeam && teamNames.includes(lastTeam) ? lastTeam : teamNames[0];
-          navigate(targetTeam, "chat");
+          currentTeam.value = targetTeam;
+          // syncFromUrl already ran and set activeTab from URL — don't change URL here
         } else if (teamNames.length > 0 && !teamNames.includes(currentTeam.value)) {
-          // URL had an invalid team — fix it
-          navigate(teamNames[0], activeTab.value || "chat");
+          // currentTeam is invalid — fix it (no URL change needed)
+          currentTeam.value = teamNames[0];
         }
       } catch (e) { }
     })();

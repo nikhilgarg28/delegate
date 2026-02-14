@@ -27,46 +27,52 @@ export const isMuted = signal(localStorage.getItem("delegate-muted") === "true")
 export const sidebarCollapsed = signal(localStorage.getItem("delegate-sidebar-collapsed") === "true");
 
 // ── URL-based navigation ──
-// URL format: /{team}/{tab}  e.g. /self/chat, /myteam/tasks
+// URL format: /{tab}  e.g. /chat, /tasks, /agents
+// Team selection is handled purely by JS state (currentTeam signal + localStorage)
 const VALID_TABS = ["chat", "tasks", "agents"];
 
-/** Parse the current URL and update currentTeam + activeTab signals. */
+/** Parse the current URL and update activeTab signal. Team comes from signal/localStorage. */
 export function syncFromUrl() {
   const parts = window.location.pathname.split("/").filter(Boolean);
-  if (parts.length >= 2 && VALID_TABS.includes(parts[1])) {
-    currentTeam.value = parts[0];
-    activeTab.value = parts[1];
+
+  if (parts.length === 0) {
+    // Root path — redirect to /chat
+    activeTab.value = "chat";
+    window.history.replaceState(null, "", "/chat");
   } else if (parts.length === 1) {
-    // Bare /{team} or legacy /{tab}
     if (VALID_TABS.includes(parts[0])) {
-      // Legacy URL like /chat — keep team, fix URL if possible
+      // Valid tab path like /chat, /tasks, /agents
       activeTab.value = parts[0];
-      if (currentTeam.value) {
-        window.history.replaceState(null, "", `/${currentTeam.value}/${parts[0]}`);
-      }
     } else {
-      // Bare team like /self — set team, default tab
-      currentTeam.value = parts[0];
+      // Old format like /self or unknown path — redirect to /chat
       activeTab.value = "chat";
-      window.history.replaceState(null, "", `/${parts[0]}/chat`);
+      window.history.replaceState(null, "", "/chat");
+    }
+  } else if (parts.length >= 2) {
+    // Old format like /self/chat — extract tab and redirect to flat format
+    if (VALID_TABS.includes(parts[1])) {
+      activeTab.value = parts[1];
+      window.history.replaceState(null, "", `/${parts[1]}`);
+    } else {
+      // Unknown format — redirect to /chat
+      activeTab.value = "chat";
+      window.history.replaceState(null, "", "/chat");
     }
   }
 }
 
-/** Navigate to a team + tab (pushState + update signals). */
+/** Navigate to a team + tab (update signals + pushState with flat URL). */
 export function navigate(team, tab) {
   const t = tab || activeTab.value || "chat";
-  window.history.pushState({}, "", `/${team}/${t}`);
   currentTeam.value = team;
   activeTab.value = t;
+  window.history.pushState({}, "", `/${t}`);
 }
 
-/** Switch tab within the current team. */
+/** Switch tab (pushState with flat URL). */
 export function navigateTab(tab) {
-  const team = currentTeam.value;
-  if (!team) return;
-  window.history.pushState({}, "", `/${team}/${tab}`);
   activeTab.value = tab;
+  window.history.pushState({}, "", `/${tab}`);
 }
 
 // ── Panel stack ──
