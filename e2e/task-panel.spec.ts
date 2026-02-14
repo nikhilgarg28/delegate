@@ -14,7 +14,7 @@ const TEAM = "testteam";
 
 /** Helper: open T0002 task panel from the tasks tab */
 async function openT0002(page) {
-    await page.goto(`/${TEAM}/tasks`);
+    await page.goto("/tasks");
     await expect(page.locator(".task-row").first()).toBeVisible({ timeout: 5_000 });
     await page.locator(".task-row", { hasText: "Implement design system" }).click();
     const panel = page.locator(".task-panel");
@@ -41,13 +41,13 @@ test.describe("Task side panel", () => {
         await expect(attachment).toBeVisible();
         await attachment.click();
 
-        // File panel should open (diff-panel is used for file view)
+        // File panel should open (diff-panel gains "open" class)
         const filePanel = page.locator(".diff-panel");
-        await expect(filePanel).toBeVisible({ timeout: 3_000 });
+        await expect(filePanel).toHaveClass(/open/, { timeout: 5_000 });
 
         // Should show "Back to T0002..." in the back bar
         const backBar = filePanel.locator(".panel-back-bar");
-        await expect(backBar).toBeVisible();
+        await expect(backBar).toBeVisible({ timeout: 5_000 });
         await expect(backBar).toContainText("T0002");
     });
 
@@ -94,7 +94,9 @@ test.describe("Task side panel", () => {
         // Stack a file panel on top
         await panel.locator(".task-attachment-name", { hasText: "design-brief.md" }).click();
         const filePanel = page.locator(".diff-panel");
-        await expect(filePanel).toHaveClass(/open/, { timeout: 3_000 });
+        // Wait for panel to slide in (webkit can be slower with transitions)
+        await expect(filePanel).toBeVisible({ timeout: 5_000 });
+        await expect(filePanel).toHaveClass(/open/, { timeout: 5_000 });
 
         // Click the backdrop (covers the area behind the panel)
         const backdrop = page.locator(".diff-backdrop.open");

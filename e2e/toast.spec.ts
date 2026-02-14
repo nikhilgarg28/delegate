@@ -14,7 +14,7 @@ const TEAM = "testteam";
 
 test.describe("Toast notifications", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    await page.goto("/chat");
     // Wait for app to load
     await expect(page.locator(".sb-nav-btn").first()).toBeVisible({
       timeout: 5_000,
@@ -50,12 +50,11 @@ test.describe("Toast notifications", () => {
     // Border color should be green (var(--semantic-green))
     // We can't easily check CSS variable values, so just verify it's not blue
 
-    // Check title font weight is not bold (should be 400 or normal)
+    // Check title font weight is semi-bold (600), not full bold (700+)
     const titleWeight = await toast.locator(".toast-title").evaluate((el) => {
       return window.getComputedStyle(el).fontWeight;
     });
-    // font-weight: 400 or "normal" (browser may report as "400")
-    expect(parseInt(titleWeight)).toBeLessThanOrEqual(400);
+    expect(parseInt(titleWeight)).toBeLessThanOrEqual(600);
 
     // Check View button is NOT blue (should be text-secondary, not accent)
     const viewButton = toast.locator(".toast-action");

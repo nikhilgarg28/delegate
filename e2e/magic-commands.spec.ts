@@ -29,7 +29,7 @@ async function fillChatInput(page, text) {
 
 test.describe("Magic command autocomplete", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    await page.goto("/chat");
     await expect(page.locator(".chat-input")).toBeVisible({ timeout: 5_000 });
   });
 
@@ -39,11 +39,13 @@ test.describe("Magic command autocomplete", () => {
     const dropdown = page.locator(".command-autocomplete");
     await expect(dropdown).toBeVisible({ timeout: 3_000 });
 
-    // Should show both /shell and /status commands
+    // Should show all commands (shell, status, diff, cost)
     const items = dropdown.locator(".command-autocomplete-item");
-    await expect(items).toHaveCount(2);
+    await expect(items).toHaveCount(4);
     await expect(dropdown.locator(".command-name", { hasText: "/shell" })).toBeVisible();
     await expect(dropdown.locator(".command-name", { hasText: "/status" })).toBeVisible();
+    await expect(dropdown.locator(".command-name", { hasText: "/diff" })).toBeVisible();
+    await expect(dropdown.locator(".command-name", { hasText: "/cost" })).toBeVisible();
   });
 
   test("autocomplete filters commands as user types", async ({ page }) => {
@@ -160,7 +162,7 @@ test.describe("Magic command autocomplete", () => {
 
 test.describe("Command hints", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    await page.goto("/chat");
     await expect(page.locator(".chat-input")).toBeVisible({ timeout: 5_000 });
   });
 
@@ -192,7 +194,7 @@ test.describe("Command hints", () => {
 
 test.describe("Shell command cwd visibility", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    await page.goto("/chat");
     await expect(page.locator(".chat-input")).toBeVisible({ timeout: 5_000 });
   });
 
@@ -213,19 +215,28 @@ test.describe("Shell command cwd visibility", () => {
   });
 
   test("cwd input is editable and persists across command edits", async ({ page }) => {
-    await fillChatInput(page, "/shell pwd");
+    const chatInput = page.locator(".chat-input");
+
+    // Use real keyboard input (not fillChatInput) to avoid Preact signal sync issues
+    await chatInput.click();
+    await page.keyboard.type("/shell pwd", { delay: 10 });
 
     const cwdInput = page.locator(".chat-cwd-input");
-    await expect(cwdInput).toBeVisible();
+    await expect(cwdInput).toBeVisible({ timeout: 3_000 });
 
     const initialValue = await cwdInput.inputValue();
     expect(initialValue).toBeTruthy();
 
+    // Change CWD
     await cwdInput.fill("/tmp");
     await expect(cwdInput).toHaveValue("/tmp");
 
-    // Type more in the command — cwd should persist
-    await fillChatInput(page, "/shell pwd && ls");
+    // Go back to chat input and modify the command
+    await chatInput.click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" && ls", { delay: 10 });
+
+    // CWD should persist
     await expect(cwdInput).toHaveValue("/tmp");
   });
 });

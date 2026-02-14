@@ -26,7 +26,7 @@ async function fillChatInput(page, text) {
 
 test.describe("Chat input UX", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    await page.goto("/chat");
     // Wait for the chat input (contentEditable div) to be visible
     await page.locator(".chat-input").waitFor({ state: "visible" });
   });

@@ -16,7 +16,7 @@ const TEAM = "testteam";
 
 test.describe("Smoke tests", () => {
   test("app loads and shows chat with messages", async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    await page.goto("/chat");
 
     // Sidebar should be visible with nav buttons
     await expect(page.locator(".sb-nav-btn").first()).toBeVisible();
@@ -31,14 +31,14 @@ test.describe("Smoke tests", () => {
   });
 
   test("tab switching works (Chat → Tasks → Agents)", async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    await page.goto("/chat");
 
     // Wait for initial load
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
 
     // Switch to Tasks tab
     await page.locator(".sb-nav-btn", { hasText: "Tasks" }).click();
-    await expect(page).toHaveURL(new RegExp(`/${TEAM}/tasks`));
+    await expect(page).toHaveURL(/\/tasks/);
 
     // Should see task rows (default filters hide "done" — only T0001, T0002)
     await expect(page.locator(".task-row").first()).toBeVisible({
@@ -48,7 +48,7 @@ test.describe("Smoke tests", () => {
 
     // Switch to Agents tab
     await page.locator(".sb-nav-btn", { hasText: "Agents" }).click();
-    await expect(page).toHaveURL(new RegExp(`/${TEAM}/agents`));
+    await expect(page).toHaveURL(/\/agents/);
 
     // Should see agent cards (edison, alice, bob)
     await expect(page.locator(".agent-card-rich").first()).toBeVisible({
@@ -57,11 +57,11 @@ test.describe("Smoke tests", () => {
 
     // Switch back to Chat
     await page.locator(".sb-nav-btn", { hasText: "Chat" }).click();
-    await expect(page).toHaveURL(new RegExp(`/${TEAM}/chat`));
+    await expect(page).toHaveURL(/\/chat/);
   });
 
   test("clicking a task opens the side panel", async ({ page }) => {
-    await page.goto(`/${TEAM}/tasks`);
+    await page.goto("/tasks");
 
     // Wait for task list to load
     await expect(page.locator(".task-row").first()).toBeVisible({

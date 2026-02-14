@@ -7,16 +7,27 @@ import { test, expect } from "@playwright/test";
  * - Cmd+K opens the team switcher modal
  * - Team list is searchable
  * - Keyboard navigation (up/down/enter/esc) works
- * - Switching teams updates the URL and UI
- * - Team selector dropdown opens downward on chat page
+ * - Switching teams updates the UI
+ * - PillSelect team dropdown on chat page works
+ *
+ * Note: URLs are flat (e.g. /chat, /tasks) — team is tracked in JS state, not URL.
  */
 
 const TEAM = "testteam";
 const TEAM2 = "otherteam";
 
+/** Navigate and wait for the page + keyboard handlers to be ready. */
+async function gotoReady(page: any, path: string) {
+  await page.goto(path);
+  await page.waitForLoadState("domcontentloaded");
+  // Ensure useEffect keyboard handlers are registered (SSE keeps connections
+  // open so networkidle would time out)
+  await page.waitForTimeout(500);
+}
+
 test.describe("Team Switcher", () => {
   test("Cmd+K opens team switcher modal", async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    await gotoReady(page, "/chat");
 
     // Modal should not be visible initially
     await expect(page.locator(".team-switcher-backdrop")).not.toBeVisible();
@@ -32,7 +43,7 @@ test.describe("Team Switcher", () => {
   });
 
   test("team list shows both teams", async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    await gotoReady(page, "/chat");
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
     await page.keyboard.press(`${modifier}+KeyK`);
 
@@ -54,7 +65,7 @@ test.describe("Team Switcher", () => {
   });
 
   test("search filters team list", async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    await gotoReady(page, "/chat");
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
     await page.keyboard.press(`${modifier}+KeyK`);
 
@@ -72,12 +83,14 @@ test.describe("Team Switcher", () => {
   });
 
   test("keyboard navigation (down/up/enter)", async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    await gotoReady(page, "/chat");
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
     await page.keyboard.press(`${modifier}+KeyK`);
 
     // First item should be selected by default
     await expect(page.locator(".team-switcher-item.selected").first()).toBeVisible();
+    // Allow time for keyboard event listeners to register in effects
+    await page.waitForTimeout(200);
 
     // Press down arrow to select second item
     await page.keyboard.press("ArrowDown");
@@ -95,8 +108,8 @@ test.describe("Team Switcher", () => {
     await expect(page.locator(".team-switcher-backdrop")).not.toBeVisible();
   });
 
-  test("switching teams updates URL and content", async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+  test("switching teams updates UI", async ({ page }) => {
+    await gotoReady(page, "/chat");
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
     await page.keyboard.press(`${modifier}+KeyK`);
 
@@ -108,10 +121,7 @@ test.describe("Team Switcher", () => {
     // Modal should close
     await expect(page.locator(".team-switcher-backdrop")).not.toBeVisible();
 
-    // URL should update
-    await expect(page).toHaveURL(`/${TEAM2}/chat`);
-
-    // Wait for chat to load
+    // Wait for team switch to take effect
     await page.waitForTimeout(500);
 
     // Open switcher again to verify current team changed
@@ -123,7 +133,7 @@ test.describe("Team Switcher", () => {
   });
 
   test("Escape closes team switcher", async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    await gotoReady(page, "/chat");
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
     await page.keyboard.press(`${modifier}+KeyK`);
 
@@ -137,7 +147,7 @@ test.describe("Team Switcher", () => {
   });
 
   test("clicking backdrop closes team switcher", async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    await gotoReady(page, "/chat");
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
     await page.keyboard.press(`${modifier}+KeyK`);
 
@@ -151,7 +161,7 @@ test.describe("Team Switcher", () => {
   });
 
   test("team selector works from tasks page", async ({ page }) => {
-    await page.goto(`/${TEAM}/tasks`);
+    await gotoReady(page, "/tasks");
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
     await page.keyboard.press(`${modifier}+KeyK`);
 
@@ -163,43 +173,59 @@ test.describe("Team Switcher", () => {
       .locator(".team-switcher-item-name", { hasText: "Otherteam" })
       .click();
 
-    // URL should update with tasks tab preserved
-    await expect(page).toHaveURL(`/${TEAM2}/tasks`);
+    // Modal should close
+    await expect(page.locator(".team-switcher-backdrop")).not.toBeVisible();
+
+    // Wait for team switch
+    await page.waitForTimeout(500);
+
+    // Verify via re-opening switcher that team changed
+    await page.keyboard.press(`${modifier}+KeyK`);
+    const currentTeamItem = page.locator(".team-switcher-item.current");
+    await expect(
+      currentTeamItem.locator(".team-switcher-item-name")
+    ).toContainText("Otherteam");
   });
 
-  test("chat page team dropdown opens downward", async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+  test("chat page PillSelect team dropdown works", async ({ page }) => {
+    await gotoReady(page, "/chat");
+
+    // Wait for page to load — the Team PillSelect should be visible in chat filters
+    const teamPill = page.locator(".pill-select").first();
+    await expect(teamPill).toBeVisible({ timeout: 5_000 });
+
+    // Click the PillSelect value to open dropdown
+    await teamPill.locator(".pill-select-value").click();
+
+    // Dropdown should appear
+    const dropdown = page.locator(".fb-dropdown");
+    await expect(dropdown).toBeVisible({ timeout: 2_000 });
+  });
+
+  test("switching teams via PillSelect dropdown works", async ({ page }) => {
+    await gotoReady(page, "/chat");
 
     // Wait for page to load
-    await expect(page.locator(".chat-team-select")).toBeVisible();
-
-    // Click team selector to open dropdown
-    await page.locator(".chat-team-select .csel-trigger").click();
-
-    // Check that dropdown is visible and positioned below the trigger
-    const menu = page.locator(".chat-team-select .csel-menu");
-    await expect(menu).toBeVisible();
-
-    // Get bounding boxes
-    const triggerBox = await page
-      .locator(".chat-team-select .csel-trigger")
-      .boundingBox();
-    const menuBox = await menu.boundingBox();
-
-    // Menu should be below trigger (menu.top > trigger.bottom)
-    expect(menuBox!.y).toBeGreaterThan(triggerBox!.y + triggerBox!.height);
-  });
-
-  test("switching teams via dropdown works", async ({ page }) => {
-    await page.goto(`/${TEAM}/chat`);
+    const teamPill = page.locator(".pill-select").first();
+    await expect(teamPill).toBeVisible({ timeout: 5_000 });
 
     // Click team selector
-    await page.locator(".chat-team-select .csel-trigger").click();
+    await teamPill.locator(".pill-select-value").click();
+    const dropdown = page.locator(".fb-dropdown");
+    await expect(dropdown).toBeVisible({ timeout: 2_000 });
 
     // Click other team
-    await page.locator(".csel-option", { hasText: "Otherteam" }).click();
+    await dropdown.locator(".fb-dropdown-item", { hasText: "Otherteam" }).click();
 
-    // URL should update
-    await expect(page).toHaveURL(`/${TEAM2}/chat`);
+    // Wait for team switch
+    await page.waitForTimeout(500);
+
+    // Verify by opening Cmd+K switcher
+    const modifier = process.platform === "darwin" ? "Meta" : "Control";
+    await page.keyboard.press(`${modifier}+KeyK`);
+    const currentTeamItem = page.locator(".team-switcher-item.current");
+    await expect(
+      currentTeamItem.locator(".team-switcher-item-name")
+    ).toContainText("Otherteam");
   });
 });

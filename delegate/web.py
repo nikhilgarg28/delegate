@@ -1203,8 +1203,8 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
             recent_messages = read_inbox(hc_home, team, human_name, unread_only=False)
             cutoff = now_utc - timedelta(minutes=15)
             recent_manager_msg = any(
-                m["sender"] == manager_name and
-                datetime.fromisoformat(m["created_at"].replace("Z", "+00:00")) > cutoff
+                m.sender == manager_name and
+                datetime.fromisoformat(m.time.replace("Z", "+00:00")) > cutoff
                 for m in recent_messages
             )
             if recent_manager_msg:
