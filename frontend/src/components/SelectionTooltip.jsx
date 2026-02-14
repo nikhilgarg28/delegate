@@ -98,8 +98,8 @@ export function SelectionTooltip({ containerRef, chatInputRef }) {
     const currentValue = (el.textContent || "").trim();
 
     const newValue = currentValue
-      ? currentValue + "\n\n" + blockquote + "\n\n"
-      : blockquote + "\n\n";
+      ? currentValue + "\n\n" + blockquote + "\n\n\n"
+      : blockquote + "\n\n\n";
 
     el.textContent = newValue;
 
