@@ -26,6 +26,7 @@ import { HelpOverlay } from "./components/HelpOverlay.jsx";
 import { NotificationBell } from "./components/NotificationBell.jsx";
 import { NotificationPopover } from "./components/NotificationPopover.jsx";
 import { TeamSwitcher } from "./components/TeamSwitcher.jsx";
+import { NoTeamsModal } from "./components/NoTeamsModal.jsx";
 import { showToast, showActionToast, showReturnToast } from "./toast.js";
 
 // ── Per-team backing stores (plain objects, not signals) ──
@@ -416,7 +417,7 @@ function App() {
   // Also uses useSignalEffect so it auto-tracks teams.value.
   useSignalEffect(() => {
     const list = teams.value;              // ← auto-tracked
-    if (!list || !list.length) return;
+    if (!list || list.length === 0) return;
 
     const connections = {};
 
@@ -594,6 +595,7 @@ function App() {
       <HelpOverlay />
       <NotificationPopover />
       <TeamSwitcher open={teamSwitcherOpen.value} onClose={() => teamSwitcherOpen.value = false} />
+      <NoTeamsModal />
       <ToastContainer />
     </>
   );

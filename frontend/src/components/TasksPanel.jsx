@@ -21,7 +21,7 @@ export function TasksPanel() {
   const team = currentTeam.value;
   const allTasks = tasks.value;
   const teamFilter = taskTeamFilter.value;
-  const allTeams = teams.value;
+  const allTeams = teams.value || [];
 
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [searchQuery, setSearchQuery] = useState("");

@@ -12,7 +12,7 @@ export function TeamSwitcher({ open, onClose }) {
   const inputRef = useRef();
   const listRef = useRef();
 
-  const teamList = teams.value;
+  const teamList = teams.value || [];
   const allTasks = tasks.value;
   const allAgents = agents.value;
 

@@ -6,7 +6,7 @@ import { signal, computed } from "@preact/signals";
 
 // ── Core data ──
 export const currentTeam = signal("");
-export const teams = signal([]);
+export const teams = signal(null);
 export const humanName = signal("human");
 /** @deprecated Use humanName instead */
 export const bossName = humanName;

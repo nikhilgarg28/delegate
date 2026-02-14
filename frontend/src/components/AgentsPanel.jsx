@@ -10,7 +10,7 @@ import { PillSelect } from "./PillSelect.jsx";
 
 export function AgentsPanel() {
   const team = currentTeam.value;
-  const teamList = teams.value;
+  const teamList = teams.value || [];
   const allAgents = agents.value;
   const allTasks = tasks.value;
   const statsMap = agentStatsMap.value;

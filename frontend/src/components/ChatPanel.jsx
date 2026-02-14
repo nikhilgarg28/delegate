@@ -280,7 +280,7 @@ export function ChatPanel() {
   const team = currentTeam.value;
   const allAgents = agents.value;
   const agNames = knownAgentNames.value;
-  const teamList = teams.value;
+  const teamList = teams.value || [];
 
   const [msgs, setMsgs] = useState([]);
   const [filterFrom, setFilterFrom] = useState("");
