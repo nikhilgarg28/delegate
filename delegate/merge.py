@@ -5,7 +5,13 @@ The merge sequence for a task in ``in_approval`` with an approved review
 
 1. Create a disposable worktree + temp branch from the feature branch.
 2. ``git rebase --onto main <base_sha> <temp>``  — rebase in the temp worktree.
-3. If conflict: remove temp worktree/branch, escalate to manager.
+3. If rebase conflicts:
+   a. **Squash-reapply fallback**: create a fresh worktree from main,
+      ``git diff main...<feature>`` and ``git apply``.  This often succeeds
+      when commit-by-commit rebase fails (intermediate conflicts).
+   b. If squash-apply also fails (true content conflict): capture the
+      conflicting hunks, escalate to the manager with detailed context
+      and ``git reset --soft`` instructions for the DRI.
 4. Run pre-merge script / tests inside the temp worktree.
 5. If tests fail: remove temp worktree/branch, escalate to manager.
 6. Fast-forward main:
@@ -74,6 +80,7 @@ class MergeFailureReason(enum.Enum):
     """
 
     REBASE_CONFLICT   = ("Rebase conflict", False)
+    SQUASH_CONFLICT   = ("True content conflict", False)
     PRE_MERGE_FAILED  = ("Pre-merge checks failed", False)
     WORKTREE_ERROR    = ("Could not create merge worktree", False)
     DIRTY_MAIN        = ("main has uncommitted changes", True)
@@ -94,11 +101,17 @@ class MergeResult:
         success: bool,
         message: str,
         reason: MergeFailureReason | None = None,
+        conflict_context: str = "",
     ):
         self.task_id = task_id
         self.success = success
         self.message = message
         self.reason = reason  # None on success
+        self.conflict_context = conflict_context  # Rich hunk details for SQUASH_CONFLICT
+
+    @property
+    def retryable(self) -> bool:
+        return self.reason.retryable if self.reason else False
 
     def __repr__(self) -> str:
         status = "OK" if self.success else "FAIL"
@@ -222,6 +235,135 @@ def _rebase_onto_main(wt_dir: str, base_sha: str | None = None) -> tuple[bool, s
         return False, result.stderr + result.stdout
 
     return True, result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Squash-reapply fallback (runs in a fresh temp worktree from main)
+# ---------------------------------------------------------------------------
+
+def _squash_reapply(
+    repo_dir: str,
+    branch: str,
+    wt_dir: str,
+) -> tuple[bool, str]:
+    """Attempt to apply the feature branch's total diff onto main as one commit.
+
+    When rebase fails due to intermediate commit conflicts, the total diff
+    often still applies cleanly.  This creates a single squashed commit on
+    top of main containing all the feature branch changes.
+
+    The worktree at *wt_dir* must already be checked out at main (or a temp
+    branch rooted at main).
+
+    Returns ``(success, output)``.  On failure, *output* contains the
+    ``git apply`` error which includes the conflicting file paths.
+    """
+    # Get the combined diff: main...branch (three-dot = changes on branch
+    # since the merge-base, i.e. the feature's net contribution)
+    diff_result = _run_git(["diff", f"main...{branch}"], cwd=repo_dir)
+    if diff_result.returncode != 0:
+        return False, f"Could not compute diff: {diff_result.stderr}"
+
+    patch = diff_result.stdout
+    if not patch.strip():
+        # No diff — nothing to apply (branch is already at main)
+        return True, "No changes to apply"
+
+    # Apply the patch inside the temp worktree
+    apply_result = subprocess.run(
+        ["git", "apply", "--index", "--3way"],
+        cwd=wt_dir,
+        input=patch,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if apply_result.returncode != 0:
+        return False, apply_result.stderr + apply_result.stdout
+
+    # Commit the applied changes
+    commit_result = _run_git(
+        ["commit", "-m", f"squash-reapply: apply {branch} onto main"],
+        cwd=wt_dir,
+    )
+    if commit_result.returncode != 0:
+        return False, f"Commit after apply failed: {commit_result.stderr}"
+
+    return True, commit_result.stdout
+
+
+def _capture_conflict_hunks(
+    repo_dir: str,
+    branch: str,
+    base_sha: str | None = None,
+) -> str:
+    """Capture human-readable conflict context when both rebase and squash fail.
+
+    Identifies the specific files where the feature branch and main diverge
+    on the same lines, and extracts both sides of the conflicting hunks.
+
+    Returns a formatted string suitable for embedding in a notification
+    message to the manager/delegate.
+    """
+    # Find the merge base
+    mb_ref = base_sha or "main"
+    merge_base_result = _run_git(["merge-base", "main", branch], cwd=repo_dir)
+    if merge_base_result.returncode == 0:
+        mb_ref = merge_base_result.stdout.strip()
+
+    # What changed on main since the merge-base
+    main_diff = _run_git(["diff", "--name-only", f"{mb_ref}..main"], cwd=repo_dir)
+    main_files = set(main_diff.stdout.strip().splitlines()) if main_diff.returncode == 0 else set()
+
+    # What changed on the feature branch since the merge-base
+    branch_diff = _run_git(["diff", "--name-only", f"{mb_ref}..{branch}"], cwd=repo_dir)
+    branch_files = set(branch_diff.stdout.strip().splitlines()) if branch_diff.returncode == 0 else set()
+
+    # Overlapping files are the conflict candidates
+    overlap = sorted(main_files & branch_files)
+    if not overlap:
+        return "Could not identify specific conflicting files."
+
+    parts = [f"Conflicting files ({len(overlap)}):"]
+    for f in overlap[:10]:  # cap at 10 to keep message reasonable
+        parts.append(f"  - {f}")
+
+        # Show the diff hunk from main's side for this file
+        main_hunk = _run_git(
+            ["diff", f"{mb_ref}..main", "--", f],
+            cwd=repo_dir,
+        )
+        # Show the diff hunk from the branch side for this file
+        branch_hunk = _run_git(
+            ["diff", f"{mb_ref}..{branch}", "--", f],
+            cwd=repo_dir,
+        )
+
+        if main_hunk.returncode == 0 and main_hunk.stdout.strip():
+            # Truncate to keep message manageable
+            hunk_lines = main_hunk.stdout.strip().splitlines()
+            preview = "\n".join(hunk_lines[:30])
+            if len(hunk_lines) > 30:
+                preview += f"\n    ... ({len(hunk_lines) - 30} more lines)"
+            parts.append(f"    MAIN changes:\n{_indent(preview, 6)}")
+
+        if branch_hunk.returncode == 0 and branch_hunk.stdout.strip():
+            hunk_lines = branch_hunk.stdout.strip().splitlines()
+            preview = "\n".join(hunk_lines[:30])
+            if len(hunk_lines) > 30:
+                preview += f"\n    ... ({len(hunk_lines) - 30} more lines)"
+            parts.append(f"    BRANCH changes:\n{_indent(preview, 6)}")
+
+    if len(overlap) > 10:
+        parts.append(f"  ... and {len(overlap) - 10} more files")
+
+    return "\n".join(parts)
+
+
+def _indent(text: str, spaces: int) -> str:
+    """Indent each line of *text* by *spaces* spaces."""
+    prefix = " " * spaces
+    return "\n".join(prefix + line for line in text.splitlines())
 
 
 # ---------------------------------------------------------------------------
@@ -528,17 +670,84 @@ def merge_task(
         base_sha = base_sha_dict.get(repo_name, "")
         ok, output = _rebase_onto_main(wt_str, base_sha=base_sha)
         if not ok:
+            # Rebase failed — try squash-reapply fallback.
+            # The temp worktree still has the aborted rebase state.
+            # Remove it and create a fresh one rooted at main.
             _remove_temp_worktree(repo_str, wt_path, temp_branch)
+
             log_event(
                 hc_home, team,
-                f"{format_task_id(task_id)} merge conflict during rebase ({repo_name})",
+                f"{format_task_id(task_id)} rebase conflict in {repo_name}, "
+                f"trying squash-reapply fallback",
                 task_id=task_id,
             )
-            return MergeResult(
-                task_id, False,
-                f"Rebase conflict in {repo_name}: {output[:200]}",
-                reason=MergeFailureReason.REBASE_CONFLICT,
+            logger.info(
+                "%s: rebase failed for %s, attempting squash-reapply",
+                format_task_id(task_id), repo_name,
             )
+
+            # Create a fresh temp worktree from main for the squash
+            squash_uid = uuid.uuid4().hex[:12]
+            squash_wt_path = _merge_worktree_dir(hc_home, team, squash_uid, task_id)
+            squash_wt_path.parent.mkdir(parents=True, exist_ok=True)
+            squash_branch = f"_merge/{squash_uid}/squash-{format_task_id(task_id)}"
+
+            create_result = _run_git(
+                ["worktree", "add", "-b", squash_branch, str(squash_wt_path), "main"],
+                cwd=repo_str,
+            )
+            if create_result.returncode != 0:
+                log_event(
+                    hc_home, team,
+                    f"{format_task_id(task_id)} squash-reapply worktree creation failed ({repo_name})",
+                    task_id=task_id,
+                )
+                return MergeResult(
+                    task_id, False,
+                    f"Rebase conflict in {repo_name} and could not create squash worktree: "
+                    f"{create_result.stderr[:200]}",
+                    reason=MergeFailureReason.REBASE_CONFLICT,
+                )
+
+            squash_ok, squash_output = _squash_reapply(
+                repo_str, branch, str(squash_wt_path),
+            )
+
+            if not squash_ok:
+                # True content conflict — capture detailed hunk context
+                _remove_temp_worktree(repo_str, squash_wt_path, squash_branch)
+
+                conflict_ctx = _capture_conflict_hunks(
+                    repo_str, branch, base_sha=base_sha,
+                )
+                log_event(
+                    hc_home, team,
+                    f"{format_task_id(task_id)} true content conflict in {repo_name}, "
+                    f"squash-reapply also failed",
+                    task_id=task_id,
+                )
+                return MergeResult(
+                    task_id, False,
+                    f"True content conflict in {repo_name}: {squash_output[:200]}",
+                    reason=MergeFailureReason.SQUASH_CONFLICT,
+                    conflict_context=conflict_ctx,
+                )
+
+            # Squash succeeded — use this worktree/branch going forward
+            log_event(
+                hc_home, team,
+                f"{format_task_id(task_id)} squash-reapply succeeded for {repo_name}",
+                task_id=task_id,
+            )
+            logger.info(
+                "%s: squash-reapply succeeded for %s",
+                format_task_id(task_id), repo_name,
+            )
+            # Replace the temp worktree tracking with the squash one
+            wt_path = squash_wt_path
+            temp_branch = squash_branch
+            temp_worktrees[repo_name] = (wt_path, temp_branch)
+            wt_str = str(wt_path)
 
         # Step 3: Run pre-merge script / tests inside the temp worktree.
         if not skip_tests:
@@ -652,6 +861,7 @@ def _handle_merge_failure(
     notify_conflict(
         hc_home, team, task,
         conflict_details=f"{detail}: {result.message[:500]}",
+        conflict_context=result.conflict_context,
     )
 
 

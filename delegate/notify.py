@@ -141,17 +141,24 @@ def notify_conflict(
     team: str,
     task: dict,
     conflict_details: str = "",
+    conflict_context: str = "",
 ) -> int | None:
     """Send a merge conflict notification to the manager.
 
     Called when the daemon merge worker detects a merge failure and sets
     the task status to 'merge_failed'.
 
+    When *conflict_context* is provided (from ``_capture_conflict_hunks``),
+    the notification includes specific file/hunk details and instructions
+    for the DRI to resolve using ``git reset --soft`` (since agents cannot
+    run ``git rebase``).
+
     Args:
         hc_home: Delegate home directory.
         team: Team name.
         task: The task dict (must include id, title, branch, assignee).
-        conflict_details: Details about the conflict (files, error output, etc.).
+        conflict_details: Short summary (error output, reason).
+        conflict_context: Detailed conflict hunks from both sides.
 
     Returns:
         The delivered message id, or None if delivery failed.
@@ -162,19 +169,55 @@ def notify_conflict(
     title = task.get("title", "(untitled)")
     branch = task.get("branch", "(no branch)")
     assignee = task.get("assignee", "(unassigned)")
+    dri = task.get("dri", assignee)
 
-    body = (
-        f"MERGE_CONFLICT: {format_task_id(task_id)}\n"
-        f"\n"
-        f"Task: {format_task_id(task_id)} — {title}\n"
-        f"Branch: {branch}\n"
-        f"Assignee: {assignee}\n"
-        f"Conflict details: {conflict_details or '(no details available)'}\n"
-        f"\n"
-        f"Suggested action:\n"
-        f"  - Assign back to {assignee or 'the original author'} to rebase "
-        f"and resolve conflicts, then re-submit for review"
-    )
+    if conflict_context:
+        # Rich notification with conflict hunks and reset --soft instructions
+        body = (
+            f"MERGE_CONFLICT: {format_task_id(task_id)}\n"
+            f"\n"
+            f"Task: {format_task_id(task_id)} — {title}\n"
+            f"Branch: {branch}\n"
+            f"DRI: {dri}\n"
+            f"\n"
+            f"The merge worker tried both rebase and squash-reapply, but there\n"
+            f"are true content conflicts — the same files were modified on both\n"
+            f"main and the feature branch.\n"
+            f"\n"
+            f"{conflict_context}\n"
+            f"\n"
+            f"RESOLUTION STEPS (for {dri}):\n"
+            f"Since agents cannot run git rebase, use reset --soft instead:\n"
+            f"\n"
+            f"  cd <worktree for {format_task_id(task_id)}>\n"
+            f"  git fetch origin main   # (if needed, ensure main ref is current)\n"
+            f"  git reset --soft main   # moves HEAD to main, keeps all changes staged\n"
+            f"  # Now resolve any staging conflicts in the files listed above.\n"
+            f"  # The staged changes contain ALL of the feature's work.\n"
+            f"  # Edit conflicting files so they work with the current main.\n"
+            f"  git add -A\n"
+            f"  git commit -m \"rebase {format_task_id(task_id)} onto main\"\n"
+            f"\n"
+            f"Then update the task's base_sha to the current main tip:\n"
+            f"  python -m delegate.task update-base-sha <home> <team> {task_id}\n"
+            f"\n"
+            f"ACTION: Assign this task back to {dri}, send them these instructions,\n"
+            f"and transition the task to in_progress. After they resolve and commit,\n"
+            f"re-submit for review."
+        )
+    else:
+        body = (
+            f"MERGE_CONFLICT: {format_task_id(task_id)}\n"
+            f"\n"
+            f"Task: {format_task_id(task_id)} — {title}\n"
+            f"Branch: {branch}\n"
+            f"DRI: {dri}\n"
+            f"Conflict details: {conflict_details or '(no details available)'}\n"
+            f"\n"
+            f"Suggested action:\n"
+            f"  - Assign back to {dri} to resolve conflicts using\n"
+            f"    git reset --soft main, then re-submit for review"
+        )
 
     msg = Message(
         sender=sender,

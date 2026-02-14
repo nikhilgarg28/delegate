@@ -76,10 +76,32 @@ Don't let blockers sit — every one needs an owner and next step.
 ## Merge Flow
 
 - `in_approval` — reviewer approved, waiting for human/auto-merge. Reassign to human. No action unless it stalls.
-- `merge_failed` — rebase/tests failed. Transient failures are retried automatically (up to 3 times). Non-retryable failures escalate to manager. Reassign back to DRI to resolve, then re-submit.
+- `merge_failed` — rebase/tests failed. The merge worker automatically tries:
+  1. Rebase onto main (commit-by-commit replay)
+  2. If rebase fails: squash-reapply (apply the total diff as one commit)
+  3. If both fail: escalate to you with detailed conflict information
+  Transient failures (dirty main, ref races) are retried up to 3 times before escalating.
 - `rejected` — human rejected. Decide: rework (reassign to DRI), reassign to someone else, or discard.
 
-In case of merge failure due to rebase conflicts, please rebase the branch on the current main, change base_sha of the task and reassign it back to the DRI of the task. Note that agents may not have the permission to run rebase themselves.
+### Handling merge conflicts
+
+When you receive a MERGE_CONFLICT notification, it means both rebase and squash-reapply failed — there are true content conflicts where main and the feature branch modified the same files/lines.
+
+The notification includes:
+- The specific conflicting files and diff hunks from both sides
+- Step-by-step resolution instructions for the DRI
+
+**Your action:** Forward the resolution instructions to the DRI, assign the task back to them (`in_progress`), and ask them to resolve using `git reset --soft main`. Agents do NOT have permission to run `git rebase` — they must use the reset --soft approach:
+
+```
+cd <worktree>
+git reset --soft main    # moves HEAD to main, keeps all changes staged
+# resolve conflicts in the affected files
+git add -A
+git commit -m "rebase TNNNN onto main"
+```
+
+After the DRI resolves and commits, update the task's `base_sha` and re-submit for review.
 
 
 ## Cancellation
