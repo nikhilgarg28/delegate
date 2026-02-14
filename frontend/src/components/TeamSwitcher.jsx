@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "preact/hooks";
+import { useState, useRef, useEffect, useCallback, useMemo } from "preact/hooks";
 import { currentTeam, teams, tasks, agents, navigate, activeTab, taskTeamFilter } from "../state.js";
 import { cap } from "../utils.js";
 
@@ -18,25 +18,34 @@ export function TeamSwitcher({ open, onClose }) {
 
   // Filter teams by search query
   // For current team, use live data (more accurate). For other teams, use /teams snapshot.
-  const filteredTeams = teamList
-    .filter(t => {
-      const name = typeof t === "object" ? t.name : t;
-      return name.toLowerCase().includes(query.toLowerCase());
-    })
-    .map(t => {
-      const teamObj = typeof t === "object" ? t : { name: t };
-      const name = teamObj.name;
-      const isCurrent = name === currentTeam.value;
-      return {
-        name,
-        agentCount: isCurrent ? allAgents.length : (teamObj.agent_count || 0),
-        taskCount: isCurrent
-          ? allTasks.filter(task => ["todo", "in_progress", "in_review"].includes(task.status)).length
-          : (teamObj.task_count || 0),
-        humanCount: teamObj.human_count || 0,
-        isCurrent,
-      };
-    });
+  // Memoized to prevent re-creating array on every render (fixes arrow key delay)
+  const filteredTeams = useMemo(() => {
+    return teamList
+      .filter(t => {
+        const name = typeof t === "object" ? t.name : t;
+        return name.toLowerCase().includes(query.toLowerCase());
+      })
+      .map(t => {
+        const teamObj = typeof t === "object" ? t : { name: t };
+        const name = teamObj.name;
+        const isCurrent = name === currentTeam.value;
+        return {
+          name,
+          agentCount: isCurrent ? allAgents.length : (teamObj.agent_count || 0),
+          taskCount: isCurrent
+            ? allTasks.filter(task => ["todo", "in_progress", "in_review"].includes(task.status)).length
+            : (teamObj.task_count || 0),
+          humanCount: teamObj.human_count || 0,
+          isCurrent,
+        };
+      });
+  }, [teamList, allTasks, allAgents, query]);
+
+  // Refs for keyboard handler to avoid re-registration on every render
+  const filteredTeamsRef = useRef(filteredTeams);
+  filteredTeamsRef.current = filteredTeams;
+  const selectedIndexRef = useRef(selectedIndex);
+  selectedIndexRef.current = selectedIndex;
 
   // Focus input when modal opens
   useEffect(() => {
@@ -47,29 +56,31 @@ export function TeamSwitcher({ open, onClose }) {
     }
   }, [open]);
 
-  // Close on Escape or outside click
+  // Keyboard navigation - only re-register when modal opens/closes
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e) => {
+      const ft = filteredTeamsRef.current;
+      const si = selectedIndexRef.current;
       if (e.key === "Escape") {
         e.preventDefault();
         onClose();
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        setSelectedIndex(i => Math.min(i + 1, filteredTeams.length - 1));
+        setSelectedIndex(i => Math.min(i + 1, ft.length - 1));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         setSelectedIndex(i => Math.max(i - 1, 0));
       } else if (e.key === "Enter") {
         e.preventDefault();
-        if (filteredTeams[selectedIndex]) {
-          selectTeam(filteredTeams[selectedIndex].name);
+        if (ft[si]) {
+          selectTeam(ft[si].name);
         }
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, selectedIndex, filteredTeams]);
+  }, [open, onClose, selectTeam]);
 
   // Scroll selected item into view
   useEffect(() => {
