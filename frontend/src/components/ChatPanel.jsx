@@ -651,7 +651,9 @@ export function ChatPanel() {
         if (!cmd.args) {
           result = { error: 'Usage: /shell [command]', exit_code: -1 };
         } else {
-          result = await api.execShell(team, cmd.args, commandCwd.value || undefined);
+          // Strip -d <path> from args since it's already captured in commandCwd
+          const shellArgs = cmd.args.replace(/-d\s+\S+/, '').trim();
+          result = await api.execShell(team, shellArgs, commandCwd.value || undefined);
         }
       } else if (cmd.name === 'status') {
         // Status is client-side, build result from API calls
