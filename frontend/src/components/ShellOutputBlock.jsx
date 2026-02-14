@@ -77,9 +77,6 @@ export function ShellOutputBlock({ result }) {
           </div>
         )}
       </div>
-      <div class={`shell-output-footer ${hasError ? 'error' : 'success'}`}>
-        exit: {exit_code}
-      </div>
     </div>
   );
 }

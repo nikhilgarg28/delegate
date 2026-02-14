@@ -2461,22 +2461,6 @@ select option:hover {
   word-break: break-all;
 }
 
-.shell-output-footer {
-  padding: 6px 12px;
-  background: var(--bg-surface);
-  border-top: 1px solid var(--border-subtle);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.shell-output-footer.success {
-  color: var(--semantic-green);
-}
-
-.shell-output-footer.error {
-  color: var(--semantic-red);
-}
-
 .shell-output-loading {
   padding: 24px;
   text-align: center;
