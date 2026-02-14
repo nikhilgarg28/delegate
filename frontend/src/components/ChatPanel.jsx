@@ -549,19 +549,26 @@ export function ChatPanel() {
       return;
     }
 
-    // Regular message flow
-    if (!recipient) return;
+    // Regular message flow — auto-select recipient if not yet set
+    let target = recipient;
+    if (!target) {
+      const cur = agents.value;
+      const mgr = cur.find(a => a.role === "manager");
+      target = mgr ? mgr.name : cur.length ? cur[0].name : null;
+      if (target) setRecipient(target);
+    }
+    if (!target) return;
     cooldownRef.current = true;
     setTimeout(() => { cooldownRef.current = false; }, 4000);
     try {
-      await api.sendMessage(team, recipient, val);
+      await api.sendMessage(team, target, val);
 
       // Optimistic insert: add message to local state immediately
       const now = new Date().toISOString();
       const optimistic = {
         id: `optimistic-${Date.now()}`,
         sender: humanName.value || "human",
-        recipient: recipient,
+        recipient: target,
         content: val,
         created_at: now,
         timestamp: now,
