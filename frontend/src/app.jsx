@@ -97,11 +97,24 @@ function App() {
         return;
       }
       if (isInputFocused()) return;
-      // / should only work when no overlays (to avoid conflicts with typing)
-      if (e.key === "/" && !isHelpOpen() && panelStack.value.length === 0) {
+      // r focuses chat input (when on Chat tab)
+      if (e.key === "r" && !isHelpOpen() && panelStack.value.length === 0) {
         e.preventDefault();
         const chatInput = document.querySelector(".chat-input-box textarea");
         if (chatInput) chatInput.focus();
+        return;
+      }
+      // / focuses search (when on Chat tab)
+      if (e.key === "/" && !isHelpOpen() && panelStack.value.length === 0) {
+        e.preventDefault();
+        const searchExpandBtn = document.querySelector(".filter-search-icon-btn");
+        const searchInput = document.querySelector(".filter-search");
+        if (searchExpandBtn) {
+          searchExpandBtn.click();
+          setTimeout(() => searchInput?.focus(), 50);
+        } else if (searchInput) {
+          searchInput.focus();
+        }
         return;
       }
       // Tab navigation and sidebar toggle work even with side panels open
@@ -119,8 +132,8 @@ function App() {
       if (e.key === "a" && !isHelpOpen()) { navigateTab("agents"); return; }
       if (e.key === "m" && !isHelpOpen()) {
         e.preventDefault();
-        isMuted.value = !isMuted.value;
-        localStorage.setItem("delegate-muted", isMuted.value ? "true" : "false");
+        const micBtn = document.querySelector(".chat-tool-btn[title*='recording'], .chat-tool-btn[title='Voice input']");
+        if (micBtn) micBtn.click();
         return;
       }
       if (e.key === "?" && !isInputFocused()) { helpOverlayOpen.value = !helpOverlayOpen.value; return; }

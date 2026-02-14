@@ -6,14 +6,15 @@ export function HelpOverlay() {
   if (!isOpen) return null;
 
   const shortcuts = [
-    { key: "/", description: "Focus chat input" },
+    { key: "r", description: "Focus chat input" },
+    { key: "/", description: "Search messages" },
     { key: "Esc", description: "Close panels / defocus chat input" },
     { key: "s", description: "Toggle sidebar" },
     { key: "n", description: "Toggle notifications" },
     { key: "c", description: "Go to Chat" },
     { key: "t", description: "Go to Tasks" },
     { key: "a", description: "Go to Agents" },
-    { key: "m", description: "Toggle audio mute" },
+    { key: "m", description: "Toggle microphone" },
     { key: "?", description: "Show/hide keyboard shortcuts" },
   ];
 

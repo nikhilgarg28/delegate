@@ -78,17 +78,17 @@ async function testShortcuts() {
   results.push({ shortcut: 'n', action: 'Close notifications', passed: !notifOpen });
   console.log(`  Close: ${!notifOpen ? 'PASS' : 'FAIL'}`);
 
-  // Test 5: / - Focus chat input
-  console.log('\nTest 5: / - Focus chat input');
+  // Test 5: r - Focus chat input
+  console.log('\nTest 5: r - Focus chat input');
   await page.keyboard.press('c'); // Go to chat tab first
   await page.waitForTimeout(200);
-  await page.keyboard.press('/');
+  await page.keyboard.press('r');
   await page.waitForTimeout(200);
   let chatInputFocused = await page.evaluate(() => {
     const el = document.activeElement;
     return el && el.tagName === 'TEXTAREA' && el.closest('.chat-input-box');
   });
-  results.push({ shortcut: '/', action: 'Focus chat input', passed: chatInputFocused });
+  results.push({ shortcut: 'r', action: 'Focus chat input', passed: chatInputFocused });
   console.log(`  Focus: ${chatInputFocused ? 'PASS' : 'FAIL'}`);
 
   // Test 6: Esc - Blur input
@@ -101,13 +101,16 @@ async function testShortcuts() {
   results.push({ shortcut: 'Esc', action: 'Blur input', passed: inputBlurred });
   console.log(`  Blur: ${inputBlurred ? 'PASS' : 'FAIL'}`);
 
-  // Test 7: m - Toggle audio mute
-  console.log('\nTest 7: m - Toggle audio mute');
+  // Test 7: m - Toggle microphone
+  console.log('\nTest 7: m - Toggle microphone');
   await page.keyboard.press('m');
   await page.waitForTimeout(200);
-  let muteIcon = await page.locator('.mute-icon.active').isVisible().catch(() => false);
-  results.push({ shortcut: 'm', action: 'Toggle mute', passed: true }); // Hard to verify without audio context
-  console.log(`  Toggle: PASS (visual check)`);
+  let micToggled = await page.evaluate(() => {
+    const micBtn = document.querySelector('.chat-tool-btn[title*="recording"], .chat-tool-btn[title="Voice input"]');
+    return micBtn !== null;
+  });
+  results.push({ shortcut: 'm', action: 'Toggle microphone', passed: micToggled }); // Hard to verify state without checking recording
+  console.log(`  Toggle: ${micToggled ? 'PASS' : 'FAIL'} (button exists)`);
 
   // Test 8: Shortcuts while panel is open
   console.log('\nTest 8: Shortcuts while side panel is open');

@@ -9,8 +9,9 @@ import { test, expect } from "@playwright/test";
  *   - a : Navigate to Agents tab
  *   - s : Toggle sidebar collapse
  *   - n : Toggle notifications
- *   - m : Toggle audio mute
- *   - / : Focus chat input
+ *   - m : Toggle microphone
+ *   - r : Focus chat input
+ *   - / : Search messages
  *   - ? : Toggle help overlay
  *   - Esc : Close panels / blur input
  *
@@ -107,7 +108,7 @@ test.describe("Keyboard shortcuts", () => {
     await expect(helpOverlay).not.toBeVisible();
   });
 
-  test("/ focuses chat input", async ({ page }) => {
+  test("r focuses chat input", async ({ page }) => {
     await page.goto(`/${TEAM}/chat`);
     // Wait for page to be ready (keyboard handler registered in useEffect)
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
@@ -116,9 +117,24 @@ test.describe("Keyboard shortcuts", () => {
     const chatInput = page.locator('textarea[placeholder="Send a message..."]');
     await expect(chatInput).not.toBeFocused();
 
-    // Press '/' to focus
-    await page.keyboard.press("/");
+    // Press 'r' to focus
+    await page.keyboard.press("r");
     await expect(chatInput).toBeFocused();
+  });
+
+  test("/ focuses search input", async ({ page }) => {
+    await page.goto(`/${TEAM}/chat`);
+    // Wait for page to be ready (keyboard handler registered in useEffect)
+    await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
+
+    // Search input should not be focused initially
+    const searchInput = page.locator(".filter-search");
+    await expect(searchInput).not.toBeFocused();
+
+    // Press '/' to focus search
+    await page.keyboard.press("/");
+    await waitForEffects(page);
+    await expect(searchInput).toBeFocused();
   });
 
   test("Escape blurs chat input when focused", async ({ page }) => {
@@ -126,9 +142,9 @@ test.describe("Keyboard shortcuts", () => {
     // Wait for page to be ready (keyboard handler registered in useEffect)
     await expect(page.locator(".sb-nav-btn.active")).toContainText("Chat");
 
-    // Focus the chat input with '/'
+    // Focus the chat input with 'r'
     const chatInput = page.locator('textarea[placeholder="Send a message..."]');
-    await page.keyboard.press("/");
+    await page.keyboard.press("r");
     await expect(chatInput).toBeFocused();
 
     // Press Escape to blur
