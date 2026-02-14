@@ -2707,6 +2707,102 @@ select option:hover {
   color: var(--text-heading);
 }
 
+/* Cost block */
+.cost-block {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.cost-block.loading,
+.cost-block.error {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.cost-header {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-heading);
+  margin-bottom: 16px;
+}
+
+.cost-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cost-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cost-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-heading);
+  margin-bottom: 4px;
+}
+
+.cost-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.cost-label {
+  min-width: 90px;
+  color: var(--text-secondary);
+}
+
+.cost-amount {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.cost-task-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.cost-task-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+  min-width: 50px;
+}
+
+.cost-task-id:hover {
+  text-decoration: underline;
+}
+
+.cost-task-title {
+  flex: 1;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cost-task-amount {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-heading);
+  font-weight: 600;
+  margin-left: auto;
+}
+
 /* Diff command block */
 .diff-command-block {
   background: var(--bg-surface);

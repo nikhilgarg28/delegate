@@ -23,6 +23,7 @@ import { CommandAutocomplete } from "./CommandAutocomplete.jsx";
 import { ShellOutputBlock } from "./ShellOutputBlock.jsx";
 import { StatusBlock } from "./StatusBlock.jsx";
 import { DiffCommandBlock } from "./DiffCommandBlock.jsx";
+import { CostBlock } from "./CostBlock.jsx";
 import { parseCommand, filterCommands, COMMANDS } from "../commands.js";
 
 // ── Command message wrapper to track error state ──
@@ -51,6 +52,7 @@ function CommandMessage({ message, parsed }) {
       {parsed?.name === 'diff' && !message.result?.error && (
         <DiffCommandBlock result={message.result} />
       )}
+      {parsed?.name === 'cost' && <CostBlock result={message.result} />}
     </div>
   );
 }
@@ -718,8 +720,10 @@ export function ChatPanel() {
             }
           }
         }
+      } else if (cmd.name === 'cost') {
+        result = await api.fetchCostSummary(team);
       } else {
-        result = { error: `Unknown command: /${cmd.name}. Available: /shell, /status, /diff`, exit_code: -1 };
+        result = { error: `Unknown command: /${cmd.name}. Available: /shell, /status, /diff, /cost`, exit_code: -1 };
       }
 
       // Persist to DB

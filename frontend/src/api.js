@@ -270,6 +270,11 @@ export async function saveCommand(team, command, result) {
   return r.json();
 }
 
+export async function fetchCostSummary(team) {
+  const r = await fetch(`/teams/${team}/cost-summary`);
+  return r.ok ? r.json() : null;
+}
+
 // --- Global task endpoints (no team context needed) ---
 
 export async function fetchTaskStatsGlobal(taskId) {

@@ -20,6 +20,11 @@ export const COMMANDS = {
     description: 'Show task diff',
     usage: '/diff [task_id]',
   },
+  cost: {
+    name: 'cost',
+    description: 'Show cost summary',
+    usage: '/cost',
+  },
 };
 
 /**

@@ -1239,6 +1239,84 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         )
         return {"status": "sent"}
 
+    @app.get("/teams/{team}/cost-summary")
+    def get_cost_summary(team: str):
+        """Return cost analytics: today, this week, and top tasks by cost."""
+        conn = get_connection(hc_home, team)
+        now_utc = datetime.now(timezone.utc)
+
+        # Today: midnight UTC today
+        midnight_today = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # This week: Monday 00:00 UTC
+        days_since_monday = now_utc.weekday()
+        monday_this_week = (now_utc - timedelta(days=days_since_monday)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+
+        # Query today
+        today_rows = conn.execute("""
+            SELECT
+                COALESCE(SUM(cost_usd), 0) as total_cost,
+                COUNT(DISTINCT task_id) as task_count
+            FROM sessions
+            WHERE started_at >= ?
+        """, (midnight_today.isoformat(),)).fetchone()
+
+        today_cost = today_rows[0] or 0.0
+        today_task_count = today_rows[1] or 0
+        today_avg = today_cost / today_task_count if today_task_count > 0 else 0.0
+
+        # Query this week
+        week_rows = conn.execute("""
+            SELECT
+                COALESCE(SUM(cost_usd), 0) as total_cost,
+                COUNT(DISTINCT task_id) as task_count
+            FROM sessions
+            WHERE started_at >= ?
+        """, (monday_this_week.isoformat(),)).fetchone()
+
+        week_cost = week_rows[0] or 0.0
+        week_task_count = week_rows[1] or 0
+        week_avg = week_cost / week_task_count if week_task_count > 0 else 0.0
+
+        # Top 3 tasks by total cost (all time)
+        top_tasks_rows = conn.execute("""
+            SELECT
+                s.task_id,
+                t.title,
+                SUM(s.cost_usd) as total_cost
+            FROM sessions s
+            LEFT JOIN tasks t ON s.task_id = t.id
+            WHERE s.task_id IS NOT NULL
+            GROUP BY s.task_id
+            ORDER BY total_cost DESC
+            LIMIT 3
+        """).fetchall()
+
+        top_tasks = [
+            {
+                "task_id": row[0],
+                "title": row[1] or f"Task {row[0]}",
+                "cost_usd": row[2] or 0.0,
+            }
+            for row in top_tasks_rows
+        ]
+
+        return {
+            "today": {
+                "total_cost_usd": round(today_cost, 2),
+                "task_count": today_task_count,
+                "avg_cost_per_task": round(today_avg, 2),
+            },
+            "this_week": {
+                "total_cost_usd": round(week_cost, 2),
+                "task_count": week_task_count,
+                "avg_cost_per_task": round(week_avg, 2),
+            },
+            "top_tasks": top_tasks,
+        }
+
     # --- Magic commands endpoints ---
 
     class ShellExecRequest(BaseModel):
