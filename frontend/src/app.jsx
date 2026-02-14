@@ -532,6 +532,16 @@ function App() {
             }
           }
 
+          // Ensure turnState reflects active work when agent_activity events arrive
+          if (!_pt.turnState[team]) _pt.turnState[team] = {};
+          if (!_pt.turnState[team][entry.agent] || !_pt.turnState[team][entry.agent].inTurn) {
+            _pt.turnState[team][entry.agent] = {
+              inTurn: true,
+              taskId: entry.task_id ?? null,
+              sender: ""
+            };
+          }
+
           if (isCurrent) _syncSignals(team);
         } catch (e) { /* ignore malformed events */ }
       };
