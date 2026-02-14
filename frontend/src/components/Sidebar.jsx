@@ -40,6 +40,13 @@ function CollapseIcon({ collapsed }) {
     </svg>
   );
 }
+function DelegateChevron() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 600 660" aria-label="Expand sidebar">
+      <path fill="#4ade80" d="M85 65V152L395 304Q414 313 430.5 319.5Q447 326 455 328Q446 330 429 337Q412 344 395 352L85 505V595L515 380V280Z"/>
+    </svg>
+  );
+}
 
 const NAV_ITEMS = [
   { key: "chat", label: "Chat", Icon: ChatIcon },
@@ -294,7 +301,7 @@ export function Sidebar() {
       <div class="sb-top">
         {!collapsed && <Logo />}
         <button class="sb-toggle" onClick={toggle} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
-          <CollapseIcon collapsed={collapsed} />
+          {collapsed ? <DelegateChevron /> : <CollapseIcon collapsed={false} />}
         </button>
       </div>
 
