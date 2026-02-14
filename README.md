@@ -1,161 +1,184 @@
-Standup is an agentic system to run a team composed of some agents and some 
-humans under the supervision of a manager.
+<p align="center">
+  <img src="branding/logo.svg" alt="delegate" height="40">
+</p>
 
-All team members (agents or humans) have access to two common substraits (both
-implemented via regular files):
+<p align="center">
+  <strong>You're one person. Delegate gives you a team.</strong>
+</p>
 
-1. A task/project management system
-2. A system of peer to peer message queues
+<p align="center">
+  <a href="https://pypi.org/project/delegate-ai/"><img src="https://img.shields.io/pypi/v/delegate-ai" alt="PyPI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-blue" alt="Python 3.12+"></a>
+</p>
 
-The team has a few stakeholders:
-1. Director - the human external to the system who directs/controls manager. 
-   Manager acts on the behalf of the Director. Team members don't know about the
-   Director - they only talk to each other and the manager.
-2. Manager - the agent (with own .md file) which writes the team charter (as 
-    instructed by the director), interprets and enforces it. It typically will
-    talk to the director to understand & clarify project specs, break it down in
-    tasks of appropriate complexity, update internal task/management system,
-    assign tasks to appropriate teammates based on complexity, expertise, and
-    background, chooses the order in which tasks are to be done, and acts as
-    first line of defense to take/resolve questions from teammates.
-1. One or more team mates - some human and some agents (for now, only agent).
-    Each agent is basically a claude agent for now.
+---
 
+Delegate is a CLI tool that creates a team of AI agents to build software for you. Describe what you want in plain English. Delegate breaks it into tasks, assigns them to agents, manages code reviews between them, and merges the result — while you watch (or don't).
 
-Team Charter
-=============
-Charter is a document (md file) describng how the team should operate - it contains
-information about the cultural values, processes, operating procedures etc. It
-is written by the manager based on instructs from the director - manager can
-also propose changes to it and present them to Director for approval.
+<!-- TODO: Replace with an actual screenshot or demo GIF
+<p align="center">
+  <img src="docs/screenshot.png" alt="Delegate UI" width="800">
+</p>
+-->
 
-Roster
-======
-At any point of time, team has some members a file called roster.md enumerates
-the names of all the active members along with a short description of what they
-own and their roles in the team.
+## Quickstart
 
-Tasks
-=====
-There is a python file in scripts/task.py which contains machinery to manage 
-tasks & projects. Tasks themselves are stored as files.
+```bash
+pip install delegate-ai
+cd your-project
+delegate start --env-file .env    # needs ANTHROPIC_API_KEY in .env
+```
 
-Chat
-====
-All messages sent to chat are also stored in sqlite and managed via a python
-script in scripts/chat.py
+That's it. Delegate will:
+1. Detect your name from `git config`
+2. Create a team with a manager + 5 engineer agents
+3. Register the current repo automatically
+4. Open a browser with a chat interface
 
-Mailboxes
-=========
-Every teammate gets an outbox and an inbox. When it wants to send message to 
-another teammate, it writes a message to own outbox. Messages that others are
-sending it come to its inbox. This is managed via scripts/mailbox.py
+Tell the manager what to build. It handles the rest.
 
-Only agent writes to its outbox, only daemon reads from outbox.
-Only daemon writes to any inbox, only the owner agent reads it.
+## What happens when you send a task
 
-Outbox message has format of (send_time, recipient, message)
-Inbox message has format of (send_time, sender, message)
+```
+You: "Add a /health endpoint that returns uptime and version"
+```
 
-Daemon
-======
-Daemon is an event loop (non-LLM) which listens to outboxes of all 
-teammates and dispatches them to appropriate inbox of the recipient. Daemon
-also runs a web app server for the human director to interact with the team. 
-This app shows a view of the projects/tasks as well as in a separate tab, a chat
-box. All messages sent from one member to another show up here for the director
-to observe. In addition, all events (e.g. assigning of tasks, task status 
-changes, spawning o agents etc) also show up here.
+1. **Manager** breaks it down, creates a task, assigns it to an available agent
+2. **Agent** gets a git worktree, writes the code, runs tests, submits for review
+3. **Reviewer** (another agent) checks the diff, runs the test suite, approves or rejects
+4. **You** approve the merge (or set repos to auto-merge)
+5. **Merge worker** rebases onto main, runs pre-merge checks, fast-forward merges
 
-More importantly, director can send messages to the manager through the chat box
-who can also respond back. If the manager has a question for the director (say
-because a teammate asked them something and they didn't know the answer), they
-can also send a message to director's mailbox.
+All of this is visible in real-time in the web UI — tasks moving, agents working, code being reviewed.
 
-Agent's Memory
-==============
-All agents maintain a folder called `memory` with a few kinds of files:
-1. Journals - here they can write one or more <number>.journal.md files 
-where they periodically write down relevant memories - understanding, decisions, 
-open questions, lessons, goals etc. 
+## Key features
 
-2. Notes - here they contain many files about variety of topics of their choice
-as {name}.note.md. 
+**Full development lifecycle.** Tasks flow through `todo → in_progress → in_review → in_approval → merging → done` with agents handling each stage. Rejections cycle back automatically.
 
-3. Feedback - one file for every other team mate they have worked with, containing
-feedback for them based on the quality of their work
+**Real git, real branches.** Each agent works in isolated [git worktrees](https://git-scm.com/docs/git-worktree). No magic file systems. Branches are named `delegate/<team>/T0001`. You can inspect them anytime.
 
-4. Context - a single context.md file which contains a summary of their current
-short session state - when the agent comes back up the next time, they minimally
-read this file to get going.
+**Code review between agents.** Agents don't just write code — they review each other's work. Reviewers check out the branch, run the full test suite, and gate the merge queue. Reviews are visible in the UI with full diffs.
 
-Repos
-=====
-A team has one or more shared git repos (including a special repo called `meta`)
-which contains standup related files to govern the team. Agents, when working
-on a repo, clone the repo in their own directory, work in a branch, and raise
-the PR against the main repo.
+**Merge automation.** Rebase onto main, run pre-merge tests, fast-forward merge. If there are conflicts, Delegate tries a squash-reapply first. True conflicts get escalated with detailed hunks and resolution instructions.
 
-CI
-==
-Every team has a CI agent with own mailboxes. Whenever an agent wants to raise
-a PR against the main repo, they send a message to CI. CI agent can choose to run
-tests
+**Customizable workflows.** Define your own task lifecycle in Python:
 
-Directory Structure
-===================
-root
-    - workspace
-        - <agent1>
-            - <repo1>  # cloned copy of repos this agent is working on
-            - <repo2>
-        - <agent2>
-    - repos
-        - <repo1>
-            .git
-            ...
-        - <repo2>
-            .git
-            ...
-        - <meta>
-            - .git
-            - charter.md
-            - scripts
-                - <script1>
-                - <script2>
-                - run.py # special script that starts daemon
-            - team
-                - roster.md
-                - <agent1>
-                    - bio.md
-                    - state.yaml
-                    - outbox/
-                        out_1.csv # outbox, one is active, older are archived
-                        out_2.csv
-                    - inbox/
-                        in_1.csv
-                        in_2.csv
-                    - journals
-                        - 1.journal.md
-                        - 2.journal.md
-                    - notes
-                        - <topic1>.note.md
-                        - <topic2>.note.md
-                    - feedback
-                        - <teammate1>.md
-                        - <teammate2>.md
-                    - context.md
-                    - logs/
-                        - 1.worklog.md  # contains full log of all prompts of this agent
-                        - 2.worklog.md
-                - <agent2>
-        - db.sqlite
+```python
+from delegate.workflow import Stage, workflow
 
+class Deploy(Stage):
+    label = "Deploying"
+    def enter(self, ctx):
+        ctx.run_script("./deploy.sh")
 
-State file
-==========
-Every agent gets a state file. This stores metadata like:
-- PID: the pid of the process executing this agent right now (or None)
-- in_cursor: id of the message in inbox until which processed (we try to do at least
-once processing so id is incremented after finishing the action)
-- out_cursor: next id of the message to be sent in outbox
+@workflow(name="with-deploy", version=1)
+def my_workflow():
+    return [Todo, InProgress, InReview, Deploy, Done]
+```
+
+**Multi-team, multi-repo.** Run separate teams for different projects, each with their own agents, repos, and workflows.
+
+**Built-in shell.** Run any command from the chat with `/shell ls -la`. Set the working directory with the CWD picker. Output renders inline.
+
+**Keyboard-driven.** `?` for shortcuts, `j/k` navigation, `t/c/a` to switch tabs, `r` to reply, `/` for commands. Vim-style escape mode.
+
+## Architecture
+
+```
+~/.delegate/
+├── members/              # Human identities (from git config)
+│   └── nikhil.yaml
+├── teams/
+│   └── my-project/
+│       ├── agents/       # delegate (manager) + engineer agents
+│       │   ├── delegate/ # Manager agent — your delegate
+│       │   ├── alice/    # Engineer agent with worktrees, logs, memory
+│       │   └── bob/
+│       ├── repos/        # Symlinks to your real git repos
+│       ├── shared/       # Team-wide shared files
+│       └── workflows/    # Registered workflow definitions
+└── db.sqlite             # Messages, tasks, events
+```
+
+Agents are [Claude Code](https://docs.anthropic.com/en/docs/claude-code) instances. The manager orchestrates — it doesn't write code. Engineers work in git worktrees and communicate through a message bus. The daemon polls for messages and dispatches agent turns as async tasks.
+
+There's no magic. You can `ls` into any agent's directory and see exactly what they're doing. Worklogs, memory journals, context files — it's all plain text.
+
+## Configuration
+
+### Environment
+
+```bash
+# Required — your Anthropic API key
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Optional
+DELEGATE_HOME=~/.delegate    # Override home directory
+```
+
+### CLI commands
+
+```bash
+delegate start [--port 3548] [--env-file .env]   # Start everything
+delegate stop                                     # Stop the daemon
+delegate status                                   # Check if running
+
+delegate team add backend --agents 3 --repo /path/to/repo
+delegate team list
+delegate repo add myteam /path/to/another-repo --test-cmd "pytest -x"
+delegate agent add myteam carol --role engineer
+
+delegate workflow init myteam                     # Register default workflow
+delegate workflow add myteam ./my-workflow.py     # Register custom workflow
+```
+
+### Repo settings
+
+```bash
+# Auto-merge when agents approve (skip human approval)
+delegate repo set-approval myteam my-repo auto
+
+# Run tests before merging
+delegate repo set-test-cmd myteam my-repo "python -m pytest -x -q"
+```
+
+## How it works
+
+The **daemon** is the central loop:
+- Polls agent inboxes for unread messages
+- Dispatches turns (one agent at a time per agent, many agents in parallel)
+- Processes the merge queue
+- Serves the web UI and SSE streams
+
+**Agents** are stateless between turns. Each turn:
+1. Read inbox messages
+2. Execute actions (create tasks, write code, send messages, run commands)
+3. Write context summary for next turn
+
+The **workflow engine** is a Python DSL. Each task is stamped with a workflow version at creation. Stages define `enter`/`exit`/`action`/`assign` hooks. Built-in functions (`ctx.setup_worktree()`, `ctx.create_review()`, `ctx.merge_task()`, etc.) handle git operations, reviews, and merging.
+
+## Development
+
+```bash
+git clone https://github.com/nikhilgarg28/delegate.git
+cd delegate
+uv sync
+uv run delegate start --foreground
+```
+
+### Tests
+
+```bash
+# Python tests
+uv run pytest tests/ -x -q
+
+# Playwright E2E tests (needs npm install first)
+npm install
+npx playwright install
+npx playwright test
+```
+
+## License
+
+[MIT](LICENSE)
