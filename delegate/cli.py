@@ -269,10 +269,21 @@ def team_create(
     parsed_agents: list[tuple[str, str]] = []
     agents_stripped = agents.strip()
     if agents_stripped.isdigit():
-        # Numeric: auto-generate names
+        # Numeric: pick random names from pool
         count = int(agents_stripped)
-        for i in range(1, count + 1):
-            parsed_agents.append((f"agent-{i}", "engineer"))
+        from delegate.names import pick_names
+        from delegate.config import get_default_human
+
+        # Exclude human member name and manager name
+        exclude = set()
+        human_name = get_default_human(hc_home)
+        if human_name:
+            exclude.add(human_name)
+        exclude.add(manager)
+
+        chosen = pick_names(count, exclude)
+        for name in chosen:
+            parsed_agents.append((name, "engineer"))
     else:
         # Parse "name:role" pairs — role defaults to "engineer"
         for token in agents_stripped.split(","):
