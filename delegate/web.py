@@ -660,7 +660,45 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
 
     @app.get("/teams")
     def get_teams():
-        return _list_teams(hc_home)
+        """List all teams with metadata from the global DB.
+
+        Returns: List of team objects with name, team_id, created_at, agent_count, task_count
+        """
+        from delegate.db import get_connection
+
+        conn = get_connection(hc_home)
+        try:
+            # Get teams from the teams table
+            teams_rows = conn.execute(
+                "SELECT name, team_id, created_at FROM teams ORDER BY created_at ASC"
+            ).fetchall()
+
+            result = []
+            for row in teams_rows:
+                team_name = row["name"]
+                team_id = row["team_id"]
+                created_at = row["created_at"]
+
+                # Count agents for this team
+                agent_count = len(_list_team_agents(hc_home, team_name))
+
+                # Count tasks for this team from DB
+                task_count = conn.execute(
+                    "SELECT COUNT(*) FROM tasks WHERE team = ?",
+                    (team_name,)
+                ).fetchone()[0]
+
+                result.append({
+                    "name": team_name,
+                    "team_id": team_id,
+                    "created_at": created_at,
+                    "agent_count": agent_count,
+                    "task_count": task_count,
+                })
+
+            return result
+        finally:
+            conn.close()
 
     # --- Workflow endpoints (team-scoped) ---
 
@@ -1211,10 +1249,22 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     # Prefixed with /api/ to avoid colliding with SPA routes (/tasks, /agents).
 
     @app.get("/api/tasks")
-    def get_tasks(status: str | None = None, assignee: str | None = None):
-        """List tasks across all teams (for backward compat)."""
+    def get_tasks(status: str | None = None, assignee: str | None = None, team: str | None = None):
+        """List tasks across all teams or specific team.
+
+        Query params:
+            status: Filter by status
+            assignee: Filter by assignee
+            team: Filter by team name, or "all" for all teams (default: all)
+        """
         all_tasks = []
-        for t in _list_teams(hc_home):
+        # Determine which teams to query
+        if team and team != "all":
+            teams = [team]
+        else:
+            teams = _list_teams(hc_home)
+
+        for t in teams:
             try:
                 tasks = _list_tasks(hc_home, t, status=status, assignee=assignee)
                 for task in tasks:
@@ -1222,6 +1272,9 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 all_tasks.extend(tasks)
             except Exception:
                 pass
+
+        # Sort by updated_at desc
+        all_tasks.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
         return all_tasks
 
     @app.get("/api/tasks/{task_id}/stats")
@@ -1309,17 +1362,33 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
     @app.get("/api/messages")
-    def get_messages(since: str | None = None, between: str | None = None, type: str | None = None, limit: int | None = None):
-        """Messages across all teams (legacy compat)."""
+    def get_messages(since: str | None = None, between: str | None = None, type: str | None = None, limit: int | None = None, before_id: int | None = None, team: str | None = None):
+        """Messages across all teams or specific team.
+
+        Query params:
+            since: ISO timestamp to filter messages after
+            between: Comma-separated sender,recipient pair
+            type: Message type filter
+            limit: Maximum number of messages
+            before_id: Return messages before this ID
+            team: Filter by team name, or "all" for all teams (default: all)
+        """
         between_tuple = None
         if between:
             parts = [p.strip() for p in between.split(",")]
             if len(parts) == 2:
                 between_tuple = (parts[0], parts[1])
+
+        # Determine which teams to query
+        if team and team != "all":
+            teams = [team]
+        else:
+            teams = _list_teams(hc_home)
+
         all_msgs = []
-        for t in _list_teams(hc_home):
+        for t in teams:
             try:
-                msgs = _get_messages(hc_home, t, since=since, between=between_tuple, msg_type=type, limit=limit)
+                msgs = _get_messages(hc_home, t, since=since, between=between_tuple, msg_type=type, limit=limit, before_id=before_id)
                 for m in msgs:
                     m["team"] = t
                 all_msgs.extend(msgs)
@@ -1348,11 +1417,21 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     # --- Agent endpoints (team-scoped) ---
 
     @app.get("/api/agents")
-    def get_all_agents():
-        """List all agents across all teams."""
+    def get_all_agents(team: str | None = None):
+        """List all agents across all teams or specific team.
+
+        Query params:
+            team: Filter by team name, or "all" for all teams (default: all)
+        """
+        # Determine which teams to query
+        if team and team != "all":
+            teams = [team]
+        else:
+            teams = _list_teams(hc_home)
+
         all_agents = []
-        for team in _list_teams(hc_home):
-            all_agents.extend(_list_team_agents(hc_home, team))
+        for t in teams:
+            all_agents.extend(_list_team_agents(hc_home, t))
         return all_agents
 
     @app.get("/teams/{team}/agents")
@@ -1474,6 +1553,46 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         from delegate.activity import subscribe, unsubscribe
 
         queue = subscribe(team=team)
+
+        async def _generate():
+            try:
+                # Send a ping immediately so the client knows the stream is alive
+                yield f"data: {json.dumps({'type': 'connected'})}\n\n"
+                while True:
+                    try:
+                        entry = await asyncio.wait_for(queue.get(), timeout=30.0)
+                        yield f"data: {json.dumps(entry)}\n\n"
+                    except asyncio.TimeoutError:
+                        # Send keepalive comment to prevent proxy/browser timeout
+                        yield ": keepalive\n\n"
+            except asyncio.CancelledError:
+                pass
+            finally:
+                unsubscribe(queue)
+
+        return StreamingResponse(
+            _generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    # --- Global SSE stream (all teams) ---
+
+    @app.get("/stream")
+    async def global_activity_stream():
+        """SSE endpoint streaming real-time agent activity events across all teams.
+
+        The client opens an ``EventSource`` to this URL and receives
+        ``data: {...}`` events for every tool invocation across all teams.
+        Each event includes a ``team`` field for client-side filtering.
+        """
+        from delegate.activity import subscribe, unsubscribe
+
+        queue = subscribe(team=None)  # No team filter — receive all events
 
         async def _generate():
             try:

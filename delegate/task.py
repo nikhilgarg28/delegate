@@ -1062,11 +1062,12 @@ def main():
     # list
     p_list = sub.add_parser("list", help="List tasks")
     p_list.add_argument("home", type=Path)
-    p_list.add_argument("team")
+    p_list.add_argument("team", nargs="?", default=None, help="Team name (optional; use --team for explicit control)")
     p_list.add_argument("--status", choices=VALID_STATUSES)
     p_list.add_argument("--assignee")
     p_list.add_argument("--project")
     p_list.add_argument("--tag", help="Filter by tag")
+    p_list.add_argument("--team", dest="team_flag", default=None, help="Team filter: specific team name or 'all' for all teams")
 
     # update
     p_update = sub.add_parser("update", help="Update a task")
@@ -1143,19 +1144,65 @@ def main():
         print(f"Created {format_task_id(task['id'])}: {task['title']} (assigned to {args.assignee})")
 
     elif args.command == "list":
-        tasks = list_tasks(
-            args.home,
-            args.team,
-            status=args.status,
-            assignee=args.assignee,
-            project=args.project,
-            tag=args.tag,
-        )
-        for t in tasks:
-            assignee = f" [{t['assignee']}]" if t["assignee"] else ""
-            print(f"  {format_task_id(t['id'])} ({t['status']}) {t['title']}{assignee}")
-        if not tasks:
-            print("(no tasks)")
+        # Use --team flag if provided, else fall back to positional team arg
+        team_filter = args.team_flag if args.team_flag is not None else args.team
+
+        if team_filter == "all":
+            # List tasks across all teams
+            from delegate.db import get_connection
+            conn = get_connection(args.home)
+            try:
+                # Get all team names
+                teams_rows = conn.execute("SELECT name FROM teams ORDER BY name").fetchall()
+                teams = [row["name"] for row in teams_rows]
+            finally:
+                conn.close()
+
+            all_tasks = []
+            for team in teams:
+                try:
+                    team_tasks = list_tasks(
+                        args.home,
+                        team,
+                        status=args.status,
+                        assignee=args.assignee,
+                        project=args.project,
+                        tag=args.tag,
+                    )
+                    for t in team_tasks:
+                        t["team"] = team
+                    all_tasks.extend(team_tasks)
+                except Exception:
+                    pass
+
+            # Sort by updated_at desc
+            all_tasks.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
+
+            for t in all_tasks:
+                assignee = f" [{t['assignee']}]" if t["assignee"] else ""
+                team_label = f" ({t['team']})" if t.get("team") else ""
+                print(f"  {format_task_id(t['id'])} ({t['status']}) {t['title']}{assignee}{team_label}")
+            if not all_tasks:
+                print("(no tasks)")
+        else:
+            # List tasks for specific team
+            if not team_filter:
+                print("Error: team name required (or use --team all for all teams)")
+                return
+
+            tasks = list_tasks(
+                args.home,
+                team_filter,
+                status=args.status,
+                assignee=args.assignee,
+                project=args.project,
+                tag=args.tag,
+            )
+            for t in tasks:
+                assignee = f" [{t['assignee']}]" if t["assignee"] else ""
+                print(f"  {format_task_id(t['id'])} ({t['status']}) {t['title']}{assignee}")
+            if not tasks:
+                print("(no tasks)")
 
     elif args.command == "update":
         updates = {}

@@ -423,9 +423,10 @@ def main():
     # inbox
     p_inbox = sub.add_parser("inbox", help="Read inbox")
     p_inbox.add_argument("home", type=Path)
-    p_inbox.add_argument("team")
+    p_inbox.add_argument("team", nargs="?", default=None, help="Team name (optional; use --team for explicit control)")
     p_inbox.add_argument("agent", help="Agent name")
     p_inbox.add_argument("--all", action="store_true", help="Include read messages")
+    p_inbox.add_argument("--team", dest="team_flag", default=None, help="Team filter: specific team name or 'all' for all teams")
 
     # outbox
     p_outbox = sub.add_parser("outbox", help="Read outbox")
@@ -441,11 +442,48 @@ def main():
         print(f"Message sent: {msg_id}")
 
     elif args.command == "inbox":
-        messages = read_inbox(args.home, args.team, args.agent, unread_only=not args.all)
-        for msg in messages:
-            print(f"[{msg.time}] {msg.sender}: {msg.body}")
-        if not messages:
-            print("(no messages)")
+        # Use --team flag if provided, else fall back to positional team arg
+        team_filter = args.team_flag if args.team_flag is not None else args.team
+
+        if team_filter == "all":
+            # Get messages across all teams
+            from delegate.db import get_connection
+            conn = get_connection(args.home)
+            try:
+                teams_rows = conn.execute("SELECT name FROM teams ORDER BY name").fetchall()
+                teams = [row["name"] for row in teams_rows]
+            finally:
+                conn.close()
+
+            all_messages = []
+            for team in teams:
+                try:
+                    team_msgs = read_inbox(args.home, team, args.agent, unread_only=not args.all)
+                    for msg in team_msgs:
+                        msg.team = team  # Add team field to message
+                    all_messages.extend(team_msgs)
+                except Exception:
+                    pass
+
+            # Sort by time
+            all_messages.sort(key=lambda m: m.time)
+
+            for msg in all_messages:
+                team_label = f" [{getattr(msg, 'team', '')}]" if hasattr(msg, 'team') else ""
+                print(f"[{msg.time}]{team_label} {msg.sender}: {msg.body}")
+            if not all_messages:
+                print("(no messages)")
+        else:
+            # Get messages for specific team
+            if not team_filter:
+                print("Error: team name required (or use --team all for all teams)")
+                return
+
+            messages = read_inbox(args.home, team_filter, args.agent, unread_only=not args.all)
+            for msg in messages:
+                print(f"[{msg.time}] {msg.sender}: {msg.body}")
+            if not messages:
+                print("(no messages)")
 
     elif args.command == "outbox":
         messages = read_outbox(args.home, args.team, args.agent, pending_only=not args.all)
