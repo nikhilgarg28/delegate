@@ -1377,6 +1377,170 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 continue
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
+    @app.get("/api/tasks/{task_id}/comments")
+    def get_task_comments_global(task_id: int, limit: int = 50):
+        """Get task comments — scans all teams (legacy compat)."""
+        from delegate.task import get_comments as _get_comments
+        for t in _list_teams(hc_home):
+            try:
+                _get_task(hc_home, t, task_id)
+                return _get_comments(hc_home, t, task_id, limit=limit)
+            except FileNotFoundError:
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.post("/api/tasks/{task_id}/comments")
+    def post_task_comment_global(task_id: int, comment: TaskCommentBody):
+        """Add a comment to a task — scans all teams (legacy compat)."""
+        from delegate.task import add_comment as _add_comment
+        for t in _list_teams(hc_home):
+            try:
+                _get_task(hc_home, t, task_id)
+                cid = _add_comment(hc_home, t, task_id, comment.author, comment.body)
+                return {"id": cid, "task_id": task_id, "author": comment.author, "body": comment.body}
+            except FileNotFoundError:
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.get("/api/tasks/{task_id}/merge-preview")
+    def get_task_merge_preview_global(task_id: int):
+        """Get merge preview — scans all teams (legacy compat)."""
+        for t in _list_teams(hc_home):
+            try:
+                _get_task(hc_home, t, task_id)
+                preview = _get_merge_preview(hc_home, t, task_id)
+                return preview
+            except FileNotFoundError:
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.get("/api/tasks/{task_id}/commits")
+    def get_task_commits_global(task_id: int):
+        """Get task commits — scans all teams (legacy compat)."""
+        for t in _list_teams(hc_home):
+            try:
+                task = _get_task(hc_home, t, task_id)
+                diffs = _get_commit_diffs(hc_home, t, task_id)
+                return {"task_id": task_id, "branch": task.get("branch", ""), "commits": diffs}
+            except FileNotFoundError:
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.post("/api/tasks/{task_id}/retry-merge")
+    def retry_merge_global(task_id: int):
+        """Retry a failed merge — scans all teams (legacy compat)."""
+        for t in _list_teams(hc_home):
+            try:
+                task = _get_task(hc_home, t, task_id)
+                if task["status"] != "merge_failed":
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Task is in '{task['status']}', not 'merge_failed'",
+                    )
+                from delegate.task import transition_task
+                _update_task(hc_home, t, task_id, merge_attempts=0, status_detail="")
+                from delegate.bootstrap import get_member_by_role
+                manager = get_member_by_role(hc_home, t, "manager") or "delegate"
+                updated = transition_task(hc_home, t, task_id, "merging", manager)
+                return updated
+            except FileNotFoundError:
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.post("/api/tasks/{task_id}/cancel")
+    def cancel_task_global(task_id: int):
+        """Cancel a task — scans all teams (legacy compat)."""
+        for t in _list_teams(hc_home):
+            try:
+                _get_task(hc_home, t, task_id)
+                from delegate.task import cancel_task
+                updated = cancel_task(hc_home, t, task_id)
+                return updated
+            except (FileNotFoundError, ValueError):
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.get("/api/tasks/{task_id}/reviews")
+    def get_task_reviews_global(task_id: int):
+        """Get all review attempts for a task — scans all teams (legacy compat)."""
+        from delegate.review import get_reviews, get_comments
+        for t in _list_teams(hc_home):
+            try:
+                _get_task(hc_home, t, task_id)
+                reviews = get_reviews(hc_home, t, task_id)
+                for r in reviews:
+                    r["comments"] = get_comments(hc_home, t, task_id, r["attempt"])
+                return reviews
+            except FileNotFoundError:
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.get("/api/tasks/{task_id}/reviews/current")
+    def get_task_current_review_global(task_id: int):
+        """Get current review attempt with comments — scans all teams (legacy compat)."""
+        from delegate.review import get_current_review
+        for t in _list_teams(hc_home):
+            try:
+                _get_task(hc_home, t, task_id)
+                review = get_current_review(hc_home, t, task_id)
+                if review is None:
+                    return {"attempt": 0, "verdict": None, "summary": "", "comments": []}
+                return review
+            except FileNotFoundError:
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.post("/api/tasks/{task_id}/reviews/comments")
+    def post_review_comment_global(task_id: int, comment: ReviewCommentBody):
+        """Add an inline comment to the current review attempt — scans all teams (legacy compat)."""
+        from delegate.review import add_comment
+        for t in _list_teams(hc_home):
+            try:
+                task = _get_task(hc_home, t, task_id)
+                attempt = task.get("review_attempt", 0)
+                if attempt == 0:
+                    raise HTTPException(status_code=400, detail="Task has no active review attempt.")
+                human_name = get_default_human(hc_home)
+                result = add_comment(
+                    hc_home, t, task_id, attempt,
+                    file=comment.file, body=comment.body, author=human_name,
+                    line=comment.line,
+                )
+                return result
+            except FileNotFoundError:
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.put("/api/tasks/{task_id}/reviews/comments/{comment_id}")
+    def edit_review_comment_global(task_id: int, comment_id: int, payload: ReviewCommentUpdateBody):
+        """Edit an existing review comment's body — scans all teams (legacy compat)."""
+        from delegate.review import update_comment
+        for t in _list_teams(hc_home):
+            try:
+                _get_task(hc_home, t, task_id)
+                result = update_comment(hc_home, t, comment_id, payload.body)
+                if result is None:
+                    raise HTTPException(status_code=404, detail="Comment not found")
+                return result
+            except FileNotFoundError:
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    @app.delete("/api/tasks/{task_id}/reviews/comments/{comment_id}")
+    def remove_review_comment_global(task_id: int, comment_id: int):
+        """Delete a review comment — scans all teams (legacy compat)."""
+        from delegate.review import delete_comment
+        for t in _list_teams(hc_home):
+            try:
+                _get_task(hc_home, t, task_id)
+                deleted = delete_comment(hc_home, t, comment_id)
+                if not deleted:
+                    raise HTTPException(status_code=404, detail="Comment not found")
+                return {"ok": True}
+            except FileNotFoundError:
+                continue
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
     @app.get("/api/messages")
     def get_messages(since: str | None = None, between: str | None = None, type: str | None = None, limit: int | None = None, before_id: int | None = None, team: str | None = None):
         """Messages across all teams or specific team.
