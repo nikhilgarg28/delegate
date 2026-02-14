@@ -94,6 +94,12 @@ function AgentView({ agentName }) {
       <div key={i} class={"agent-msg" + (m.processed_at ? "" : " unread")}>
         <div class="agent-msg-header">
           <span class="agent-msg-sender">{cap(m.sender)}</span>
+          {m.task_id != null && (
+            <>
+              <span class="msg-task-sep">|</span>
+              <span class="msg-task-badge">{taskIdStr(m.task_id)}</span>
+            </>
+          )}
           <span class="agent-msg-time" dangerouslySetInnerHTML={{ __html: fmtTimestamp(m.time) + " " + msgStatusIcon(m) }} />
         </div>
         <div class="agent-msg-body collapsed" onClick={(e) => e.target.classList.toggle("collapsed")}>
