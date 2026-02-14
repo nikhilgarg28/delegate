@@ -26,6 +26,38 @@ function _setCache(id, patch) {
   _cache.set(key, { ...(_cache.get(key) || {}), ...patch });
 }
 
+// ── Background prefetch for recent tasks ──
+// Proactively fetches and caches stats+reviews for task IDs to warm the cache.
+// Processes tasks sequentially to avoid hammering the server.
+// Skips tasks that already have cached stats.
+export async function prefetchTaskPanelData(taskIds) {
+  if (!taskIds || taskIds.length === 0) return;
+
+  for (const id of taskIds) {
+    const cached = _getCache(id);
+    // Skip if already cached
+    if (cached.stats) continue;
+
+    try {
+      // Fetch stats and current review (but not full reviews list, diff, or activity)
+      const [stats, currentReview] = await Promise.all([
+        api.fetchTaskStatsGlobal(id).catch(() => null),
+        api.fetchCurrentReviewGlobal(id).catch(() => null),
+      ]);
+
+      const cacheUpdate = {};
+      if (stats) cacheUpdate.stats = stats;
+      if (currentReview) cacheUpdate.currentReview = currentReview;
+
+      if (Object.keys(cacheUpdate).length > 0) {
+        _setCache(id, cacheUpdate);
+      }
+    } catch (e) {
+      // Silently skip failures — prefetch is best-effort
+    }
+  }
+}
+
 // ── Panel title helper (for back-bar) ──
 function panelTitle(entry, allTasks) {
   if (!entry) return "";
@@ -739,45 +771,35 @@ export function TaskSidePanel() {
     setActivityRaw(c.activityRaw ?? null);
     setActivityLoaded(!!c.activityRaw);
 
-    // If we have cached diff/merge/activity data, mark those tabs as "already visited"
-    // so the lazy-mount keeps them rendered; otherwise start fresh.
-    const restored = { overview: true };
-    if (c.diffRaw) restored.changes = true;
+    // Mark changes and activity tabs as visited for eager loading
+    const restored = { overview: true, changes: true, activity: true };
     if (c.mergePreviewRaw) restored.merge = true;
-    if (c.activityRaw) restored.activity = true;
     setVisitedTabs(restored);
 
     const cached = allTasks.find(t => t.id === id);
     if (cached) setTask(cached);
 
     // ── Revalidate in background ──
+    // Parallelize stats + reviews loading
     (async () => {
       try {
-        const s = await api.fetchTaskStatsGlobal(id);
-        setStats(s);
-        _setCache(id, { stats: s });
-      } catch (e) { }
-    })();
-  }, [id]);
+        const [s, review, reviews] = await Promise.all([
+          api.fetchTaskStatsGlobal(id).catch(() => null),
+          api.fetchCurrentReviewGlobal(id).catch(() => null),
+          api.fetchReviewsGlobal(id).catch(() => []),
+        ]);
 
-  // Sync task from signal when SSE pushes updates
-  useEffect(() => {
-    if (id === null) return;
-    const updated = allTasks.find(t => t.id === id);
-    if (updated) setTask(prev => prev ? { ...prev, ...updated } : updated);
-  }, [allTasks, id]);
+        if (s) {
+          setStats(s);
+          _setCache(id, { stats: s });
+        }
 
-  // Load review data eagerly (needed by approval bar in header) — also cached
-  useEffect(() => {
-    if (id === null) return;
-    (async () => {
-      try {
-        const review = await api.fetchCurrentReviewGlobal(id);
-        setCurrentReview(review);
-        _setCache(id, { currentReview: review });
-      } catch (e) { }
-      try {
-        const reviews = await api.fetchReviewsGlobal(id);
+        if (review) {
+          setCurrentReview(review);
+          _setCache(id, { currentReview: review });
+        }
+
+        // Process old comments from reviews
         if (reviews.length > 1) {
           const latest = reviews[reviews.length - 1];
           const old = [];
@@ -792,8 +814,31 @@ export function TaskSidePanel() {
           _setCache(id, { oldComments: old });
         }
       } catch (e) { }
+
+      // Eagerly start loading diff and activity in background (non-blocking)
+      api.fetchTaskDiffGlobal(id).then(data => {
+        const raw = flattenDiffDict(data.diff);
+        setDiffRaw(raw);
+        setDiffLoaded(true);
+        _setCache(id, { diffRaw: raw });
+      }).catch(() => {});
+
+      api.fetchTaskActivityGlobal(id, 50).then(raw => {
+        setActivityRaw(raw);
+        setActivityLoaded(true);
+        _setCache(id, { activityRaw: raw });
+      }).catch(() => {
+        setActivityRaw([]);
+      });
     })();
-  }, [id, task && task.review_attempt]);
+  }, [id, allTasks]);
+
+  // Sync task from signal when SSE pushes updates
+  useEffect(() => {
+    if (id === null) return;
+    const updated = allTasks.find(t => t.id === id);
+    if (updated) setTask(prev => prev ? { ...prev, ...updated } : updated);
+  }, [allTasks, id]);
 
   // Lazy load diff when Changes tab first visited — stale-while-revalidate
   useEffect(() => {

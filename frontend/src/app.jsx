@@ -1,5 +1,5 @@
 import { render } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useState, useRef } from "preact/hooks";
 import { batch, useSignalEffect } from "@preact/signals";
 import {
   currentTeam, teams, humanName, hcHome, tasks, agents, agentStatsMap, messages,
@@ -19,7 +19,7 @@ import { Sidebar } from "./components/Sidebar.jsx";
 import { ChatPanel } from "./components/ChatPanel.jsx";
 import { TasksPanel } from "./components/TasksPanel.jsx";
 import { AgentsPanel } from "./components/AgentsPanel.jsx";
-import { TaskSidePanel } from "./components/TaskSidePanel.jsx";
+import { TaskSidePanel, prefetchTaskPanelData } from "./components/TaskSidePanel.jsx";
 import { DiffPanel } from "./components/DiffPanel.jsx";
 import { ToastContainer } from "./components/Toast.jsx";
 import { HelpOverlay } from "./components/HelpOverlay.jsx";
@@ -80,6 +80,9 @@ function _syncSignalsNow(team) {
 
 // ── Main App ──
 function App() {
+  // ── Prefetch tracking ──
+  const hasPrefetched = useRef(false);
+
   // ── Keyboard shortcuts ──
   useEffect(() => {
     const handler = (e) => {
@@ -225,6 +228,14 @@ function App() {
             knownAgentNames.value = agentData.map(a => a.name);
             allTeamsAgents.value = allAgentData;
           });
+
+          // Prefetch task panel data for recent tasks (once per session)
+          if (!hasPrefetched.current && taskData.length > 0) {
+            hasPrefetched.current = true;
+            const recentTaskIds = taskData.slice(0, 50).map(t => t.id);
+            // Fire and forget — don't await
+            prefetchTaskPanelData(recentTaskIds).catch(() => {});
+          }
         }
       } catch (e) {
         showToast("Failed to refresh data", "error");
