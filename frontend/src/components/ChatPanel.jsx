@@ -89,25 +89,29 @@ function LinkedDiv({ html, class: cls, style, ref: externalRef }) {
 const COLLAPSE_THRESHOLD = 90; // ~4 lines at 14px * 1.6 line-height = 89.6px
 
 function CollapsibleMessage({ html, messageId, isBoss }) {
-  const contentRef = useRef();
+  const wrapperRef = useRef();
   const [isLong, setIsLong] = useState(false);
   const isExpanded = expandedMessages.value.has(messageId);
 
   useEffect(() => {
-    if (!contentRef.current) return;
+    // Query the content div directly instead of passing ref through LinkedDiv
+    const el = wrapperRef.current?.querySelector('.msg-content');
+    if (!el) return;
+
     const checkOverflow = () => {
-      const el = contentRef.current;
-      if (el && el.scrollHeight > COLLAPSE_THRESHOLD) {
+      if (el.scrollHeight > COLLAPSE_THRESHOLD) {
         setIsLong(true);
       } else {
         setIsLong(false);
       }
     };
-    checkOverflow();
+
+    // Use requestAnimationFrame to ensure layout is complete
+    requestAnimationFrame(checkOverflow);
 
     // Re-check on resize
     const observer = new ResizeObserver(checkOverflow);
-    if (contentRef.current) observer.observe(contentRef.current);
+    observer.observe(el);
     return () => observer.disconnect();
   }, [html]);
 
@@ -127,8 +131,8 @@ function CollapsibleMessage({ html, messageId, isBoss }) {
 
   return (
     <>
-      <div class={wrapperClass}>
-        <LinkedDiv class={contentClass} html={html} ref={contentRef} />
+      <div class={wrapperClass} ref={wrapperRef}>
+        <LinkedDiv class={contentClass} html={html} />
         {isLong && !isExpanded && (
           <div class="msg-fade-overlay" />
         )}
