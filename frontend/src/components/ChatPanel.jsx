@@ -985,7 +985,6 @@ export function ChatPanel() {
               }
             }}
           />
-        </div>
         {commandMode.value && parseCommand(inputVal)?.name === 'shell' && (
           <div class="chat-cwd-badge">
             <span class="chat-cwd-label">cwd:</span>
