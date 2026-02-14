@@ -264,3 +264,144 @@ export async function saveCommand(team, command, result) {
   }
   return r.json();
 }
+
+// --- Global task endpoints (no team context needed) ---
+
+export async function fetchTaskStatsGlobal(taskId) {
+  const r = await fetch(`/api/tasks/${taskId}/stats`);
+  return r.ok ? r.json() : null;
+}
+
+export async function fetchTaskDiffGlobal(taskId) {
+  const r = await fetch(`/api/tasks/${taskId}/diff`);
+  return r.ok ? r.json() : { diff: {}, branch: "", commits: {} };
+}
+
+export async function fetchTaskActivityGlobal(taskId, limit = 50) {
+  const url = `/api/tasks/${taskId}/activity${limit ? `?limit=${limit}` : ''}`;
+  const r = await fetch(url);
+  return r.ok ? r.json() : [];
+}
+
+export async function fetchTaskCommentsGlobal(taskId) {
+  const r = await fetch(`/api/tasks/${taskId}/comments`);
+  return r.ok ? r.json() : [];
+}
+
+export async function postTaskCommentGlobal(taskId, author, body) {
+  const r = await fetch(`/api/tasks/${taskId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ author, body }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || r.statusText);
+  }
+  return r.json();
+}
+
+export async function fetchTaskMergePreviewGlobal(taskId) {
+  const r = await fetch(`/api/tasks/${taskId}/merge-preview`);
+  return r.ok ? r.json() : { diff: {}, branch: "" };
+}
+
+export async function fetchTaskCommitsGlobal(taskId) {
+  const r = await fetch(`/api/tasks/${taskId}/commits`);
+  return r.ok ? r.json() : { commit_diffs: {} };
+}
+
+export async function retryMergeGlobal(taskId) {
+  const r = await fetch(`/api/tasks/${taskId}/retry-merge`, {
+    method: "POST",
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || r.statusText);
+  }
+  return r.json();
+}
+
+export async function cancelTaskGlobal(taskId) {
+  const r = await fetch(`/api/tasks/${taskId}/cancel`, {
+    method: "POST",
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || r.statusText);
+  }
+  return r.json();
+}
+
+export async function fetchReviewsGlobal(taskId) {
+  const r = await fetch(`/api/tasks/${taskId}/reviews`);
+  return r.ok ? r.json() : [];
+}
+
+export async function fetchCurrentReviewGlobal(taskId) {
+  const r = await fetch(`/api/tasks/${taskId}/reviews/current`);
+  return r.ok ? r.json() : { attempt: 0, verdict: null, summary: "", comments: [] };
+}
+
+export async function postReviewCommentGlobal(taskId, { file, line, body }) {
+  const r = await fetch(`/api/tasks/${taskId}/reviews/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file, line: line || null, body }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || r.statusText);
+  }
+  return r.json();
+}
+
+export async function updateReviewCommentGlobal(taskId, commentId, body) {
+  const r = await fetch(`/api/tasks/${taskId}/reviews/comments/${commentId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || r.statusText);
+  }
+  return r.json();
+}
+
+export async function deleteReviewCommentGlobal(taskId, commentId) {
+  const r = await fetch(`/api/tasks/${taskId}/reviews/comments/${commentId}`, {
+    method: "DELETE",
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || r.statusText);
+  }
+  return r.json();
+}
+
+export async function approveTaskGlobal(taskId, summary = "") {
+  const r = await fetch(`/api/tasks/${taskId}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ summary }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || r.statusText);
+  }
+  return r.json();
+}
+
+export async function rejectTaskGlobal(taskId, reason, summary = "") {
+  const r = await fetch(`/api/tasks/${taskId}/reject`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason: reason || "(no reason)", summary: summary || reason || "(no reason)" }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || r.statusText);
+  }
+  return r.json();
+}
