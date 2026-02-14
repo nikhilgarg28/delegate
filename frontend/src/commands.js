@@ -15,6 +15,11 @@ export const COMMANDS = {
     description: 'Show system status',
     usage: '/status',
   },
+  diff: {
+    name: 'diff',
+    description: 'Show task diff',
+    usage: '/diff [task_id]',
+  },
 };
 
 /**

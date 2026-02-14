@@ -22,6 +22,7 @@ import { SelectionTooltip } from "./SelectionTooltip.jsx";
 import { CommandAutocomplete } from "./CommandAutocomplete.jsx";
 import { ShellOutputBlock } from "./ShellOutputBlock.jsx";
 import { StatusBlock } from "./StatusBlock.jsx";
+import { DiffCommandBlock } from "./DiffCommandBlock.jsx";
 import { parseCommand, filterCommands, COMMANDS } from "../commands.js";
 
 // ── Command message wrapper to track error state ──
@@ -65,6 +66,9 @@ function CommandMessage({ message, parsed }) {
         <ShellOutputBlock result={message.result} onErrorState={setHasError} />
       )}
       {parsed?.name === 'status' && <StatusBlock result={message.result} />}
+      {parsed?.name === 'diff' && !message.result?.error && (
+        <DiffCommandBlock result={message.result} />
+      )}
     </div>
   );
 }
@@ -714,8 +718,26 @@ export function ChatPanel() {
           total: tasksData.filter(t => t.status !== 'done' && t.status !== 'cancelled').length,
         };
         result = { agents, taskCounts };
+      } else if (cmd.name === 'diff') {
+        if (!cmd.args) {
+          result = { error: 'Usage: /diff [task_id]', exit_code: -1 };
+        } else {
+          // Parse task ID - strip leading T/t if present
+          const idStr = cmd.args.trim().replace(/^[Tt]/, '');
+          const taskId = parseInt(idStr, 10);
+          if (isNaN(taskId)) {
+            result = { error: `Invalid task ID: ${cmd.args}`, exit_code: -1 };
+          } else {
+            const diffData = await api.fetchTaskDiffGlobal(taskId);
+            if (!diffData) {
+              result = { error: `Task ${taskId} not found or has no diff`, exit_code: -1 };
+            } else {
+              result = diffData;
+            }
+          }
+        }
       } else {
-        result = { error: `Unknown command: /${cmd.name}. Available: /shell, /status`, exit_code: -1 };
+        result = { error: `Unknown command: /${cmd.name}. Available: /shell, /status, /diff`, exit_code: -1 };
       }
 
       // Persist to DB

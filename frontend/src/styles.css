@@ -2724,6 +2724,189 @@ select option:hover {
   color: var(--text-heading);
 }
 
+/* Diff command block */
+.diff-command-block {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 16px;
+  margin-top: 8px;
+}
+
+.diff-command-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-heading);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.diff-command-branch {
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.diff-command-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 20px;
+  text-align: center;
+}
+
+.diff-command-body {
+  max-height: 400px;
+  overflow-y: auto;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+.diff-command-file {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.diff-command-file:last-child {
+  border-bottom: none;
+}
+
+.diff-command-file-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.diff-command-file-name {
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.diff-command-file-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.diff-command-file-badge.added {
+  background: var(--diff-add-bg);
+  color: var(--diff-add-text);
+}
+
+.diff-command-file-badge.deleted {
+  background: var(--diff-del-bg);
+  color: var(--diff-del-text);
+}
+
+.diff-command-file-stats {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+.diff-command-stats-add {
+  color: var(--semantic-green);
+}
+
+.diff-command-stats-del {
+  color: var(--semantic-red);
+}
+
+.diff-command-file-body {
+  background: var(--bg-surface);
+}
+
+.diff-command-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+
+.diff-command-table tbody tr {
+  border: none;
+}
+
+.diff-gutter {
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  text-align: right;
+  padding: 0 6px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  color: var(--text-faint);
+  background: var(--bg-surface);
+  user-select: none;
+  vertical-align: top;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.diff-code {
+  padding: 0 8px;
+  background: var(--bg-surface);
+}
+
+.diff-code-pre {
+  margin: 0;
+  padding: 1px 0;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-wrap: break-word;
+}
+
+.diff-line-add .diff-code {
+  background: var(--diff-add-bg);
+}
+
+.diff-line-add .diff-code-pre {
+  color: var(--diff-add-text);
+}
+
+.diff-line-add .diff-gutter {
+  background: var(--diff-add-bg);
+}
+
+.diff-line-del .diff-code {
+  background: var(--diff-del-bg);
+}
+
+.diff-line-del .diff-code-pre {
+  color: var(--diff-del-text);
+}
+
+.diff-line-del .diff-gutter {
+  background: var(--diff-del-bg);
+}
+
+.diff-line-hunk .diff-code {
+  background: var(--diff-hunk-bg);
+  padding: 4px 8px;
+}
+
+.diff-line-hunk .diff-code-pre {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.diff-line-hunk .diff-gutter {
+  background: var(--diff-hunk-bg);
+}
+
 /* ================================================================
    Notification Bell + Popover
    ================================================================ */

@@ -87,6 +87,11 @@ export async function fetchTaskDiff(team, taskId) {
   return r.ok ? r.json() : { diff: {}, branch: "", commits: {} };
 }
 
+export async function fetchTaskDiffGlobal(taskId) {
+  const r = await fetch(`/api/tasks/${taskId}/diff`);
+  return r.ok ? r.json() : null;
+}
+
 export async function fetchTaskMergePreview(team, taskId) {
   const r = await fetch(`/teams/${team}/tasks/${taskId}/merge-preview`);
   return r.ok ? r.json() : { diff: {}, branch: "" };
