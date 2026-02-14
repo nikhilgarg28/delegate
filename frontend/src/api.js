@@ -277,11 +277,6 @@ export async function fetchTaskStatsGlobal(taskId) {
   return r.ok ? r.json() : null;
 }
 
-export async function fetchTaskDiffGlobal(taskId) {
-  const r = await fetch(`/api/tasks/${taskId}/diff`);
-  return r.ok ? r.json() : { diff: {}, branch: "", commits: {} };
-}
-
 export async function fetchTaskActivityGlobal(taskId, limit = 50) {
   const url = `/api/tasks/${taskId}/activity${limit ? `?limit=${limit}` : ''}`;
   const r = await fetch(url);

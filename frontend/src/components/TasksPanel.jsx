@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "preact/hooks";
 import { currentTeam, tasks, activeTab, openPanel, taskTeamFilter, teams, getWorkflowStages, isInputFocused } from "../state.js";
 import { cap, fmtStatus, taskIdStr } from "../utils.js";
-import { playTaskSound } from "../audio.js";
+import { playTaskSound, playApprovalSound } from "../audio.js";
 import { FilterBar, applyFilters } from "./FilterBar.jsx";
 import { PillSelect } from "./PillSelect.jsx";
 import { CopyBtn } from "./CopyBtn.jsx";
@@ -82,15 +82,18 @@ export function TasksPanel() {
 
   // Task status change sound
   useEffect(() => {
-    let soundNeeded = false;
+    let approvalNeeded = false;
+    let doneNeeded = false;
     for (const t of allTasks) {
       const prev = prevStatusRef.current[t.id];
-      if (prev && prev !== t.status && (t.status === "done" || t.status === "in_review")) {
-        soundNeeded = true;
+      if (prev && prev !== t.status) {
+        if (t.status === "in_approval") approvalNeeded = true;
+        if (t.status === "done") doneNeeded = true;
       }
       prevStatusRef.current[t.id] = t.status;
     }
-    if (soundNeeded) playTaskSound();
+    if (approvalNeeded) playApprovalSound();
+    if (doneNeeded) playTaskSound();
   }, [allTasks]);
 
   // Build dynamic field config from task data

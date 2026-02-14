@@ -49,3 +49,21 @@ export function playTaskSound() {
     o.connect(g); o.start(t); o.stop(t + 0.15);
   });
 }
+
+export function playApprovalSound() {
+  if (isMuted.value) return;
+  const ctx = _getAudioCtx();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  // 2-note ascending: C5 -> G5, triangle wave for distinctness
+  [523.25, 783.99].forEach((freq, i) => {
+    const t = now + i * 0.18;
+    const g = ctx.createGain();
+    g.connect(ctx.destination);
+    g.gain.setValueAtTime(0.15, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    const o = ctx.createOscillator();
+    o.type = "triangle"; o.frequency.value = freq;
+    o.connect(g); o.start(t); o.stop(t + 0.2);
+  });
+}
