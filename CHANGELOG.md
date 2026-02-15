@@ -2,6 +2,17 @@
 
 All notable changes to Delegate are documented here.
 
+## 0.2.2 — 2026-02-15
+
+### Added
+- **Roadmap section in README** — documented upcoming features (sandboxing, external integrations, remote repos, team templates).
+- **Local-first note in README** — clarified that Delegate currently works with local git repos, with remote/external tool support on the roadmap.
+
+### Changed
+- `/status` command redesigned — task-focused, concise output replacing the verbose previous format.
+- `/diff` command shows red-bordered error block on failures instead of silently failing.
+- API key error message now lists three clear options with examples: `export ANTHROPIC_API_KEY`, `delegate start --env-file`, and `claude login`.
+
 ## 0.2.1 — 2026-02-15
 
 ### Added
