@@ -344,3 +344,6 @@ export function isInputFocused() {
   // contentEditable can be "true", "plaintext-only", or "inherit"/"false"
   return el.isContentEditable === true;
 }
+
+// ── File uploads ──
+export const uploadingFiles = signal([]);  // Array of {name, progress, error, cancel}

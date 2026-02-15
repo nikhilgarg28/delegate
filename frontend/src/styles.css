@@ -3391,3 +3391,207 @@ select option:hover {
   font-size: 12px !important;
   font-style: italic;
 }
+
+/* ================================================================
+   File Upload UI
+   ================================================================ */
+
+/* Upload button */
+.upload-btn {
+  /* Inherits from .chat-tool-btn */
+}
+
+/* Upload progress area (above chat input) */
+.upload-progress-area {
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.upload-progress-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.upload-filename {
+  color: var(--text-primary);
+  font-weight: 500;
+  flex: 0 0 auto;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-input);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 150ms ease-out;
+}
+
+.upload-error {
+  flex: 1;
+  color: var(--semantic-red);
+  font-size: 12px;
+}
+
+.upload-cancel-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+}
+
+.upload-cancel-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* Drop zone overlay */
+.drop-zone-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.drop-zone-content {
+  padding: 32px 48px;
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
+  background: rgba(74, 222, 128, 0.08);
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* ================================================================
+   File Upload UI
+   ================================================================ */
+
+/* Upload button */
+.upload-btn {
+  /* Inherits from .chat-tool-btn */
+}
+
+/* Upload progress area (above chat input) */
+.upload-progress-area {
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.upload-progress-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.upload-filename {
+  color: var(--text-primary);
+  font-weight: 500;
+  flex: 0 0 auto;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-input);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 150ms ease-out;
+}
+
+.upload-error {
+  flex: 1;
+  color: var(--semantic-red);
+  font-size: 12px;
+}
+
+.upload-cancel-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+}
+
+.upload-cancel-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* Drop zone overlay */
+.drop-zone-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.drop-zone-content {
+  padding: 32px 48px;
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
+  background: rgba(74, 222, 128, 0.08);
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 500;
+}

@@ -5,6 +5,7 @@ import {
   knownAgentNames, isMuted, humanName, expandedMessages,
   commandMode, commandCwd, teams, navigate,
   loadTeamCwd, saveTeamCwd, loadTeamHistory, addToHistory,
+  uploadingFiles,
 } from "../state.js";
 import * as api from "../api.js";
 import {
@@ -307,6 +308,7 @@ export function ChatPanel() {
   const acRef = useRef({ visible: false, commands: [], index: 0 }); // refs for keydown handler
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [showDropZone, setShowDropZone] = useState(false);
 
   // Command history state
   const [historyIndex, setHistoryIndex] = useState(-1); // -1 = not navigating history
@@ -316,6 +318,7 @@ export function ChatPanel() {
   const direction = chatFilterDirection.value;
   const logRef = useRef();
   const inputRef = useRef();
+  const fileInputRef = useRef();
   const searchTimerRef = useRef(null);
   const lastMsgTsRef = useRef("");
   const cooldownRef = useRef(false);
@@ -329,6 +332,142 @@ export function ChatPanel() {
   const lastTeamRef = useRef(team); // Track last team to detect switches
   const mic = useSpeechRecognition(inputRef);
   const muted = isMuted.value;
+
+  // ── File upload handlers ──
+  const handleFileSelect = useCallback(async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    // Reset file input
+    if (fileInputRef.current) fileInputRef.current.value = '';
+
+    // Client-side validation
+    const ALLOWED_EXTENSIONS = new Set([
+      'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
+      'pdf', 'md', 'txt', 'csv', 'json', 'yaml', 'yml',
+      'zip', 'html', 'css', 'js', 'py'
+    ]);
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
+    const validFiles = [];
+    for (const file of files) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (!ALLOWED_EXTENSIONS.has(ext)) {
+        showToast(`File ${file.name} has unsupported type`, 'error');
+        continue;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        showToast(`File ${file.name} exceeds 50MB limit`, 'error');
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    if (validFiles.length === 0) return;
+
+    // Add to uploadingFiles
+    const uploadEntries = validFiles.map(f => ({
+      name: f.name,
+      progress: 0,
+      error: null,
+    }));
+    uploadingFiles.value = [...uploadingFiles.value, ...uploadEntries];
+
+    try {
+      // Upload files
+      const result = await api.uploadFiles(team, validFiles, (progress) => {
+        // Update progress for all files (XHR gives total progress)
+        uploadingFiles.value = uploadingFiles.value.map(entry => {
+          if (validFiles.some(f => f.name === entry.name)) {
+            return { ...entry, progress };
+          }
+          return entry;
+        });
+      });
+
+      // Insert file references into chat input
+      const tokens = result.uploaded.map(f => `[file:${f.url}]`).join(' ');
+      if (inputRef.current) {
+        const currentText = inputRef.current.textContent || '';
+        const newText = currentText ? `${currentText} ${tokens}` : tokens;
+        inputRef.current.textContent = newText;
+
+        // Trigger input event to update state
+        const event = new Event('input', { bubbles: true });
+        inputRef.current.dispatchEvent(event);
+
+        // Focus and move cursor to end
+        inputRef.current.focus();
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(inputRef.current);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+
+      // Remove from uploadingFiles after 3 seconds
+      setTimeout(() => {
+        uploadingFiles.value = uploadingFiles.value.filter(
+          entry => !validFiles.some(f => f.name === entry.name)
+        );
+      }, 3000);
+    } catch (error) {
+      // Set error on failed files
+      uploadingFiles.value = uploadingFiles.value.map(entry => {
+        if (validFiles.some(f => f.name === entry.name)) {
+          return { ...entry, error: error.message || 'Upload failed' };
+        }
+        return entry;
+      });
+    }
+  }, [team]);
+
+  const triggerFileInput = useCallback(() => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  }, []);
+
+  const cancelUpload = useCallback((file) => {
+    uploadingFiles.value = uploadingFiles.value.filter(f => f.name !== file.name);
+  }, []);
+
+  // Drag-and-drop handlers
+  const handleDragEnter = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setShowDropZone(true);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only hide if leaving the container itself, not a child element
+    if (e.target === e.currentTarget) {
+      setShowDropZone(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowDropZone(false);
+
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length > 0) {
+      // Simulate file input event
+      const fakeEvent = { target: { files } };
+      handleFileSelect(fakeEvent);
+    }
+  }, [handleFileSelect]);
 
   // ── Autocomplete state ──
   // Show autocomplete only while typing the command name (before first space).
@@ -1015,12 +1154,28 @@ export function ChatPanel() {
     }
   }, [handleSend, historyIndex]);
 
-  const handlePaste = useCallback((e) => {
-    // Strip HTML formatting on paste
+  const handlePaste = useCallback(async (e) => {
+    // Check for image in clipboard
+    const items = e.clipboardData.items;
+    for (let item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const blob = item.getAsFile();
+        const timestamp = Date.now();
+        const file = new File([blob], `pasted-image-${timestamp}.png`, { type: blob.type });
+        // Simulate file input event
+        const fakeEvent = { target: { files: [file] } };
+        await handleFileSelect(fakeEvent);
+        return;
+      }
+    }
+
+    // Strip HTML formatting on paste for text
     e.preventDefault();
     const text = e.clipboardData.getData('text/plain');
     document.execCommand('insertText', false, text);
-  }, []);
+  }, [handleFileSelect]);
+
 
   // Select a command from autocomplete — fill the input and enter argument mode
   const selectAutocomplete = useCallback((cmd) => {
@@ -1098,7 +1253,21 @@ export function ChatPanel() {
   }, [team]);
 
   return (
-    <div class="panel active" style={{ display: activeTab.value === "chat" ? "" : "none" }}>
+    <div
+      class="panel active"
+      style={{ display: activeTab.value === "chat" ? "" : "none" }}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drop zone overlay */}
+      {showDropZone && (
+        <div class="drop-zone-overlay">
+          <div class="drop-zone-content">Drop files here</div>
+        </div>
+      )}
+
       {/* Consolidated filter bar with team selector */}
       <div class="chat-filters">
         <PillSelect
@@ -1241,6 +1410,25 @@ export function ChatPanel() {
       {/* Text selection tooltip */}
       <SelectionTooltip containerRef={logRef} chatInputRef={inputRef} />
 
+      {/* Upload progress area */}
+      {uploadingFiles.value.length > 0 && (
+        <div class="upload-progress-area">
+          {uploadingFiles.value.map((f, i) => (
+            <div key={i} class="upload-progress-item">
+              <span class="upload-filename">{f.name}</span>
+              {f.error ? (
+                <span class="upload-error">{f.error}</span>
+              ) : (
+                <div class="upload-progress-bar">
+                  <div class="upload-progress-fill" style={`width: ${f.progress}%`} />
+                </div>
+              )}
+              <button class="upload-cancel-btn" onClick={() => cancelUpload(f)} title="Cancel">×</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Chat input — Cursor-style: contenteditable on top, toolbar on bottom */}
       <div class={`chat-input-box ${commandMode.value ? 'command-mode' : ''}`}>
           {/* Autocomplete dropdown — only while typing command name */}
@@ -1301,6 +1489,27 @@ export function ChatPanel() {
         )}
         <div class="chat-input-toolbar">
           <div class="chat-input-toolbar-spacer" />
+          {!commandMode.value && (
+            <button
+              class="chat-tool-btn upload-btn"
+              onClick={triggerFileInput}
+              title="Upload file"
+            >
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 9v4a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9" />
+                <path d="M8 2v9" />
+                <path d="M5 5l3-3 3 3" />
+              </svg>
+            </button>
+          )}
+          <input
+            type="file"
+            ref={fileInputRef}
+            style="display:none"
+            multiple
+            accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.pdf,.md,.txt,.csv,.json,.yaml,.yml,.zip,.html,.css,.js,.py"
+            onChange={handleFileSelect}
+          />
           {mic.supported && !commandMode.value && (
             <button
               class={"chat-tool-btn" + (mic.active ? " recording" : "")}

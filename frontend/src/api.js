@@ -421,3 +421,31 @@ export async function rejectTaskGlobal(taskId, reason, summary = "") {
   }
   return r.json();
 }
+
+// --- File Upload ---
+
+export async function uploadFiles(team, files, onProgress) {
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("files", file);
+  }
+
+  const xhr = new XMLHttpRequest();
+  return new Promise((resolve, reject) => {
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText));
+      } else {
+        reject(new Error(xhr.responseText || `Upload failed: ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Upload failed: network error"));
+    xhr.open("POST", `/teams/${team}/uploads`);
+    xhr.send(formData);
+  });
+}
