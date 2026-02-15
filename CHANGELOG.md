@@ -2,6 +2,31 @@
 
 All notable changes to Delegate are documented here.
 
+## 0.2.1 — 2026-02-15
+
+### Added
+- **Empty-state modal** — guided setup screen when no teams are configured.
+- **Animated thinking indicator** — manager activity bar cycles through synonyms ("thinking…", "reasoning…", "pondering…") with smooth transitions.
+- **Task approve/reject shortcuts** — `Ctrl+Enter` to approve, `Ctrl+Shift+Enter` to reject when the approval textarea is focused.
+- **Agent inbox task badges** — task IDs shown as badges in agent inbox messages.
+- **`/cost` command** — view token usage and cost breakdown per task inline in chat.
+- **Slash command usage hints** — autocomplete items show argument descriptions.
+
+### Changed
+- Task panel rendering optimized with progressive diff loading, memoization, and lazy activity fetch.
+- Cost summary task IDs styled in gray-scale (matching system task-id pattern) instead of green links.
+- Toast borders changed from colored to neutral for a cleaner look.
+- Reply blockquote spacing improved (blank line after quote).
+- Playwright test suite stabilized for flat URLs, new components, and webkit timing.
+- CI: frontend build skipped in pytest job; playwright steps reordered.
+
+### Fixed
+- `selectTeam` TDZ crash — `useCallback` declaration moved above the `useEffect` that depends on it, fixing a `ReferenceError` that broke the entire app on load.
+- Cmd+K team switcher arrow key delay caused by re-registering keyboard handlers on every render.
+- `/cost` command 500 error (missing `get_connection` import).
+- `CollapsibleMessage` ref forwarding issue.
+- Git `init -b main` in multi-team test fixture (CI compatibility).
+
 ## 0.2.0 — 2026-02-14
 
 ### Added
