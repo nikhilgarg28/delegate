@@ -392,8 +392,8 @@ def team_create(
                     exclude.update(agent_names)
 
         chosen = pick_names(count, exclude)
-        for name in chosen:
-            parsed_agents.append((name, "engineer"))
+        for agent_name in chosen:
+            parsed_agents.append((agent_name, "engineer"))
     else:
         # Parse "name:role" pairs — role defaults to "engineer"
         for token in agents_stripped.split(","):
