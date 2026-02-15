@@ -57,3 +57,7 @@ def tmp_team(tmp_path):
         os.environ.pop("DELEGATE_HOME", None)
     else:
         os.environ["DELEGATE_HOME"] = old_env
+
+    # Clear the schema cache so subsequent tests re-check the DB
+    from delegate.db import _schema_verified
+    _schema_verified.clear()

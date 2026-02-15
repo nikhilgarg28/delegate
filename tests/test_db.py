@@ -12,9 +12,20 @@ from delegate.db import (
     task_row_to_dict,
     MIGRATIONS,
     _current_version,
+    _schema_verified,
 )
 from delegate.paths import db_path, global_db_path
 from tests.conftest import SAMPLE_TEAM_NAME as TEAM
+
+
+@pytest.fixture(autouse=True)
+def _clear_schema_cache(tmp_team):
+    """Clear the ensure_schema in-process cache after fixture setup (which
+    populates it via bootstrap) so that tests which delete/recreate the DB
+    file get a fresh schema check."""
+    _schema_verified.clear()
+    yield
+    _schema_verified.clear()
 
 
 class TestSchemaInitialization:
