@@ -131,15 +131,17 @@ jobs:
         run: |
           python -c "
           import json, urllib.request, sys
-          from packaging.version import Version
 
-          local = Version('${{ steps.local.outputs.version }}')
+          def parse(v):
+              return tuple(int(x) for x in v.split('.'))
+
+          local = parse('${{ steps.local.outputs.version }}')
 
           try:
               resp = urllib.request.urlopen('https://pypi.org/pypi/delegate-ai/json')
-              pypi = Version(json.loads(resp.read())['info']['version'])
+              pypi = parse(json.loads(resp.read())['info']['version'])
           except Exception:
-              pypi = Version('0.0.0')
+              pypi = (0, 0, 0)
 
           if local > pypi:
               print('Version bump detected: {} -> {}'.format(pypi, local))
