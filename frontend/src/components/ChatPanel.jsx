@@ -1496,9 +1496,7 @@ export function ChatPanel() {
               title="Upload file"
             >
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 9v4a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9" />
-                <path d="M8 2v9" />
-                <path d="M5 5l3-3 3 3" />
+                <path d="M12 6.5a3.5 3.5 0 0 1-7 0V3a2 2 0 1 1 4 0v4.5a1 1 0 0 1-2 0V3.5" />
               </svg>
             </button>
           )}
