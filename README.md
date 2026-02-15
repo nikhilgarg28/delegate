@@ -17,7 +17,7 @@
 
 Delegate creates a persistent team of AI agents on your local machine. Describe what you want in plain English — Delegate breaks it into tasks, assigns them to agents, manages code reviews between them, and merges the result. You watch it all happen in a real-time web UI, or check in later. The team remembers your codebase across tasks.
 
-> **Note:** Delegate currently works with **local git repositories** — agents commit directly to branches on your machine. Support for remote repositories (GitHub, GitLab), external tools (Slack, Linear), and CI/CD integrations is on the roadmap.
+> **Note:** Delegate currently works with **local git repositories** — agents commit directly to branches on your machine. Support for remote repositories (GitHub, GitLab), external tools (Slack, Linear), and CI/CD integrations is coming soon - stay tuned!
 
 <!-- TODO: Replace with an actual screenshot or demo GIF
 <p align="center">
@@ -33,16 +33,12 @@ Most AI coding tools give you **one agent, one task, then it's gone**. Delegate 
 
 ```bash
 pip install delegate-ai
-delegate start # needs ANTHROPIC_API_KEY in ENV or claude code login
+delegate start # needs claude code login or ANTHROPIC_API_KEY in ENV
 ```
 
-That's it. Delegate will:
-1. Detect your name from `git config`
-2. Create a team with a manager + 5 engineer agents
-3. Register the current repo automatically
-4. Open a browser with a chat interface
-
-Tell the manager what to build. It handles the rest.
+That's it. Delegate will create a default team with a manager + 5 engineer agents
+and open the console in the browser. You tell delegate agent what to build and it
+handles the rest.
 
 ## What happens when you send a task
 
@@ -50,7 +46,7 @@ Tell the manager what to build. It handles the rest.
 You: "Add a /health endpoint that returns uptime and version"
 ```
 
-1. **Manager** breaks it down, creates a task, assigns it to an available agent
+1. **Manager** breaks it down, creates one or more tasks, assigns to available agents
 2. **Agent** gets a git worktree, writes the code, runs tests, submits for review
 3. **Reviewer** (another agent) checks the diff, runs the test suite, approves or rejects
 4. **You** approve the merge (or set repos to auto-merge)
@@ -67,13 +63,9 @@ as you need with zero cost when not in use, all on your local filesystem.
 
 **Browser UI with real-time visibility.** Watch agents pick up tasks, write code, and review each other's work — live. Approve merges, browse diffs, inspect files, and run shell commands — all from the browser.
 
-**Full development lifecycle.** Tasks flow through `todo → in_progress → in_review → in_approval → merging → done` with agents handling each stage. Rejections cycle back automatically.
+**Full development lifecycle.** Agents don't just write code but also review each other's code. By default tasks flow through `todo → in_progress → in_review → in_approval → merging → done` with agents handling each stage.
 
-**Real git, real branches.** Each agent works in isolated [git worktrees](https://git-scm.com/docs/git-worktree). No magic file systems. Branches are named `delegate/<team>/T0001`. You can inspect them anytime.
-
-**Code review between agents.** Agents don't just write code — they review each other's work. Reviewers check out the branch, run the full test suite, and gate the merge queue. Reviews are visible in the UI with full diffs.
-
-**Customizable workflows.** Define your own task lifecycle in Python:
+**Customizable workflows.** Not happy with default task workflow? Define your own task lifecycle in Python:
 
 ```python
 from delegate.workflow import Stage, workflow
@@ -88,15 +80,13 @@ def my_workflow():
     return [Todo, InProgress, InReview, Deploy, Done]
 ```
 
+**Real git, real branches.** Each agent works in isolated [git worktrees](https://git-scm.com/docs/git-worktree). No magic file systems. Branches are named `delegate/<team>/T0001`. You can inspect them anytime.
+
 **Mix models by role.** By default, the manager runs on Claude Opus and engineers run on Claude Sonnet — strong reasoning where it matters, cost-efficient execution everywhere else. Configurable per agent.
 
-**Team charter in markdown.** Edit a markdown file to set review standards, communication norms, and team values. Ship two presets — "quality first" (stricter reviews, more tests) and "ship fast" (lighter process, faster iteration) — or write your own.
-
-**Multi-team, multi-repo.** Run separate teams for different projects, each with their own agents, repos, and workflows.
+**Team charter in markdown.** Edit a markdown file to set review standards, communication norms, and team values. 
 
 **Built-in shell.** Run any command from the chat with `/shell ls -la`. Output renders inline.
-
-**Keyboard-driven.** `?` for shortcuts, `j/k` navigation, `t/c/a` to switch tabs, `r` to reply, `/` for commands.
 
 ## Architecture
 
@@ -116,7 +106,7 @@ def my_workflow():
 └── db.sqlite             # Messages, tasks, events
 ```
 
-Agents are [Claude Code](https://docs.anthropic.com/en/docs/claude-code) instances. The manager orchestrates — it doesn't write code. Engineers work in git worktrees and communicate through a message bus. The daemon polls for messages and dispatches agent turns as async tasks.
+Agents are [Claude Code](https://docs.anthropic.com/en/docs/claude-code) instances. A delegate agent manages other agents on your behalf. Engineers work in git worktrees and communicate through a message bus. The daemon polls for messages and dispatches agent turns as async tasks. All storage is in local files - either plaintext or sqlite.
 
 There's no magic. You can `ls` into any agent's directory and see exactly what they're doing. Worklogs, memory journals, context files — it's all plain text.
 
@@ -148,14 +138,14 @@ delegate workflow init myteam                     # Register default workflow
 delegate workflow add myteam ./my-workflow.py     # Register custom workflow
 ```
 
-### Repo settings
+### Set Auto Approval
+
+By default, Delegate expects you to do a final code review and give explicit
+approval before merging into your local repo's main. If you wanted, you can set 
+it to auto approval:
 
 ```bash
-# Auto-merge when agents approve (skip human approval)
 delegate repo set-approval myteam my-repo auto
-
-# Run tests before merging
-delegate repo set-test-cmd myteam my-repo "python -m pytest -x -q"
 ```
 
 ## How it works
