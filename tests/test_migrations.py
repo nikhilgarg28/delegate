@@ -29,7 +29,10 @@ def tmp_hc(tmp_path):
     hc = tmp_path / "hc"
     hc.mkdir()
     (hc / "protected").mkdir()
-    return hc
+    yield hc
+    # Clean up pooled connections so stale references don't leak across tests.
+    from delegate.db import close_thread_connections
+    close_thread_connections()
 
 
 # ---------------------------------------------------------------------------
