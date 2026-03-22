@@ -80,6 +80,8 @@ def tmp_team(tmp_path):
     else:
         os.environ["DELEGATE_HOME"] = old_env
 
-    # Clear the schema cache so subsequent tests re-check the DB
-    from delegate.db import _schema_verified
+    # Close any pooled connections and clear the schema cache so subsequent
+    # tests re-check the DB against a fresh directory.
+    from delegate.db import _schema_verified, close_thread_connections
+    close_thread_connections()
     _schema_verified.clear()

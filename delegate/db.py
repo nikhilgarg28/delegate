@@ -9,17 +9,26 @@ Migrations live as numbered SQL files in ``delegate/migrations/V001.sql``,
 creates an automatic backup before applying new ones, runs an integrity
 check afterwards, and restores the backup on failure.
 
+**Connection pooling** — ``get_connection()`` maintains a per-thread pool
+(via ``threading.local()``) so that successive calls on the same thread
+reuse an existing ``sqlite3.Connection`` instead of opening a fresh one
+each time.  This significantly reduces connection overhead during
+high-concurrency agent turns where ``asyncio.to_thread`` dispatches work
+to a thread pool.  Call ``close_thread_connections()`` to release all
+pooled connections for the current thread.
+
 Usage::
 
-    from delegate.db import get_connection, ensure_schema
+    from delegate.db import get_connection, close_thread_connections
 
-    # At daemon startup (or lazily on first query):
-    ensure_schema(hc_home, project)
-
-    # For individual operations:
+    # For individual operations (connection is pooled per-thread):
     conn = get_connection(hc_home, project)
-    ...
-    conn.close()
+    conn.execute(...)
+    conn.commit()
+    # No need to call conn.close() — the pool reuses the connection.
+
+    # When the thread is about to exit, release pooled connections:
+    close_thread_connections()
 """
 
 import json
@@ -39,6 +48,17 @@ logger = logging.getLogger(__name__)
 # Changed to use just hc_home since we now have a global DB
 _schema_verified: dict[str, int] = {}
 _schema_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# Per-thread connection pool
+# ---------------------------------------------------------------------------
+# Reuse SQLite connections within the same thread to avoid the overhead of
+# opening (and WAL-pragmaing) a fresh connection on every get_connection()
+# call.  Each thread keeps at most one connection per database path.
+# Callers that still call conn.close() will simply cause the next
+# get_connection() to transparently open a replacement.
+
+_thread_local = threading.local()
 
 # ---------------------------------------------------------------------------
 # Migration registry  (file-based)
@@ -640,19 +660,74 @@ def ensure_schema(hc_home: Path, team: str = "") -> None:
     conn.close()
 
 
-def get_connection(hc_home: Path, team: str = "") -> sqlite3.Connection:
-    """Open a connection to the global DB with row_factory and ensure schema is current.
+def _is_connection_usable(conn: sqlite3.Connection) -> bool:
+    """Return True if *conn* is open and can execute a trivial query."""
+    try:
+        conn.execute("SELECT 1")
+        return True
+    except Exception:
+        return False
 
-    Callers are responsible for closing the connection.
+
+def get_connection(hc_home: Path, team: str = "") -> sqlite3.Connection:
+    """Return a per-thread cached connection to the global DB.
+
+    Connections are stored in ``threading.local()`` and reused across
+    successive calls **on the same thread** for the same database path.
+    This avoids the overhead of opening a fresh ``sqlite3.Connection``
+    (plus WAL pragma) on every call — which matters during high-concurrency
+    agent turns where ``asyncio.to_thread`` dispatches work to a pool.
+
+    If a caller explicitly closes the returned connection, the next call
+    will transparently open a replacement.
+
+    Use :func:`close_thread_connections` to release all pooled connections
+    for the current thread when the thread is about to exit or when you
+    want to force fresh connections.
 
     Note: team parameter is kept for backward compatibility but is no longer used.
     """
     ensure_schema(hc_home, team)
-    path = global_db_path(hc_home)
-    conn = sqlite3.connect(str(path))
+    path = str(global_db_path(hc_home))
+
+    pool: dict[str, sqlite3.Connection] | None = getattr(
+        _thread_local, "connections", None
+    )
+    if pool is None:
+        pool = {}
+        _thread_local.connections = pool
+
+    conn = pool.get(path)
+    if conn is not None and _is_connection_usable(conn):
+        return conn
+
+    # Evict the stale/closed entry (if any) before inserting a fresh one.
+    pool.pop(path, None)
+
+    # Open a new connection and cache it for this thread + path.
+    conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    pool[path] = conn
     return conn
+
+
+def close_thread_connections() -> None:
+    """Close and discard all pooled connections for the **current** thread.
+
+    Call this when a thread is about to exit or when you want to force
+    subsequent ``get_connection()`` calls to open fresh connections.
+    """
+    pool: dict[str, sqlite3.Connection] | None = getattr(_thread_local, "connections", None)
+    if pool is None:
+        return
+    for conn in pool.values():
+        try:
+            conn.close()
+        except Exception:
+            pass
+    pool.clear()
+
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,9 @@ import pytest
 from delegate.db import (
     ensure_schema,
     get_connection,
+    close_thread_connections,
+    _is_connection_usable,
+    _thread_local,
     task_row_to_dict,
     MIGRATIONS,
     _current_version,
@@ -20,11 +23,13 @@ from tests.conftest import SAMPLE_TEAM_NAME as TEAM
 
 @pytest.fixture(autouse=True)
 def _clear_schema_cache(tmp_team):
-    """Clear the ensure_schema in-process cache after fixture setup (which
-    populates it via bootstrap) so that tests which delete/recreate the DB
-    file get a fresh schema check."""
+    """Clear the ensure_schema in-process cache and connection pool after
+    fixture setup (which populates them via bootstrap) so that tests which
+    delete/recreate the DB file get a fresh schema check and fresh connections."""
+    close_thread_connections()
     _schema_verified.clear()
     yield
+    close_thread_connections()
     _schema_verified.clear()
 
 
@@ -206,25 +211,87 @@ class TestConnectionManagement:
         conn.close()
         assert count == len(MIGRATIONS)
 
-    def test_multiple_connections_to_same_db(self, tmp_team):
-        """Multiple connections to the same DB should work (WAL mode)."""
+    def test_same_thread_reuses_connection(self, tmp_team):
+        """Successive get_connection calls on the same thread return the same object."""
         conn1 = get_connection(tmp_team, TEAM)
         conn2 = get_connection(tmp_team, TEAM)
+        assert conn1 is conn2
 
-        # Insert via conn1
-        conn1.execute("INSERT INTO messages (sender, recipient, content, type) VALUES (?, ?, ?, ?)",
-                      ("alice", "bob", "test", "chat"))
+        # Insert and read on the (shared) connection still works.
+        conn1.execute(
+            "INSERT INTO messages (sender, recipient, content, type) VALUES (?, ?, ?, ?)",
+            ("alice", "bob", "test", "chat"),
+        )
         conn1.commit()
-
-        # Read via conn2
         cursor = conn2.execute("SELECT content FROM messages WHERE sender='alice'")
         row = cursor.fetchone()
-
-        conn1.close()
-        conn2.close()
-
         assert row["content"] == "test"
 
+
+class TestConnectionPooling:
+    """Test per-thread connection pool behaviour."""
+
+    def test_pool_replaces_closed_connection(self, tmp_team):
+        """If the caller closes the connection, the pool creates a fresh one."""
+        conn1 = get_connection(tmp_team, TEAM)
+        conn1.close()
+
+        conn2 = get_connection(tmp_team, TEAM)
+        assert conn2 is not conn1
+        assert _is_connection_usable(conn2)
+
+    def test_close_thread_connections_clears_pool(self, tmp_team):
+        """close_thread_connections should close and remove all cached connections."""
+        conn = get_connection(tmp_team, TEAM)
+        assert _is_connection_usable(conn)
+
+        close_thread_connections()
+
+        # The old connection object should now be unusable.
+        assert not _is_connection_usable(conn)
+        # The pool dict should be empty.
+        pool = getattr(_thread_local, "connections", {})
+        assert len(pool) == 0
+
+    def test_pool_per_thread_isolation(self, tmp_team):
+        """Each thread should get its own independent connection."""
+        import threading as _threading
+
+        main_conn = get_connection(tmp_team, TEAM)
+        child_conn_holder: list[sqlite3.Connection] = []
+
+        def _worker():
+            c = get_connection(tmp_team, TEAM)
+            child_conn_holder.append(c)
+            close_thread_connections()
+
+        t = _threading.Thread(target=_worker)
+        t.start()
+        t.join()
+
+        assert len(child_conn_holder) == 1
+        child_conn = child_conn_holder[0]
+        # Different thread must get a different connection object.
+        assert child_conn is not main_conn
+
+    def test_pool_different_paths_different_connections(self, tmp_path):
+        """Different hc_home paths should yield different connections."""
+        from delegate.db import ensure_schema as _es
+
+        home_a = tmp_path / "a"
+        home_a.mkdir()
+        _es(home_a, "")
+
+        home_b = tmp_path / "b"
+        home_b.mkdir()
+        _es(home_b, "")
+
+        conn_a = get_connection(home_a, "")
+        conn_b = get_connection(home_b, "")
+        assert conn_a is not conn_b
+
+        # Clean up so the autouse fixture doesn't trip on stale paths.
+        close_thread_connections()
 
 class TestJSONColumnRoundtrips:
     """Test serialization/deserialization of JSON columns in task_row_to_dict."""
