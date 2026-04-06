@@ -50,57 +50,13 @@ logger = logging.getLogger(__name__)
 # manual configuration.  Edit via ``delegate network`` CLI.
 # ---------------------------------------------------------------------------
 
-DEFAULT_DOMAINS: list[str] = [
-    # ── Python (pip / uv / poetry) ──
-    "pypi.org",
-    "files.pythonhosted.org",
-    # ── Node (npm / yarn / pnpm) ──
-    "registry.npmjs.org",
-    "registry.yarnpkg.com",
-    # ── Rust (cargo) ──
-    "crates.io",
-    "static.crates.io",
-    "index.crates.io",
-    # ── Go ──
-    "proxy.golang.org",
-    "sum.golang.org",
-    "storage.googleapis.com",
-    # ── Ruby (gem / bundler) ──
-    "rubygems.org",
-    "index.rubygems.org",
-    # ── Java / Kotlin (Maven / Gradle) ──
-    "repo1.maven.org",
-    "repo.maven.apache.org",
-    "plugins.gradle.org",
-    "services.gradle.org",
-    "jcenter.bintray.com",
-    # ── .NET (NuGet) ──
-    "api.nuget.org",
-    "*.nuget.org",
-    # ── Swift / iOS (CocoaPods + SPM uses GitHub) ──
-    "cdn.cocoapods.org",
-    "trunk.cocoapods.org",
-    # ── Dart / Flutter (pub) ──
-    "pub.dev",
-    "*.pub.dev",
-    # ── PHP (Composer / Packagist) ──
-    "packagist.org",
-    "repo.packagist.org",
-    # ── Elixir (Hex) ──
-    "hex.pm",
-    "repo.hex.pm",
-    "builds.hex.pm",
-    # ── Haskell (Hackage / Stackage) ──
-    "hackage.haskell.org",
-    # ── Git forges ──
-    "github.com",
-    "*.github.com",
-    "*.githubusercontent.com",
-    "gitlab.com",
-    "*.gitlab.com",
-    "bitbucket.org",
-    "*.bitbucket.org",
-]
+# The canonical domain list is composed from adapter domain groups.
+# See ``delegate.adapters`` for the individual groups (CORE_DOMAINS,
+# DOMAIN_GROUPS).  This module re-exports the composed list so that
+# existing callers don't need to change.
+from delegate.adapters import build_default_domains as _build_default_domains
+
+DEFAULT_DOMAINS: list[str] = _build_default_domains()
 """Curated list of domains agents commonly need.  Exported so that
 other modules (e.g. tests, CLI help text) can reference it."""
 

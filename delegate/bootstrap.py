@@ -159,7 +159,7 @@ def _default_model(role: str) -> str:
 def _default_state(role: str, model: str | None = None) -> dict:
     if model is None:
         model = _default_model(role)
-    return {"role": role, "model": model, "pid": None, "token_budget": None}
+    return {"role": role, "model": model, "pid": None, "token_budget": None, "host": None}
 
 
 def make_roster(
@@ -325,6 +325,7 @@ def bootstrap(
     # already exists the DB row may be missing (e.g. after a DB wipe).
     from delegate.db import get_connection
     from delegate.db_ids import register_team
+    from delegate.task import _derive_prefix
     conn = get_connection(hc_home, "")
     try:
         conn.execute(
@@ -332,6 +333,12 @@ def bootstrap(
             (team_name, team_uuid),
         )
         register_team(conn, team_name, team_uuid=team_uuid)
+        # Set the per-project prefix for task display IDs (e.g. "POLY")
+        prefix = _derive_prefix(team_name)
+        conn.execute(
+            "UPDATE project_ids SET prefix = ? WHERE uuid = ? AND (prefix = '' OR prefix IS NULL)",
+            (prefix, team_uuid),
+        )
         conn.commit()
     finally:
         conn.close()

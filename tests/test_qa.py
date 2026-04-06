@@ -92,8 +92,7 @@ def qa_team_with_task(qa_team):
     hc_home, repo_path = qa_team
 
     # Create a task and move it through the workflow to 'in_review'
-    task = create_task(hc_home, TEAM, title="Add multiply feature", assignee="manager", repo="myapp")
-    assign_task(hc_home, TEAM, task["id"], "alice")
+    task = create_task(hc_home, TEAM, title="Add multiply feature", assignee="alice", repo="myapp")
     change_status(hc_home, TEAM, task["id"], "in_progress")
     change_status(hc_home, TEAM, task["id"], "in_review")
 
@@ -146,6 +145,21 @@ class TestExtractTaskIdFromBranch:
         assert _extract_task_id_from_branch("delegate/a1b2c3/myteam/T0042") == 42
         # Legacy format: delegate/<team>/T<NNN>
         assert _extract_task_id_from_branch("delegate/myteam/T0042") == 42
+
+    def test_display_id_branch_format(self, qa_team):
+        """Convention: delegate/<team_id>/<team>/PREFIX-NNNN."""
+        hc_home, _ = qa_team
+        # Create a task so we have a display_id to look up
+        task = create_task(hc_home, TEAM, title="Test display_id", assignee="alice")
+        display_id = task["display_id"]
+        branch = f"delegate/abc123/{TEAM}/{display_id}"
+        result = _extract_task_id_from_branch(branch, hc_home, TEAM)
+        assert result == task["id"]
+
+    def test_display_id_branch_no_db_returns_none(self):
+        """PREFIX-NNNN branch without DB context returns None."""
+        result = _extract_task_id_from_branch("delegate/abc123/myteam/POLY-0001")
+        assert result is None
 
 
 class TestParseReviewRequest:
