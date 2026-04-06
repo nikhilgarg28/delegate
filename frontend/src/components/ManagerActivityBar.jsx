@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
   managerTurnContext, agentLastActivity, agentActivityLog,
-  agentThinking, agents, tasks, openPanel,
+  agentThinking, agents, tasks, openPanel, currentTeam,
 } from "../state.js";
 import { cap, taskIdStr, renderMarkdown, useStreamingText, formatToolDetail } from "../utils.js";
+import { showToast } from "../toast.js";
+import * as api from "../api.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -161,6 +163,20 @@ export function ManagerActivityBar() {
     return <div class="delegate-footer" />;
   }
 
+  const [interrupting, setInterrupting] = useState(false);
+  const onInterrupt = async (e) => {
+    e.stopPropagation();
+    setInterrupting(true);
+    try {
+      await api.interruptAgent(managerName, currentTeam.value);
+      showToast(`Interrupted ${cap(managerName)}`, "success");
+    } catch (err) {
+      showToast(`Interrupt failed: ${err.message}`, "error");
+    } finally {
+      setInterrupting(false);
+    }
+  };
+
   return (
     <div class={"delegate-footer delegate-footer-active" + (hasThinking ? " delegate-footer-expanded" : "")}>
       {/* Header: dots · Delegate · status — click to open side panel */}
@@ -175,6 +191,14 @@ export function ManagerActivityBar() {
           ? <span class="delegate-footer-status">{status}</span>
           : <span class="delegate-footer-verb"><CyclingVerb /></span>
         }
+        <button
+          class="delegate-footer-interrupt"
+          disabled={interrupting}
+          onClick={onInterrupt}
+          title="Stop this turn"
+        >
+          {interrupting ? "..." : "Stop"}
+        </button>
       </div>
 
       {/* Body — thinking stream + tools */}

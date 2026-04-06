@@ -252,7 +252,7 @@ function TaskRow({ task, active }) {
     <div class="mc-task-row" onClick={() => openPanel("task", task.id)}>
       <div class="mc-task-row-line1">
         <span class={"mc-dot " + (active ? "dot-active" : "dot-idle")} />
-        <span class="mc-task-id">{taskIdStr(task.id)}</span>
+        <span class="mc-task-id">{taskIdStr(task.id, task.prefix, task.seq)}</span>
         <span class="mc-task-title-inline">{task.title}</span>
       </div>
       <div class="mc-task-row-line2">

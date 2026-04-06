@@ -142,7 +142,7 @@ export function NotificationPopover() {
                   >
                     <div class="notif-item-main">
                       <span class={`status-dot status-${task.status}`} />
-                      <span class="notif-task-id">{taskIdStr(task.id)}</span>
+                      <span class="notif-task-id">{taskIdStr(task.id, task.prefix, task.seq)}</span>
                       <span class="notif-task-title">{task.title}</span>
                     </div>
                     <div class="notif-item-meta">
@@ -176,7 +176,7 @@ export function NotificationPopover() {
                     onClick={() => handleTaskClick(task.id)}
                   >
                     <div class="notif-item-main">
-                      <span class="notif-task-id">{taskIdStr(task.id)}</span>
+                      <span class="notif-task-id">{taskIdStr(task.id, task.prefix, task.seq)}</span>
                       <span class="notif-task-title">{task.title}</span>
                       <span class="notif-time">
                         {fmtRelativeTime(task.updated_at)}

@@ -1,5 +1,5 @@
 import { useMemo } from "preact/hooks";
-import { diff2HtmlParse } from "../utils.js";
+import { diff2HtmlParse, taskIdStr } from "../utils.js";
 
 /**
  * Renders /diff command output - inline task diff view.
@@ -39,7 +39,7 @@ export function DiffCommandBlock({ result }) {
     return (
       <div class="diff-command-block">
         <div class="diff-command-header">
-          Diff for T{String(task_id).padStart(4, '0')}
+          Diff for {taskIdStr(task_id)}
           {branch && <span class="diff-command-branch">{branch}</span>}
         </div>
         <div class="diff-command-empty">No changes</div>
@@ -50,7 +50,7 @@ export function DiffCommandBlock({ result }) {
   return (
     <div class="diff-command-block">
       <div class="diff-command-header">
-        Diff for T{String(task_id).padStart(4, '0')}
+        Diff for {taskIdStr(task_id)}
         {branch && <span class="diff-command-branch">{branch}</span>}
       </div>
       <div class="diff-command-body">

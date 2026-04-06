@@ -185,6 +185,54 @@ def read_outbox(
     return [_row_to_message(r) for r in rows]
 
 
+def claim_inbox_batch(
+    hc_home: Path, team: str, agent: str, limit: int = 5,
+    *,
+    select_fn: "Callable[[list[Message]], list[Message]] | None" = None,
+) -> list[Message]:
+    """Atomically read unprocessed messages and mark them as seen.
+
+    Uses a single transaction with ``BEGIN IMMEDIATE`` to prevent two
+    concurrent callers (e.g. two turns dispatched for the same agent)
+    from both reading and claiming the same messages.
+
+    When *select_fn* is provided, it is called on the fetched messages
+    inside the transaction and only the returned subset is marked as
+    seen.  Messages not selected remain untouched and eligible for
+    future claims.
+
+    Only messages that are delivered but not yet seen are claimed.
+    Returns the claimed messages (now marked ``seen_at``).
+    """
+    team_uuid = _team(hc_home, team)
+    now = _now()
+    conn = get_connection(hc_home, team)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        rows = conn.execute(
+            "SELECT * FROM messages WHERE type = 'chat' AND project_uuid = ? "
+            "AND recipient = ? AND delivered_at IS NOT NULL AND processed_at IS NULL "
+            "AND seen_at IS NULL "
+            "ORDER BY id ASC LIMIT ?",
+            (team_uuid, agent, limit),
+        ).fetchall()
+        candidates = [_row_to_message(r) for r in rows]
+        batch = select_fn(candidates) if select_fn else candidates
+        if batch:
+            ids = [m.id for m in batch if m.id is not None]
+            conn.executemany(
+                "UPDATE messages SET seen_at = ? WHERE id = ?",
+                [(now, mid) for mid in ids],
+            )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+    return batch
+
+
 def mark_seen(hc_home: Path, team: str, msg_id: int) -> None:
     """Mark a message as seen (agent control loop picked it up at turn start)."""
     conn = get_connection(hc_home, team)
@@ -382,22 +430,86 @@ def has_unread(hc_home: Path, team: str, agent: str) -> bool:
     return row is not None
 
 
+def has_unclaimed_messages(hc_home: Path, team: str, agent: str) -> bool:
+    """Check if an agent has any unclaimed messages (seen_at IS NULL)."""
+    team_uuid = _team(hc_home, team)
+    conn = get_connection(hc_home, team)
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM messages WHERE type = 'chat' AND project_uuid = ? "
+            "AND recipient = ? AND delivered_at IS NOT NULL "
+            "AND processed_at IS NULL AND seen_at IS NULL LIMIT 1",
+            (team_uuid, agent),
+        ).fetchone()
+    finally:
+        conn.close()
+    return row is not None
+
+
 def agents_with_unread(hc_home: Path, team: str) -> list[str]:
-    """Return all recipient names that have at least one unread message.
+    """Return all recipient names that have at least one unclaimed message.
 
     Single query — used by the daemon to find every agent needing a turn.
+    Only considers messages not yet claimed (seen_at IS NULL).
     """
     team_uuid = _team(hc_home, team)
     conn = get_connection(hc_home, team)
     try:
         rows = conn.execute(
             "SELECT DISTINCT recipient FROM messages "
-            "WHERE type = 'chat' AND project_uuid = ? AND delivered_at IS NOT NULL AND processed_at IS NULL",
+            "WHERE type = 'chat' AND project_uuid = ? "
+            "AND delivered_at IS NOT NULL AND processed_at IS NULL "
+            "AND seen_at IS NULL",
             (team_uuid,),
         ).fetchall()
     finally:
         conn.close()
     return [row[0] for row in rows]
+
+
+def agents_with_unread_prioritized(
+    hc_home: Path, team: str, human_names: list[str],
+) -> list[str]:
+    """Return agents with unread messages, human-message recipients first.
+
+    Like ``agents_with_unread`` but sorts so agents that have a pending
+    message from a human sender are dispatched before the rest.
+
+    Only considers messages that have not yet been claimed (seen_at IS
+    NULL).  Messages already claimed by a prior turn are not eligible
+    for re-dispatch.
+    """
+    team_uuid = _team(hc_home, team)
+    conn = get_connection(hc_home, team)
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT recipient FROM messages "
+            "WHERE type = 'chat' AND project_uuid = ? "
+            "AND delivered_at IS NOT NULL AND processed_at IS NULL "
+            "AND seen_at IS NULL",
+            (team_uuid,),
+        ).fetchall()
+        all_agents = [row[0] for row in rows]
+
+        if not human_names or not all_agents:
+            return all_agents
+
+        placeholders = ",".join("?" * len(human_names))
+        human_rows = conn.execute(
+            f"SELECT DISTINCT recipient FROM messages "
+            f"WHERE type = 'chat' AND project_uuid = ? "
+            f"AND delivered_at IS NOT NULL AND processed_at IS NULL "
+            f"AND seen_at IS NULL "
+            f"AND sender IN ({placeholders})",
+            (team_uuid, *human_names),
+        ).fetchall()
+        human_recipients = {row[0] for row in human_rows}
+    finally:
+        conn.close()
+
+    priority = [a for a in all_agents if a in human_recipients]
+    rest = [a for a in all_agents if a not in human_recipients]
+    return priority + rest
 
 
 def count_unread(hc_home: Path, team: str, agent: str) -> int:
