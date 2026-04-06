@@ -14,6 +14,8 @@ Usage:
         delegate workflow add myteam delegate/workflows/default.py
 """
 
+from datetime import datetime, timezone
+
 from delegate.workflow import Stage, workflow
 
 # Import git mixin so ctx gets git methods
@@ -36,10 +38,12 @@ class InProgress(Stage):
     _transitions = {"in_review", "cancelled"}
 
     def assign(self, ctx):
-        # If the task already has an assignee, keep them (e.g. rework
-        # after rejection).  Otherwise, pick the least-loaded engineer.
-        if ctx.task.get("assignee"):
-            return ctx.task.assignee
+        # Keep existing assignee for rework (rejection → in_progress),
+        # but NOT if the assignee is the manager — the manager should
+        # never be the one working on a task.
+        current = ctx.task.get("assignee")
+        if current and current != ctx.manager:
+            return current
         return ctx.pick(role="engineer")
 
     def enter(self, ctx):
@@ -119,7 +123,6 @@ class Done(Stage):
     terminal = True
 
     def enter(self, ctx):
-        from datetime import datetime, timezone
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         ctx.task.update(completed_at=now)
 
@@ -162,7 +165,6 @@ class Cancelled(Stage):
     terminal = True
 
     def enter(self, ctx):
-        from datetime import datetime, timezone
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         ctx.task.update(completed_at=now, assignee="")
         # Best-effort worktree cleanup

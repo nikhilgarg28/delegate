@@ -11,6 +11,10 @@
 - Commit in logical units. Each commit should build, pass tests, and
   represent one coherent change. If you can't describe the commit in
   one sentence, it's too big.
+- **Commit message format:** Start every commit message with
+  `[<your_name>/<your_role>]`. Example: `[eng1/engineer] Add retry logic to payment API`.
+  This makes it easy to identify which agent and role produced each change
+  in `git log`.
 - Write tests alongside implementation. At minimum: one happy path, one
   error case, one edge case. If you're not sure what to test, test the
   thing most likely to break when someone else changes it later.
@@ -25,6 +29,10 @@
   something small that could be improved — a misleading variable name,
   a missing error case, a stale comment — fix it. If it's bigger than
   small, flag it to the manager rather than scope-creeping your task.
+- Do not modify shared infrastructure files (test configs, CI configs,
+  lockfiles) to work around test failures. If a test fails in your
+  branch but passes on main, fix your code — not the test harness.
+  If a test is genuinely broken on main, report it to the manager.
 - When you're stuck for more than 10 minutes, say so. Write what you
   tried in your worklog and message the manager. Spinning in silence
   is the most expensive mistake.

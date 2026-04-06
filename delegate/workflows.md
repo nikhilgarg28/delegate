@@ -605,6 +605,18 @@ Self-loop with guard: `DynamicApproval → DynamicApproval (loop until all appro
 
 The guard checks `task.data["approved_by"]` against `task.data["required_approvers"]`. Each iteration assigns the next approver.
 
+### Autonomous Research
+
+```
+Todo → Researching (agent, loops autonomously) → Reporting (human reviews) → Done
+                                                      ↓ needs more experiments
+                                                  Researching (loops back)
+```
+
+The built-in `research` workflow ships with Delegate. The researcher agent enters an autonomous experiment loop: modify code → run → evaluate → keep/discard → repeat. The agent uses `git reset --hard` to discard failed experiments and keeps successful ones as commits. When done, the task moves to `Reporting` where the human reviews results. The human can send it back to `Researching` for more experiments or move to `Done`.
+
+Key difference from engineering workflows: no review/merge pipeline. Research produces experiment logs and insights, not merge-ready PRs.
+
 ### Deployment with Monitoring
 
 ```
