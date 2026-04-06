@@ -287,6 +287,30 @@ class TestTelephoneUnit:
         deny2 = asyncio.run(guard("Bash", {"command": "git push origin main"}, None))
         assert deny2.behavior == "deny"
 
+    def test_guard_denies_bash_case_insensitive(self, tmp_path):
+        """Guard denies bash commands regardless of case."""
+        t = Telephone(
+            preamble="hello",
+            cwd=tmp_path,
+            denied_bash_patterns=["DROP TABLE", "DELETE FROM", "TRUNCATE "],
+        )
+        guard = t._make_guard()
+        assert guard is not None
+
+        # Lowercase variants should also be denied
+        deny1 = asyncio.run(guard("Bash", {"command": "psql -c 'drop table users'"}, None))
+        assert deny1.behavior == "deny"
+
+        deny2 = asyncio.run(guard("Bash", {"command": "echo 'delete from orders'"}, None))
+        assert deny2.behavior == "deny"
+
+        deny3 = asyncio.run(guard("Bash", {"command": "psql -c 'Truncate accounts'"}, None))
+        assert deny3.behavior == "deny"
+
+        # Non-matching should still be allowed
+        ok = asyncio.run(guard("Bash", {"command": "psql -c 'SELECT * FROM users'"}, None))
+        assert ok.behavior == "allow"
+
     def test_guard_read_always_allowed(self, tmp_path):
         """Read/Grep/Glob are never blocked by the write guard."""
         t = Telephone(

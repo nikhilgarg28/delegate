@@ -104,6 +104,7 @@ def start_daemon(
     token_budget: int | None = None,
     foreground: bool = False,
     dev: bool = False,
+    host: str = "127.0.0.1",
 ) -> int | None:
     """Start the daemon.
 
@@ -142,11 +143,23 @@ def start_daemon(
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            s.bind(("0.0.0.0", port))
+            s.bind((host, port))
         except OSError:
             raise RuntimeError(
                 f"Port {port} is already in use. "
                 f"Stop the other process or use --port to pick a different port."
+            )
+
+    # Warn if binding to a non-loopback address without authentication
+    if host != "127.0.0.1" and host != "localhost":
+        from delegate.auth import is_passphrase_enabled
+        if not is_passphrase_enabled(hc_home):
+            logger.warning(
+                "SECURITY WARNING: Binding to %s without a passphrase. "
+                "All endpoints (including shell exec) are unauthenticated. "
+                "Run 'delegate auth set-passphrase' to secure the API, "
+                "or use --host 127.0.0.1 to restrict to localhost.",
+                host,
             )
 
     # Set environment variables for the web app
@@ -177,7 +190,7 @@ def start_daemon(
             uvicorn.run(
                 "delegate.web:create_app",
                 factory=True,
-                host="0.0.0.0",
+                host=host,
                 port=port,
                 log_level="info",
                 timeout_graceful_shutdown=15,
@@ -194,7 +207,7 @@ def start_daemon(
         sys.executable, "-m", "uvicorn",
         "delegate.web:create_app",
         "--factory",
-        "--host", "0.0.0.0",
+        "--host", host,
         "--port", str(port),
         "--log-level", "info",
     ]
@@ -217,11 +230,69 @@ def start_daemon(
     return proc.pid
 
 
+def find_claude_pids(
+    *,
+    ppid_filter: int | None = None,
+    exclude_pids: set[int] | None = None,
+) -> list[int]:
+    """Scan ``/proc`` for Claude processes matching the given criteria.
+
+    Args:
+        ppid_filter: If set, only return processes whose parent PID matches.
+        exclude_pids: PIDs to skip (e.g. tracked Telephone subprocesses).
+
+    Returns a list of matching PIDs.
+    """
+    exclude = exclude_pids or set()
+    my_pid = os.getpid()
+    found: list[int] = []
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            child_pid = int(entry)
+            if child_pid == my_pid or child_pid in exclude:
+                continue
+            with open(f"/proc/{entry}/stat") as f:
+                parts = f.read().split()
+            ppid = int(parts[3])
+            comm = parts[1].strip("()")
+            if "claude" not in comm:
+                continue
+            if ppid_filter is not None and ppid != ppid_filter:
+                continue
+            found.append(child_pid)
+        except (FileNotFoundError, ProcessLookupError, ValueError,
+                IndexError, PermissionError):
+            continue
+    return found
+
+
+def sweep_orphaned_claude_processes() -> int:
+    """Kill Claude processes reparented to PID 1 (orphans from a dead daemon).
+
+    Returns the number of processes killed.
+    """
+    pids = find_claude_pids(ppid_filter=1)
+    for pid in pids:
+        try:
+            logger.info("Killing reparented Claude orphan PID %d", pid)
+            os.kill(pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
+    if pids:
+        logger.info("Swept %d orphaned Claude process(es)", len(pids))
+    return len(pids)
+
+
 def stop_daemon(hc_home: Path, timeout: float = 15.0) -> bool:
     """Stop the running daemon.
 
     Sends SIGTERM and waits up to *timeout* seconds for the process to exit.
     If still alive after timeout, sends SIGKILL.
+
+    After the daemon exits, sweeps for orphaned Claude subprocesses that
+    got reparented to PID 1 during shutdown.
 
     Returns True if a daemon was stopped, False if none was running.
     """
@@ -245,37 +316,33 @@ def stop_daemon(hc_home: Path, timeout: float = 15.0) -> bool:
     poll_interval = 0.1
     while time.time() - start_time < timeout:
         try:
-            os.kill(pid, 0)  # Check if process is still alive
+            os.kill(pid, 0)
             time.sleep(poll_interval)
         except (OSError, ProcessLookupError):
-            # Process is gone
             elapsed = time.time() - start_time
             logger.info("Daemon stopped (%.1fs)", elapsed)
-            pid_path = daemon_pid_path(hc_home)
-            pid_path.unlink(missing_ok=True)
-            return True
-
-    # Timeout expired — force kill
-    logger.warning("Daemon did not stop after %.1fs — sending SIGKILL", timeout)
-    try:
-        os.kill(pid, signal.SIGKILL)
-        logger.info("Sent SIGKILL to daemon PID %d", pid)
-    except (OSError, ProcessLookupError) as e:
-        logger.warning("Failed to SIGKILL daemon PID %d: %s", pid, e)
-
-    # Wait briefly for SIGKILL to take effect
-    for _ in range(10):
+            break
+    else:
+        # Timeout expired — force kill
+        logger.warning("Daemon did not stop after %.1fs — sending SIGKILL", timeout)
         try:
-            os.kill(pid, 0)
-            time.sleep(0.1)
-        except (OSError, ProcessLookupError):
-            logger.info("Daemon force-killed")
-            pid_path = daemon_pid_path(hc_home)
-            pid_path.unlink(missing_ok=True)
-            return True
+            os.kill(pid, signal.SIGKILL)
+            logger.info("Sent SIGKILL to daemon PID %d", pid)
+        except (OSError, ProcessLookupError) as e:
+            logger.warning("Failed to SIGKILL daemon PID %d: %s", pid, e)
 
-    # Still alive after SIGKILL (very unlikely)
-    logger.error("Daemon PID %d did not respond to SIGKILL", pid)
+        for _ in range(10):
+            try:
+                os.kill(pid, 0)
+                time.sleep(0.1)
+            except (OSError, ProcessLookupError):
+                logger.info("Daemon force-killed")
+                break
+        else:
+            logger.error("Daemon PID %d did not respond to SIGKILL", pid)
+
+    # Cleanup — always runs regardless of how the daemon exited
     pid_path = daemon_pid_path(hc_home)
     pid_path.unlink(missing_ok=True)
+    sweep_orphaned_claude_processes()
     return True
