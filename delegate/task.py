@@ -29,6 +29,10 @@ from delegate.paths import resolve_team_uuid as _team
 
 _log = logging.getLogger(__name__)
 
+# Cache of task_id -> display_id (e.g. "POLY-0001").
+# Populated by db.task_row_to_dict whenever a task row is loaded.
+_display_cache: dict[int, str] = {}
+
 
 def _broadcast_update(task_id: int, team: str, changes: dict) -> None:
     """Best-effort SSE broadcast of a task mutation."""
@@ -39,23 +43,46 @@ def _broadcast_update(task_id: int, team: str, changes: dict) -> None:
         pass
 
 
-VALID_STATUSES = ("todo", "in_progress", "in_review", "in_approval", "merging", "done", "rejected", "merge_failed", "cancelled")
+VALID_STATUSES = ("todo", "in_progress", "in_review", "in_approval", "merging", "done", "rejected", "merge_failed", "cancelled", "researching", "reporting", "paused")
 VALID_PRIORITIES = ("low", "medium", "high", "critical")
 VALID_APPROVAL_STATUSES = ("", "pending", "approved", "rejected")
 
 # Allowed status transitions: from_status -> set of valid to_statuses
 VALID_TRANSITIONS = {
-    "todo": {"in_progress", "cancelled"},
+    "todo": {"in_progress", "researching", "cancelled"},
     "in_progress": {"in_review", "cancelled"},
     "in_review": {"in_approval", "in_progress", "cancelled"},
     "in_approval": {"merging", "rejected", "cancelled"},
     "merging": {"done", "merge_failed", "cancelled"},
     "rejected": {"in_progress", "cancelled"},
     "merge_failed": {"merging", "in_progress", "cancelled"},
+    # Research workflow stages (primary validation via workflow engine;
+    # these entries exist so legacy validation doesn't reject them)
+    "researching": {"reporting", "paused", "cancelled"},
+    "paused": {"researching", "done", "cancelled"},
+    "reporting": {"done", "researching", "cancelled"},
     # Terminal states — no transitions out
     "done": set(),
     "cancelled": set(),
 }
+
+# Statuses with no outgoing transitions.
+TERMINAL_STATUSES = frozenset({"done", "cancelled"})
+
+# Statuses where work is actively in progress.
+IN_PROGRESS_STATUSES = frozenset({
+    "in_progress", "in_review", "in_approval", "merging",
+    "researching", "reporting", "rejected", "merge_failed",
+})
+
+# Statuses where tasks are waiting to start.
+QUEUED_STATUSES = frozenset({"todo", "paused"})
+
+# Summary-only fields returned by task_list (full details via task_show).
+SUMMARY_FIELDS = (
+    "id", "display_id", "title", "status", "assignee", "dri",
+    "priority", "workflow", "repo", "tags", "created_at", "updated_at",
+)
 
 # All columns in the tasks table (used for field validation on update).
 _TASK_FIELDS = frozenset({
@@ -65,15 +92,31 @@ _TASK_FIELDS = frozenset({
     "rejection_reason", "approval_status", "merge_base", "merge_tip",
     "attachments", "review_attempt", "status_detail", "merge_attempts",
     "workflow", "workflow_version", "metadata", "retry_after",
+    "seq", "display_id",
 })
 
 
-def format_task_id(task_id: int) -> str:
-    """Format a task ID as ``T`` followed by zero-padded digits.
+def _derive_prefix(name: str) -> str:
+    """Derive a 4-char uppercase prefix from a project/team name.
 
-    Always uses at least 4 digits, but automatically widens
-    for IDs >= 10000 (e.g. ``T10000``).
+    Strips hyphens and underscores, takes first 4 chars, uppercases.
+    E.g. ``"poly-repo"`` → ``"POLY"``, ``"q4_launch"`` → ``"Q4LA"``.
     """
+    stripped = name.replace("-", "").replace("_", "")
+    return stripped[:4].upper()
+
+
+def format_task_id(task_id: int) -> str:
+    """Return the per-project display ID (e.g. ``POLY-0001``) if cached,
+    otherwise fall back to the legacy ``T`` format (``T0001``).
+
+    The cache is populated automatically by ``task_row_to_dict`` every
+    time a task row is loaded from the database, so callers never need
+    to change.
+    """
+    cached = _display_cache.get(task_id)
+    if cached:
+        return cached
     return f"T{task_id:04d}"
 
 
@@ -121,6 +164,21 @@ def create_task(
     if not assignee or not assignee.strip():
         raise ValueError("Assignee/DRI is required when creating a task")
 
+    from delegate.config import is_task_creation_frozen, get_max_tasks_config
+    if is_task_creation_frozen(hc_home, team):
+        raise ValueError(
+            "Task creation is frozen for this team. "
+            "Disable the task freeze before creating new tasks."
+        )
+    mt_cfg = get_max_tasks_config(hc_home, team)
+    if mt_cfg["enabled"]:
+        queued_count = count_tasks_by_status(hc_home, team, QUEUED_STATUSES)
+        if queued_count >= mt_cfg["limit_queued"]:
+            raise ValueError(
+                f"Queue limit reached ({queued_count}/{mt_cfg['limit_queued']} queued tasks). "
+                f"Complete or cancel existing queued tasks before creating new ones."
+            )
+
     if priority not in VALID_PRIORITIES:
         raise ValueError(f"Invalid priority '{priority}'. Must be one of: {VALID_PRIORITIES}")
 
@@ -129,6 +187,21 @@ def create_task(
         repo_list = [repo] if repo else []
     else:
         repo_list = list(repo)
+
+    # Guard: the manager agent must never be DRI on tasks with repos.
+    # The manager operates in the main working directory (via symlink) and
+    # has no isolated worktree — being DRI would cause branch checkouts
+    # directly in the user's main repo.
+    if repo_list:
+        from delegate.bootstrap import get_member_by_role
+        manager_name = get_member_by_role(hc_home, team, "manager")
+        if manager_name and assignee.strip() == manager_name:
+            raise ValueError(
+                f"Cannot assign a repo task to the manager agent "
+                f"({manager_name!r}). The manager has no worktree isolation "
+                f"and would check out branches in the main working directory. "
+                f"Assign to a worker agent instead."
+            )
 
     # Resolve workflow version
     if workflow_version is None:
@@ -139,6 +212,12 @@ def create_task(
     team_uuid = _team(hc_home, team)
     conn = get_connection(hc_home, team)
     try:
+        # Look up prefix for this project
+        prefix_row = conn.execute(
+            "SELECT prefix FROM project_ids WHERE uuid = ?", (team_uuid,)
+        ).fetchone()
+        prefix = prefix_row[0] if prefix_row and prefix_row[0] else _derive_prefix(team)
+
         cursor = conn.execute(
             """\
             INSERT INTO tasks (
@@ -147,14 +226,17 @@ def create_task(
                 created_at, updated_at, completed_at,
                 depends_on, branch, base_sha, commits,
                 rejection_reason, approval_status, merge_base, merge_tip, team,
-                workflow, workflow_version, metadata, project_uuid
+                workflow, workflow_version, metadata, project_uuid,
+                seq, display_id
             ) VALUES (
                 ?, ?, 'todo', ?, ?,
                 ?, ?, ?, ?,
                 ?, ?, '',
                 ?, '', '{}', '{}',
                 '', '', '{}', '{}', ?,
-                ?, ?, ?, ?
+                ?, ?, ?, ?,
+                (SELECT COALESCE(MAX(seq), 0) + 1 FROM tasks WHERE project_uuid = ?),
+                ''
             )""",
             (
                 title, description, assignee, assignee,
@@ -167,10 +249,17 @@ def create_task(
                 workflow_name, workflow_version,
                 json.dumps(metadata or {}),
                 team_uuid,  # UUID in 'project_uuid' column
+                team_uuid,  # for the seq subquery
             ),
         )
-        conn.commit()
         task_id = cursor.lastrowid
+
+        # Read back the seq that was computed by the subquery, build display_id
+        seq_row = conn.execute("SELECT seq FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        seq = seq_row[0] if seq_row else 1
+        display_id = f"{prefix}-{seq:04d}"
+        conn.execute("UPDATE tasks SET display_id = ? WHERE id = ?", (display_id, task_id))
+        conn.commit()
 
         # Read back the full row to return
         row = conn.execute("SELECT * FROM tasks WHERE project_uuid = ? AND id = ?", (team_uuid, task_id)).fetchone()
@@ -225,8 +314,6 @@ def _all_deps_resolved(hc_home: Path, team: str, task: dict) -> bool:
     if not deps:
         return True
 
-    terminal_statuses = {"done", "cancelled"}
-
     for dep_id in deps:
         try:
             dep_task = get_task(hc_home, team, dep_id)
@@ -234,18 +321,44 @@ def _all_deps_resolved(hc_home: Path, team: str, task: dict) -> bool:
             # Dep task doesn't exist — treat as unresolved
             return False
         dep_status = dep_task.get("status", "")
-        if dep_status in terminal_statuses:
+        if dep_status in TERMINAL_STATUSES:
             continue
         # Check workflow-aware terminal status
         try:
-            from delegate.workflow import load_workflow
-            wf = load_workflow(hc_home, team)
+            from delegate.workflow import load_workflow_cached
+            wf_name = dep_task.get("workflow", "default")
+            wf_version = dep_task.get("workflow_version", 1)
+            wf = load_workflow_cached(hc_home, team, wf_name, wf_version)
             if wf and wf.is_terminal(dep_status):
                 continue
         except Exception:
             pass
         return False
     return True
+
+
+def increment_merge_attempts(hc_home: Path, team: str, task_id: int) -> int:
+    """Atomically increment merge_attempts in SQL and return the new value.
+
+    Uses ``SET merge_attempts = merge_attempts + 1`` to avoid the
+    read-modify-write race that occurs when incrementing in Python.
+    """
+    team_uuid = _team(hc_home, team)
+    conn = get_connection(hc_home, team)
+    try:
+        conn.execute(
+            "UPDATE tasks SET merge_attempts = COALESCE(merge_attempts, 0) + 1, "
+            "updated_at = ? WHERE project_uuid = ? AND id = ?",
+            (_now(), team_uuid, task_id),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT merge_attempts FROM tasks WHERE project_uuid = ? AND id = ?",
+            (team_uuid, task_id),
+        ).fetchone()
+    finally:
+        conn.close()
+    return row[0] if row else 1
 
 
 def update_task(hc_home: Path, team: str, task_id: int, **updates) -> dict:
@@ -334,6 +447,21 @@ def assign_task(hc_home: Path, team: str, task_id: int, assignee: str, suppress_
         suppress_log: If True, skip logging the assignment event (default: False)
     """
     task = get_task(hc_home, team, task_id)
+
+    # Guard: prevent the manager from becoming DRI on repo tasks.
+    # DRI is set on first assignment and never changes — if the manager
+    # becomes DRI, all CURRENT_TASK sessions will operate in the main
+    # working directory instead of an isolated worktree.
+    if not task.get("dri") and task.get("repo"):
+        from delegate.bootstrap import get_member_by_role
+        manager_name = get_member_by_role(hc_home, team, "manager")
+        if manager_name and assignee.strip() == manager_name:
+            raise ValueError(
+                f"Cannot set manager agent ({manager_name!r}) as DRI on a "
+                f"repo task ({format_task_id(task_id)}). The manager has no "
+                f"worktree isolation. Assign to a worker agent instead."
+            )
+
     updates: dict[str, str] = {"assignee": assignee}
     if not task.get("dri"):
         updates["dri"] = assignee
@@ -356,9 +484,6 @@ def _backfill_branch_metadata(hc_home: Path, team: str, task: dict, updates: dic
     For ``branch``, derives the name from the team and task ID.
     For ``base_sha``, computes ``git merge-base main <branch>`` per repo.
     """
-    import logging
-    _log = logging.getLogger(__name__)
-
     repos = task.get("repo", [])
     if not repos:
         return
@@ -414,7 +539,6 @@ def _validate_review_gate(hc_home: Path, team: str, task: dict) -> None:
     1. The worktree has uncommitted changes.
     2. The worktree has a different branch checked out than expected.
     """
-    import subprocess
     from delegate.paths import task_worktree_dir
 
     repos: list[str] = task.get("repo", [])
@@ -472,6 +596,60 @@ def _validate_review_gate(hc_home: Path, team: str, task: dict) -> None:
                 pass
 
 
+def _atomic_status_update(
+    hc_home: Path, team: str, task_id: int,
+    expected_status: str, updates: dict,
+) -> dict:
+    """Update a task only if its current status matches *expected_status*.
+
+    Uses an atomic ``UPDATE ... WHERE status = ?`` to implement optimistic
+    locking.  If another caller changed the status between our read and
+    this write, zero rows are affected and we raise ``ValueError``.
+
+    Returns the updated task dict.
+    """
+    updates["updated_at"] = _now()
+    set_parts = []
+    params: list = []
+    for key, value in updates.items():
+        set_parts.append(f"{key} = ?")
+        if key in _JSON_COLUMNS:
+            params.append(json.dumps(value) if isinstance(value, (dict, list)) else (value or "{}"))
+        else:
+            params.append(value)
+    team_uuid = _team(hc_home, team)
+    params.extend([team_uuid, task_id, expected_status])
+
+    conn = get_connection(hc_home, team)
+    try:
+        cursor = conn.execute(
+            f"UPDATE tasks SET {', '.join(set_parts)} "
+            f"WHERE project_uuid = ? AND id = ? AND status = ?",
+            params,
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            # Re-read to get the actual current status for the error message
+            row = conn.execute(
+                "SELECT status FROM tasks WHERE project_uuid = ? AND id = ?",
+                (team_uuid, task_id),
+            ).fetchone()
+            actual = row["status"] if row else "unknown"
+            raise ValueError(
+                f"Concurrent status change on {format_task_id(task_id)}: "
+                f"expected '{expected_status}' but found '{actual}'. "
+                f"Another caller already transitioned this task."
+            )
+        row = conn.execute(
+            "SELECT * FROM tasks WHERE project_uuid = ? AND id = ?",
+            (team_uuid, task_id),
+        ).fetchone()
+        task = task_row_to_dict(row)
+    finally:
+        conn.close()
+    return task
+
+
 def change_status(hc_home: Path, team: str, task_id: int, status: str, suppress_log: bool = False) -> dict:
     """Change task status with workflow-driven validation and hooks.
 
@@ -511,6 +689,32 @@ def change_status(hc_home: Path, team: str, task_id: int, status: str, suppress_
     else:
         # Legacy validation
         _legacy_validate_transition(current, status)
+
+    # ── Warn if task reaches merge-eligible status without a repo ──
+    _merge_statuses = ("in_review", "in_approval", "merging")
+    if status in _merge_statuses:
+        repos: list[str] = old_task.get("repo", [])
+        branch: str = old_task.get("branch", "")
+        if not repos or not branch:
+            _log = logging.getLogger(__name__)
+            _log.warning(
+                "%s: transitioning to %s without repo/branch — "
+                "merge pipeline will not be able to land this task. "
+                "Was it created without --repo?",
+                format_task_id(task_id), status,
+            )
+
+    # ── Hard enforcement of max-tasks in-progress limit ──
+    from delegate.config import get_max_tasks_config
+    if status in IN_PROGRESS_STATUSES and current not in IN_PROGRESS_STATUSES:
+        mt_cfg = get_max_tasks_config(hc_home, team)
+        if mt_cfg["enabled"]:
+            in_prog_count = count_tasks_by_status(hc_home, team, IN_PROGRESS_STATUSES)
+            if in_prog_count >= mt_cfg["limit_in_progress"]:
+                raise ValueError(
+                    f"In-progress limit reached ({in_prog_count}/{mt_cfg['limit_in_progress']} tasks). "
+                    f"Complete existing in-progress tasks before starting new ones."
+                )
 
     # ── Run workflow hooks ──
     wf_def = None
@@ -564,7 +768,11 @@ def change_status(hc_home: Path, team: str, task_id: int, status: str, suppress_
             updates["review_attempt"] = new_attempt
             updates["approval_status"] = ""
 
-    task = update_task(hc_home, team, task_id, **updates)
+    # Optimistic locking: only update if status is still what we read.
+    # This prevents two concurrent callers from both transitioning the
+    # same task (e.g. both reading "in_progress" and both writing
+    # "in_review"), which would run hooks twice and corrupt state.
+    task = _atomic_status_update(hc_home, team, task_id, current, updates)
 
     # Legacy: create review row after task is updated
     if not wf_def and status == "in_approval":
@@ -598,7 +806,75 @@ def change_status(hc_home: Path, team: str, task_id: int, status: str, suppress_
         log_event(hc_home, team, f"{format_task_id(task_id)} {old_status} \u2192 {new_status}", task_id=task_id)
         _broadcast_update(task_id, team, {"status": status})
 
+    # ── Auto-advance dependents ──
+    # When a task reaches a terminal status, check if any tasks that
+    # depend on it now have all dependencies satisfied.  If so,
+    # auto-transition them from 'todo' to their first working stage.
+    if status in ("done", "cancelled"):
+        try:
+            _auto_advance_dependents(hc_home, team, task_id)
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "Auto-advance dependents failed for %s: %s",
+                format_task_id(task_id), exc,
+            )
+
     return task
+
+
+def _auto_advance_dependents(hc_home: Path, team: str, completed_task_id: int) -> None:
+    """Auto-advance tasks whose dependencies are now all resolved.
+
+    When a task reaches 'done' (or 'cancelled'), iterate over all 'todo'
+    tasks that include ``completed_task_id`` in their ``depends_on`` list.
+    If all of that task's dependencies are now resolved, transition it to
+    the first working stage of its workflow.
+
+    For the default workflow, this is 'in_progress'.
+    For the research workflow, this is 'researching'.
+    """
+    from delegate.workflow import load_workflow_cached
+
+    all_tasks = list_tasks(hc_home, team, status="todo")
+    for task in all_tasks:
+        deps = task.get("depends_on", [])
+        if not deps or completed_task_id not in [int(d) for d in deps]:
+            continue
+
+        # Check if ALL deps are now resolved
+        if not _all_deps_resolved(hc_home, team, task):
+            continue
+
+        # Determine the first working stage from the workflow
+        wf_name = task.get("workflow", "default")
+        wf_version = task.get("workflow_version", 1)
+        first_stage = "in_progress"  # default workflow fallback
+
+        try:
+            wf = load_workflow_cached(hc_home, team, wf_name, wf_version)
+            # The first non-initial, non-terminal stage is the working stage
+            for stage_key, stage_cls in wf.stage_map.items():
+                if stage_key == "todo":
+                    continue
+                inst = stage_cls()
+                if not getattr(inst, 'terminal', False):
+                    first_stage = stage_key
+                    break
+        except (FileNotFoundError, KeyError):
+            pass
+
+        try:
+            change_status(hc_home, team, task["id"], first_stage)
+            logging.getLogger(__name__).info(
+                "Auto-advanced %s to '%s' (dependency %s resolved)",
+                format_task_id(task["id"]), first_stage,
+                format_task_id(completed_task_id),
+            )
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "Failed to auto-advance %s: %s",
+                format_task_id(task["id"]), exc,
+            )
 
 
 def _legacy_validate_transition(current: str, status: str) -> None:
@@ -698,8 +974,6 @@ def cancel_task(hc_home: Path, team: str, task_id: int) -> dict:
 
 def _cleanup_cancelled_task(hc_home: Path, team: str, task: dict) -> None:
     """Remove worktrees and feature branch for a cancelled task (best-effort)."""
-    _log = logging.getLogger(__name__)
-
     branch: str = task.get("branch", "")
     repos: list[str] = task.get("repo", [])
 
@@ -723,7 +997,6 @@ def _cleanup_cancelled_task(hc_home: Path, team: str, task: dict) -> None:
 
             # Delete the feature branch (best-effort; -D to force)
             if branch:
-                import subprocess
                 subprocess.run(
                     ["git", "branch", "-D", branch],
                     cwd=real_repo,
@@ -1040,10 +1313,13 @@ def list_tasks(
     assignee: str | None = None,
     project: str | None = None,
     tag: str | None = None,
+    exclude_statuses: frozenset[str] | None = None,
 ) -> list[dict]:
     """List tasks with optional filters.
 
     *tag* filters to tasks whose ``tags`` JSON array contains the given value.
+    *exclude_statuses* omits rows matching any of the given statuses at the
+    SQL level (avoids fetching/deserializing rows that would be discarded).
     """
     team_uuid = _team(hc_home, team)
     conn = get_connection(hc_home, team)
@@ -1054,6 +1330,10 @@ def list_tasks(
         if status:
             query += " AND status = ?"
             params.append(status)
+        if exclude_statuses:
+            placeholders = ",".join("?" * len(exclude_statuses))
+            query += f" AND status NOT IN ({placeholders})"
+            params.extend(exclude_statuses)
         if assignee:
             query += " AND assignee = ?"
             params.append(assignee)
@@ -1074,6 +1354,25 @@ def list_tasks(
         tasks = [t for t in tasks if tag in t.get("tags", [])]
 
     return tasks
+
+
+def count_tasks_by_status(hc_home: Path, team: str, statuses: frozenset[str]) -> int:
+    """Count tasks matching any of the given statuses.
+
+    Uses ``SELECT COUNT(*)`` — much cheaper than ``list_tasks()`` when
+    only the count is needed (no JSON deserialization).
+    """
+    team_uuid = _team(hc_home, team)
+    conn = get_connection(hc_home, team)
+    try:
+        placeholders = ",".join("?" * len(statuses))
+        row = conn.execute(
+            f"SELECT COUNT(*) FROM tasks WHERE project_uuid = ? AND status IN ({placeholders})",
+            [team_uuid, *statuses],
+        ).fetchone()
+        return row[0] if row else 0
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------

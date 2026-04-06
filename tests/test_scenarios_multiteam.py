@@ -275,10 +275,9 @@ class TestBranchNamespaceIsolation:
         )
         branches = result.stdout
 
-        # Expected branch names - use actual task IDs (global sequence)
-        # task_a1 is ID 1, task_b1 is ID 2
-        expected_a = f"delegate/{team_a_id}/{TEAM_A}/T{task_a1['id']:04d}"
-        expected_b = f"delegate/{team_b_id}/{TEAM_B}/T{task_b1['id']:04d}"
+        # Expected branch names - use display_id (per-project sequence)
+        expected_a = f"delegate/{team_a_id}/{TEAM_A}/{task_a1['display_id']}"
+        expected_b = f"delegate/{team_b_id}/{TEAM_B}/{task_b1['display_id']}"
 
         assert expected_a in branches, f"Expected branch {expected_a} not found in:\n{branches}"
         assert expected_b in branches, f"Expected branch {expected_b} not found in:\n{branches}"
@@ -335,8 +334,9 @@ class TestBranchNamespaceIsolation:
         team_b_id = get_team_id(hc, TEAM_B)
 
         # Both branches exist and have different team_id prefixes
-        assert f"delegate/{team_a_id}/{TEAM_A}/T0001" in branches
-        assert f"delegate/{team_b_id}/{TEAM_B}/T0002" in branches
+        # Display IDs: BACK-0001 (backend seq 1), FRON-0001 (frontend seq 1)
+        assert f"delegate/{team_a_id}/{TEAM_A}/BACK-0001" in branches
+        assert f"delegate/{team_b_id}/{TEAM_B}/FRON-0001" in branches
 
 
 class TestIndependentWorkflows:

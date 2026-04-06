@@ -13,7 +13,7 @@ All work on feature branches: `delegate/<team_id>/<team>/T<NNNN>` (e.g., `delega
 1. Agent completes work → sets task to `in_review`. Manager reassigns to a peer reviewer.
 2. Reviewer reviews diff (base_sha → branch tip), runs tests, checks quality.
 3. Approved → `in_approval`, manager reassigns to human. Rejected → `in_progress`, manager reassigns to DRI with feedback.
-4. Human approves (manual) or auto-merge (auto repos).
+4. Human approves (review-needed repos) or AI/auto-merge (via reviewer agent or no-review repos). If a `reviewer` agent is on the team and the reviewer mode is `ai`, the daemon dispatches a review request. The reviewer calls `task_diff` to inspect the diff, checks for sensitive files and rebase status, then calls `task_approve` or `task_reject`. Sensitive files are escalated to the human.
 5. Merge worker rebases onto main (or falls back to squash-reapply if rebase conflicts), runs tests. True content conflicts → task becomes `merge_failed`, manager notified with conflict details and `rebase_to_main` MCP tool instructions for the DRI.
 6. Clean rebase/squash + tests pass → fast-forward merge → `done`, worktree cleaned up.
 

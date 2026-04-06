@@ -297,13 +297,15 @@ class TestFormatterCompleteness:
         "mailbox_send", "mailbox_inbox",
         # Repository (2)
         "repo_list", "rebase_to_main",
+        # Review (3)
+        "task_diff", "task_approve", "task_reject",
     }
 
-    def test_all_13_tools_covered(self):
+    def test_all_tools_covered(self):
         assert set(MCP_TOOL_FORMATTERS.keys()) == self.EXPECTED_TOOLS
 
-    def test_count_is_13(self):
-        assert len(MCP_TOOL_FORMATTERS) == 13
+    def test_count(self):
+        assert len(MCP_TOOL_FORMATTERS) == 16
 
 
 # ---------------------------------------------------------------------------

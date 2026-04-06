@@ -139,7 +139,7 @@ export function AgentsPanel() {
                 class="agent-task-id"
                 onClick={(e) => { e.stopPropagation(); openPanel("task", currentTask.id); }}
               >
-                {taskIdStr(currentTask.id)}
+                {taskIdStr(currentTask.id, currentTask.prefix, currentTask.seq)}
               </span>
             ) : (
               <span class="agent-task-title" style="color: var(--text-muted);">

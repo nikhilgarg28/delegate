@@ -218,6 +218,20 @@ f"INSERT OR IGNORE INTO {ids_table} (uuid, name) VALUES (?, ?)",
         # V16 not yet applied, skip UUID column backfill
         return
 
+    def _resolve_member_uuid(team_uuid: str, name: str, default: str = '') -> str:
+        """Resolve a member name to its UUID (try agent, then human)."""
+        row = conn.execute(
+            "SELECT uuid FROM member_ids WHERE kind = 'agent' AND team_uuid = ? AND name = ? AND deleted = 0",
+            (team_uuid, name)
+        ).fetchone()
+        if row:
+            return row[0]
+        row = conn.execute(
+            "SELECT uuid FROM member_ids WHERE kind = 'human' AND team_uuid IS NULL AND name = ? AND deleted = 0",
+            (name,)
+        ).fetchone()
+        return row[0] if row else default
+
     # Determine project/team column name used in data tables (project or team)
     proj_col = "project" if "project" in columns else "team"
 
@@ -245,39 +259,9 @@ f"INSERT OR IGNORE INTO {ids_table} (uuid, name) VALUES (?, ?)",
             continue
         team_uuid = team_uuid_row[0]
 
-        # Resolve sender (try agent first, then human)
-        sender_uuid = None
-        row = conn.execute(
-            "SELECT uuid FROM member_ids WHERE kind = 'agent' AND team_uuid = ? AND name = ? AND deleted = 0",
-            (team_uuid, sender)
-        ).fetchone()
-        if row:
-            sender_uuid = row[0]
-        else:
-            row = conn.execute(
-                "SELECT uuid FROM member_ids WHERE kind = 'human' AND team_uuid IS NULL AND name = ? AND deleted = 0",
-                (sender,)
-            ).fetchone()
-            if row:
-                sender_uuid = row[0]
+        sender_uuid = _resolve_member_uuid(team_uuid, sender, default=None)
+        recipient_uuid = _resolve_member_uuid(team_uuid, recipient, default=None)
 
-        # Resolve recipient
-        recipient_uuid = None
-        row = conn.execute(
-            "SELECT uuid FROM member_ids WHERE kind = 'agent' AND team_uuid = ? AND name = ? AND deleted = 0",
-            (team_uuid, recipient)
-        ).fetchone()
-        if row:
-            recipient_uuid = row[0]
-        else:
-            row = conn.execute(
-                "SELECT uuid FROM member_ids WHERE kind = 'human' AND team_uuid IS NULL AND name = ? AND deleted = 0",
-                (recipient,)
-            ).fetchone()
-            if row:
-                recipient_uuid = row[0]
-
-        # Update message
         if sender_uuid and recipient_uuid:
             conn.execute(
                 "UPDATE messages SET sender_uuid = ?, recipient_uuid = ? WHERE id = ?",
@@ -315,39 +299,8 @@ f"INSERT OR IGNORE INTO {ids_table} (uuid, name) VALUES (?, ?)",
             continue
         team_uuid = team_uuid_row[0]
 
-        # Resolve DRI (flexible)
-        dri_uuid = ''
-        if dri:
-            row = conn.execute(
-                "SELECT uuid FROM member_ids WHERE kind = 'agent' AND team_uuid = ? AND name = ? AND deleted = 0",
-                (team_uuid, dri)
-            ).fetchone()
-            if row:
-                dri_uuid = row[0]
-            else:
-                row = conn.execute(
-                    "SELECT uuid FROM member_ids WHERE kind = 'human' AND team_uuid IS NULL AND name = ? AND deleted = 0",
-                    (dri,)
-                ).fetchone()
-                if row:
-                    dri_uuid = row[0]
-
-        # Resolve assignee (flexible)
-        assignee_uuid = ''
-        if assignee:
-            row = conn.execute(
-                "SELECT uuid FROM member_ids WHERE kind = 'agent' AND team_uuid = ? AND name = ? AND deleted = 0",
-                (team_uuid, assignee)
-            ).fetchone()
-            if row:
-                assignee_uuid = row[0]
-            else:
-                row = conn.execute(
-                    "SELECT uuid FROM member_ids WHERE kind = 'human' AND team_uuid IS NULL AND name = ? AND deleted = 0",
-                    (assignee,)
-                ).fetchone()
-                if row:
-                    assignee_uuid = row[0]
+        dri_uuid = _resolve_member_uuid(team_uuid, dri) if dri else ''
+        assignee_uuid = _resolve_member_uuid(team_uuid, assignee) if assignee else ''
 
         conn.execute(
             f"UPDATE tasks SET {uuid_col} = ?, dri_uuid = ?, assignee_uuid = ? WHERE id = ?",
@@ -381,23 +334,7 @@ f"INSERT OR IGNORE INTO {ids_table} (uuid, name) VALUES (?, ?)",
         ).fetchone()
         if not team_uuid_row:
             continue
-        team_uuid = team_uuid_row[0]
-
-        author_uuid = ''
-        row = conn.execute(
-            "SELECT uuid FROM member_ids WHERE kind = 'agent' AND team_uuid = ? AND name = ? AND deleted = 0",
-            (team_uuid, author)
-        ).fetchone()
-        if row:
-            author_uuid = row[0]
-        else:
-            row = conn.execute(
-                "SELECT uuid FROM member_ids WHERE kind = 'human' AND team_uuid IS NULL AND name = ? AND deleted = 0",
-                (author,)
-            ).fetchone()
-            if row:
-                author_uuid = row[0]
-
+        author_uuid = _resolve_member_uuid(team_uuid_row[0], author)
         if author_uuid:
             conn.execute(
                 "UPDATE task_comments SET author_uuid = ? WHERE id = ?",
@@ -418,22 +355,7 @@ f"INSERT OR IGNORE INTO {ids_table} (uuid, name) VALUES (?, ?)",
         if not team_uuid_row:
             continue
         team_uuid = team_uuid_row[0]
-
-        reviewer_uuid = ''
-        if reviewer:
-            row = conn.execute(
-                "SELECT uuid FROM member_ids WHERE kind = 'agent' AND team_uuid = ? AND name = ? AND deleted = 0",
-                (team_uuid, reviewer)
-            ).fetchone()
-            if row:
-                reviewer_uuid = row[0]
-            else:
-                row = conn.execute(
-                    "SELECT uuid FROM member_ids WHERE kind = 'human' AND team_uuid IS NULL AND name = ? AND deleted = 0",
-                    (reviewer,)
-                ).fetchone()
-                if row:
-                    reviewer_uuid = row[0]
+        reviewer_uuid = _resolve_member_uuid(team_uuid, reviewer) if reviewer else ''
 
         conn.execute(
             f"UPDATE reviews SET {uuid_col} = ?, reviewer_uuid = ? WHERE id = ?",
@@ -453,23 +375,7 @@ f"INSERT OR IGNORE INTO {ids_table} (uuid, name) VALUES (?, ?)",
         ).fetchone()
         if not team_uuid_row:
             continue
-        team_uuid = team_uuid_row[0]
-
-        author_uuid = ''
-        row = conn.execute(
-            "SELECT uuid FROM member_ids WHERE kind = 'agent' AND team_uuid = ? AND name = ? AND deleted = 0",
-            (team_uuid, author)
-        ).fetchone()
-        if row:
-            author_uuid = row[0]
-        else:
-            row = conn.execute(
-                "SELECT uuid FROM member_ids WHERE kind = 'human' AND team_uuid IS NULL AND name = ? AND deleted = 0",
-                (author,)
-            ).fetchone()
-            if row:
-                author_uuid = row[0]
-
+        author_uuid = _resolve_member_uuid(team_uuid_row[0], author)
         if author_uuid:
             conn.execute(
                 "UPDATE review_comments SET author_uuid = ? WHERE id = ?",
@@ -641,17 +547,29 @@ def ensure_schema(hc_home: Path, team: str = "") -> None:
 
 
 def get_connection(hc_home: Path, team: str = "") -> sqlite3.Connection:
-    """Open a connection to the global DB with row_factory and ensure schema is current.
+    """Open a connection to the global DB with row_factory.
 
     Callers are responsible for closing the connection.
 
+    Schema migrations are applied once at startup (``ensure_schema()`` is
+    called from ``create_app`` and ``start_daemon``).  Calling it on every
+    connection was a major bottleneck — the threading lock in
+    ``ensure_schema`` caused contention with dozens of concurrent agents.
+
     Note: team parameter is kept for backward compatibility but is no longer used.
     """
-    ensure_schema(hc_home, team)
+    # Fast-path: only run ensure_schema if it hasn't been verified yet.
+    # After the first successful check the _schema_verified dict is populated
+    # and the fast-path in ensure_schema returns immediately without locking,
+    # but even the dict lookup + function-call overhead matters at 100+ agents.
+    key = str(hc_home)
+    if _schema_verified.get(key) != len(MIGRATIONS):
+        ensure_schema(hc_home, team)
     path = global_db_path(hc_home)
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
@@ -736,4 +654,11 @@ def task_row_to_dict(row: sqlite3.Row) -> dict:
     # commits values are lists of strings keyed by repo
     if d.get("commits"):
         d["commits"] = {str(k): [str(v) for v in vs] for k, vs in d["commits"].items()}
+
+    # Populate the format_task_id display cache so callers auto-get
+    # per-project IDs (e.g. "POLY-0001") without any code changes.
+    if d.get("display_id"):
+        from delegate.task import _display_cache
+        _display_cache[d["id"]] = d["display_id"]
+
     return d

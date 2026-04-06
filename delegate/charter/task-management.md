@@ -22,6 +22,8 @@ Statuses: `todo` → `in_progress` → `in_review` → `in_approval` → `mergin
 
 Tasks are stored per-team in SQLite. Associate with one or more repos using `--repo` (repeatable for multi-repo tasks).
 
+**Two-tier task queries:** `task_list` returns a compact summary (id, title, status, assignee, priority) and excludes done/cancelled tasks by default. To see full details on a specific task — description, comments, branch, commits, attachments — use `task_show(task_id)`. Always prefer `task_list` for scanning, then `task_show` to drill into specific tasks.
+
 **Combined status + assignee changes**: When changing both status and assignee together (e.g., moving to `in_review` and reassigning to a reviewer), use the `--assignee` flag on `task status` to generate a single combined event instead of two separate events:
 ```
 python -m delegate.task status <home> <team> <task_id> in_review --assignee john
@@ -44,7 +46,7 @@ The human's "Action Queue" in the UI shows tasks where they are the current assi
 3. Agent completes → sets `in_review`. Manager reassigns to the reviewer.
 4. Reviewer reviews diff (base_sha → branch tip), runs tests, checks quality.
 5. Reviewer approves → `in_approval`. Manager reassigns to human. Reviewer rejects → back to `in_progress`, manager reassigns to DRI with feedback.
-6. Human approves (manual repos) or auto-merge (auto repos). Task transitions to `merging`.
+6. Human approves (review-needed repos) or AI review / auto-merge (via reviewer agent using `task_approve`/`task_reject` MCP tools, or no-review repos). Task transitions to `merging`.
 7. Merge worker attempts rebase onto main in each repo. If rebase conflicts, it falls back to squash-reapply (applying the total diff as one commit). Then runs pre-merge script, fast-forward merges.
 8. Task becomes `done` (successful merge) or `merge_failed` (true content conflict or test failure). Transient failures are retried automatically up to 3 times before escalating to the manager. On content conflicts, the manager receives detailed hunk context and instructs the DRI to use the `rebase_to_main` MCP tool to resolve.
 

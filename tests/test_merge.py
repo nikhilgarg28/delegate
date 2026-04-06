@@ -27,9 +27,9 @@ from delegate.task import (
     get_task,
 )
 from delegate.config import (
-    add_repo, get_repo_approval, get_repo_test_cmd, update_repo_test_cmd, set_boss,
+    add_repo, get_merge_policy, get_repo_approval, get_repo_test_cmd, update_repo_test_cmd, set_boss,
 )
-from delegate.merge import merge_task, merge_once, _run_pre_merge, _other_unmerged_tasks_on_branch, MergeResult, MergeFailureReason
+from delegate.merge import merge_task, merge_once, _run_pre_merge, _other_unmerged_tasks_on_branch, _sort_merge_candidates, MergeResult, MergeFailureReason
 from delegate.bootstrap import bootstrap
 from delegate.paths import team_dir as _team_dir
 
@@ -736,15 +736,15 @@ class TestMergeOnce:
         results = merge_once(hc_home, SAMPLE_TEAM)
         assert results == []
 
-    def test_skips_manual_unapproved(self, hc_home):
-        """Manual approval tasks without approval_status='approved' are skipped."""
-        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/fake", approval="manual")
+    def test_skips_review_needed_unapproved(self, hc_home):
+        """review-needed tasks without approval are skipped."""
+        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/fake", merge_policy="review-needed")
         _make_in_approval_task(hc_home, title="Unapproved")
         results = merge_once(hc_home, SAMPLE_TEAM)
         assert results == []
 
-    def test_auto_merge_processes(self, hc_home, tmp_path):
-        """Auto approval tasks should be processed without boss approval."""
+    def test_no_review_merge_processes(self, hc_home, tmp_path):
+        """no-review tasks should be processed without approval."""
         repo = _setup_git_repo(tmp_path)
         _make_feature_branch(repo, "alice/T0001")
         _register_repo_with_symlink(hc_home, "myrepo", repo)
@@ -755,8 +755,8 @@ class TestMergeOnce:
         assert len(results) == 1
         assert results[0].success is True
 
-    def test_manual_approved_processes(self, hc_home, tmp_path):
-        """Manual tasks with an approved review should be processed."""
+    def test_review_needed_approved_processes(self, hc_home, tmp_path):
+        """review-needed tasks with an approved review should be processed."""
         repo = _setup_git_repo(tmp_path)
         _make_feature_branch(repo, "alice/T0001")
 
@@ -765,7 +765,7 @@ class TestMergeOnce:
         rd = repos_dir(hc_home, SAMPLE_TEAM)
         rd.mkdir(parents=True, exist_ok=True)
         (rd / "myrepo").symlink_to(repo)
-        add_repo(hc_home, SAMPLE_TEAM, "myrepo", str(repo), approval="manual")
+        add_repo(hc_home, SAMPLE_TEAM, "myrepo", str(repo), merge_policy="review-needed")
 
         task = _make_in_approval_task(hc_home, repo="myrepo", branch="alice/T0001")
         # Approve via the reviews table (not the deprecated approval_status field)
@@ -807,20 +807,34 @@ class TestMergeOnce:
 
 
 # ---------------------------------------------------------------------------
-# get_repo_approval tests
+# get_merge_policy tests
 # ---------------------------------------------------------------------------
 
-class TestGetRepoApproval:
-    def test_returns_manual_by_default(self, hc_home):
-        assert get_repo_approval(hc_home, SAMPLE_TEAM, "nonexistent") == "manual"
+class TestGetMergePolicy:
+    def test_returns_review_needed_by_default(self, hc_home):
+        assert get_merge_policy(hc_home, SAMPLE_TEAM, "nonexistent") == "review-needed"
 
     def test_reads_from_config(self, hc_home):
-        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo", approval="auto")
-        add_repo(hc_home, SAMPLE_TEAM, "other", "/tmp/other", approval="manual")
+        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo", merge_policy="no-review")
+        add_repo(hc_home, SAMPLE_TEAM, "other", "/tmp/other", merge_policy="review-needed")
 
+        assert get_merge_policy(hc_home, SAMPLE_TEAM, "myrepo") == "no-review"
+        assert get_merge_policy(hc_home, SAMPLE_TEAM, "other") == "review-needed"
+        assert get_merge_policy(hc_home, SAMPLE_TEAM, "missing") == "review-needed"
+
+    def test_legacy_approval_fallback(self, hc_home):
+        """Legacy 'approval' key in repos.yaml is read transparently."""
+        from delegate.config import _read_repos, _write_repos
+        data = _read_repos(hc_home, SAMPLE_TEAM)
+        data["legacy_repo"] = {"source": "/tmp/legacy", "approval": "auto"}
+        _write_repos(hc_home, SAMPLE_TEAM, data)
+
+        assert get_merge_policy(hc_home, SAMPLE_TEAM, "legacy_repo") == "no-review"
+
+    def test_deprecated_alias_still_works(self, hc_home):
+        """The deprecated get_repo_approval function still works."""
+        add_repo(hc_home, SAMPLE_TEAM, "myrepo", "/tmp/repo", merge_policy="no-review")
         assert get_repo_approval(hc_home, SAMPLE_TEAM, "myrepo") == "auto"
-        assert get_repo_approval(hc_home, SAMPLE_TEAM, "other") == "manual"
-        assert get_repo_approval(hc_home, SAMPLE_TEAM, "missing") == "manual"
 
 
 # ---------------------------------------------------------------------------
@@ -1292,3 +1306,116 @@ class TestMasterBranch:
             cwd=str(wt_path), capture_output=True, text=True,
         )
         assert master_sha in wt_log.stdout
+
+
+class TestSortMergeCandidates:
+    """Tests for _sort_merge_candidates merge ordering."""
+
+    def test_dependency_order(self, hc_home, tmp_path):
+        """B depends on A → A sorted first."""
+        repo = _setup_git_repo(tmp_path)
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        # Create two feature branches with different files
+        _make_feature_branch(repo, "feature/a", filename="a.py", content="# A\n")
+        _make_feature_branch(repo, "feature/b", filename="b.py", content="# B\n")
+
+        # Get base SHA
+        base_sha = subprocess.run(
+            ["git", "rev-parse", "main"],
+            cwd=str(repo), capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+        # Create tasks: B depends on A
+        task_a = create_task(hc_home, SAMPLE_TEAM, title="Task A", assignee="alice")
+        update_task(hc_home, SAMPLE_TEAM, task_a["id"], repo="myrepo",
+                    branch="feature/a", base_sha={"myrepo": base_sha})
+
+        task_b = create_task(hc_home, SAMPLE_TEAM, title="Task B", assignee="bob",
+                             depends_on=[task_a["id"]])
+        update_task(hc_home, SAMPLE_TEAM, task_b["id"], repo="myrepo",
+                    branch="feature/b", base_sha={"myrepo": base_sha})
+
+        # Fetch fresh task data
+        tasks = [
+            get_task(hc_home, SAMPLE_TEAM, task_a["id"]),
+            get_task(hc_home, SAMPLE_TEAM, task_b["id"]),
+        ]
+
+        # Sort — even if B is listed first, A should come first
+        result = _sort_merge_candidates(hc_home, SAMPLE_TEAM, [tasks[1], tasks[0]])
+        assert result[0]["id"] == task_a["id"], "A should be sorted before B"
+        assert result[1]["id"] == task_b["id"]
+
+    def test_non_overlapping_first(self, hc_home, tmp_path):
+        """Task with unique files sorted before tasks with shared files."""
+        repo = _setup_git_repo(tmp_path)
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        # Task X: modifies shared.py (overlaps with Y)
+        _make_feature_branch(repo, "feature/x", filename="shared.py", content="# X\n")
+        # Task Y: modifies shared.py AND shared2.py (overlaps with X)
+        subprocess.run(["git", "checkout", "-b", "feature/y"], cwd=str(repo),
+                        capture_output=True, check=True)
+        (repo / "shared.py").write_text("# Y\n")
+        (repo / "shared2.py").write_text("# Y2\n")
+        subprocess.run(["git", "add", "."], cwd=str(repo), capture_output=True)
+        subprocess.run(["git", "commit", "-m", "Y changes"], cwd=str(repo),
+                        capture_output=True, check=True)
+        subprocess.run(["git", "checkout", "main"], cwd=str(repo),
+                        capture_output=True, check=True)
+        # Task Z: modifies unique.py (no overlap)
+        _make_feature_branch(repo, "feature/z", filename="unique.py", content="# Z\n")
+
+        base_sha = subprocess.run(
+            ["git", "rev-parse", "main"],
+            cwd=str(repo), capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+        task_x = create_task(hc_home, SAMPLE_TEAM, title="Task X", assignee="alice")
+        update_task(hc_home, SAMPLE_TEAM, task_x["id"], repo="myrepo",
+                    branch="feature/x", base_sha={"myrepo": base_sha})
+
+        task_y = create_task(hc_home, SAMPLE_TEAM, title="Task Y", assignee="bob")
+        update_task(hc_home, SAMPLE_TEAM, task_y["id"], repo="myrepo",
+                    branch="feature/y", base_sha={"myrepo": base_sha})
+
+        task_z = create_task(hc_home, SAMPLE_TEAM, title="Task Z", assignee="alice")
+        update_task(hc_home, SAMPLE_TEAM, task_z["id"], repo="myrepo",
+                    branch="feature/z", base_sha={"myrepo": base_sha})
+
+        tasks = [
+            get_task(hc_home, SAMPLE_TEAM, task_x["id"]),
+            get_task(hc_home, SAMPLE_TEAM, task_y["id"]),
+            get_task(hc_home, SAMPLE_TEAM, task_z["id"]),
+        ]
+
+        result = _sort_merge_candidates(hc_home, SAMPLE_TEAM, tasks)
+        # Z has no overlap → should be first
+        assert result[0]["id"] == task_z["id"], \
+            f"Non-overlapping task Z should be first, got task {result[0]['id']}"
+
+    def test_single_task_unchanged(self, hc_home, tmp_path):
+        """Single task returned as-is."""
+        repo = _setup_git_repo(tmp_path)
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+        _make_feature_branch(repo, "feature/solo", filename="solo.py", content="# Solo\n")
+
+        base_sha = subprocess.run(
+            ["git", "rev-parse", "main"],
+            cwd=str(repo), capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+        task = create_task(hc_home, SAMPLE_TEAM, title="Solo", assignee="alice")
+        update_task(hc_home, SAMPLE_TEAM, task["id"], repo="myrepo",
+                    branch="feature/solo", base_sha={"myrepo": base_sha})
+        task_data = get_task(hc_home, SAMPLE_TEAM, task["id"])
+
+        result = _sort_merge_candidates(hc_home, SAMPLE_TEAM, [task_data])
+        assert len(result) == 1
+        assert result[0]["id"] == task["id"]
+
+    def test_empty_list(self, hc_home):
+        """Empty input returns empty output."""
+        result = _sort_merge_candidates(hc_home, SAMPLE_TEAM, [])
+        assert result == []

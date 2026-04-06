@@ -2,10 +2,29 @@
 
 All notable changes to Delegate are documented here.
 
+## 0.2.11 — 2026-03-08
+
+### Added
+- **Research workflow** — new built-in `research` workflow for autonomous experimentation tasks (`todo → researching → reporting → done`). Skips the review/merge pipeline entirely. Register with `delegate workflow init <team>`.
+- **Researcher role** — new `researcher` agent role with a dedicated charter defining autonomous experiment loop practices, results tracking, simplicity criterion, and reporting standards. Researchers get relaxed git sandbox permissions (`git reset --hard`, `git checkout`, `git branch`) for discarding failed experiments within their worktree.
+- **Role-aware sandbox** — `_sandbox_for_role()` dynamically adjusts disallowed git commands per role. Researchers get the git commands needed for experiment management; all other roles retain full restrictions.
+- **Workflow parameter on task_create** — the `task_create` MCP tool now accepts an optional `workflow` parameter (e.g. `workflow: "research"`) so agents can create tasks under non-default workflows.
+- **Manager research guidance** — manager charter updated with a "Research Tasks" section covering how to create research tasks, assign researchers, and review results.
+- **`workflow init` registers both workflows** — `delegate workflow init <team>` now registers both the `default` and `research` built-in workflows.
+- **Frontend support** — CSS variables, status dots, badges, and tier sorting for `researching` and `reporting` statuses in the web UI.
+
+## 0.2.10 — 2026-02-27
+
+### Added
+- **Main-prefer files** — configurable list of file patterns per repo that are automatically reset to main's version after rebase. Prevents agents from carrying stale edits to shared infrastructure files (test configs, CI configs, lockfiles) through the merge cycle. Configure with `delegate repo prefer-main <team> <repo> <patterns...>`. Applies in both the merge worker (Phase 2.5, between rebase and tests) and the agent `rebase_to_main` MCP tool.
+- **Engineer charter guidance** — agents are now instructed not to modify shared infrastructure files to work around test failures; fix the code or escalate to the manager.
+- **Manager knowledge** — manager role documentation now covers diagnosing and resolving stuck branches caused by shared-file edits, including how to configure `prefer-main` patterns.
+
 ## 0.2.9 - 2020-02-20
 - **Skip Auth Check** - some enterprise users authenticate in custom ways, so added
  check for delegate to skip auth check. For such cases, authentication will be
  managed outside of Delegate now
+- **Reviewer agent role** — new `reviewer` role with dedicated MCP tools (`task_diff`, `task_approve`, `task_reject`). When a reviewer agent is on the team, the daemon dispatches review requests through the standard turn mechanism instead of the in-process LLM judge. Includes sensitive file escalation (reviewer escalates to human instead of approving/rejecting), rebase-needed detection, and merge-priority ordering. Falls back to the original `auto_approve_once` when no reviewer agent exists.
 
 ## 0.2.8 — 2026-02-20
 

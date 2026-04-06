@@ -52,6 +52,26 @@ class GitMixin:
     ``self.task`` are available (inherited from ``Context``).
     """
 
+    # ── Artifacts ─────────────────────────────────────────────────
+
+    def setup_artifacts(self) -> Path:
+        """Create the persistent artifacts directory for the task.
+
+        Unlike worktrees, this directory is NOT cleaned up when the task
+        completes.  It is intended for model checkpoints, training logs,
+        evaluation reports, and other large outputs.
+
+        Subdirectories ``models/``, ``logs/``, and ``reports/`` are created
+        automatically.  Returns the artifacts root path.
+        """
+        from delegate.paths import task_artifacts_dir, ARTIFACT_CATEGORIES
+
+        art_dir = task_artifacts_dir(self._hc_home, self._team, self.task.id)
+        art_dir.mkdir(parents=True, exist_ok=True)
+        for subdir in ARTIFACT_CATEGORIES.values():
+            (art_dir / subdir).mkdir(exist_ok=True)
+        return art_dir
+
     # ── Workspace ───────────────────────────────────────────────
 
     def setup_worktree(self, repo: str | None = None) -> list[Path]:

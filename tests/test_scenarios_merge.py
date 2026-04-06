@@ -16,6 +16,7 @@ from delegate.task import (
     update_task,
     get_task,
     cancel_task,
+    format_task_id,
 )
 from delegate.config import add_repo, set_boss
 from delegate.merge import merge_task, MergeResult, MergeFailureReason
@@ -116,7 +117,7 @@ class TestMergeScenarios:
 
         # Create worktree (simulating agent work)
         task = _make_in_approval_task(hc_home, repo="myrepo", branch=branch, merging=True)
-        wt_path = _team_dir(hc_home, TEAM) / "worktrees" / "myrepo" / f"T{task['id']:04d}"
+        wt_path = _team_dir(hc_home, TEAM) / "worktrees" / "myrepo" / format_task_id(task["id"])
         wt_path.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(
             ["git", "worktree", "add", str(wt_path), branch],
@@ -346,8 +347,8 @@ class TestMergeScenarios:
         branch1 = branch1_result.stdout.strip()
         branch2 = branch2_result.stdout.strip()
         assert branch1 != branch2, "Each worktree should have its own branch"
-        assert "T0001" in branch1 or "T{:04d}".format(task1["id"]) in branch1
-        assert "T0002" in branch2 or "T{:04d}".format(task2["id"]) in branch2
+        assert "MYTE-0001" in branch1 or "T0001" in branch1
+        assert "MYTE-0002" in branch2 or "T0002" in branch2
 
         # Make commits in worktree 1 without affecting worktree 2
         (wt1 / "file1.py").write_text("# from wt1\n")

@@ -78,7 +78,7 @@ Meanwhile, you can send more tasks — Delegate will prioritize, assign, and mul
 
 **Async by default.** You don't need to sit and watch. Send Delegate a task, close your laptop, come back later. The team keeps working — writing code, reviewing each other, running tests. Check in when you want. This is the fundamental difference from copilots, which require your continuous presence.
 
-**Agents that coordinate, not just execute.** Engineers don't work in isolation. When one agent finishes coding, another reviews the diff and runs the test suite. Tasks flow through `todo → in_progress → in_review → in_approval → merging → done` with agents handling each transition — just like a well-run engineering team.
+**Agents that coordinate, not just execute.** Engineers don't work in isolation. When one agent finishes coding, another reviews the diff and runs the test suite. Tasks flow through `todo → in_progress → in_review → in_approval → merging → done` with agents handling each transition — just like a well-run engineering team. Research tasks follow their own lifecycle: `todo → researching → reporting → done`.
 
 **Browser UI with real-time visibility.** Watch agents pick up tasks, write code, and review each other's work — live. Approve merges, browse diffs, inspect files, and run shell commands — all from the browser.
 
@@ -103,6 +103,18 @@ def my_workflow():
     return [Todo, InProgress, InReview, Deploy, Done]
 ```
 
+Ships with two built-in workflows: the **default** software development workflow (`todo → in_progress → in_review → in_approval → merging → done`) and a **research** workflow for autonomous experimentation (`todo → researching → reporting → done`).
+
+**Autonomous research agents.** Assign a `researcher` role agent to run iterative experiments — hyperparameter tuning, architecture search, code optimization, data analysis. The researcher modifies code, runs experiments, keeps improvements, discards failures, and loops autonomously for hours. Results are logged to a structured TSV and reported when ready for human review. Researchers get relaxed git permissions (`git reset --hard`, `git checkout`) for discarding failed experiments within their worktree.
+
+**Long-running background commands.** Experiments and builds that take minutes to hours run as detached background processes. Agents launch them with `run_background`, poll progress with `check_background`, and cancel with `cancel_background` — no timeout limits, no blocking.
+
+**Persistent artifacts.** Task outputs (checkpoints, reports, data files) are saved to a persistent artifacts directory that survives worktree teardown. Three MCP tools (`artifact_save`, `artifact_list`, `artifact_path`) manage the lifecycle. Artifacts are organized by category and tracked in a manifest.
+
+**Task pipeline chaining.** Tasks with `depends_on` relationships auto-advance when dependencies complete — completing a data preparation task automatically kicks off the training task that depends on it.
+
+**Extensible adapter system.** Technology-specific code (hardware probes, network domain groups) lives in a single adapter module. Adding support for a new GPU architecture or domain group is a single-function addition — no core changes needed. See [docs/architecture.md](docs/architecture.md) for details.
+
 **Mix models by role.** All agents default to Claude Sonnet. Override per agent with `--model opus` for tasks requiring stronger reasoning.
 
 **Team charter in markdown.** Set review standards, communication norms, and team values in a markdown file — like an EM setting expectations for the team.
@@ -125,13 +137,17 @@ def my_workflow():
 │       │   └── bob/
 │       ├── repos/        # Symlinks to your real git repos
 │       ├── shared/       # Team-wide shared files
+│       ├── artifacts/    # Persistent task outputs (survive worktree teardown)
+│       │   └── T0001/    # Per-task: models/, logs/, reports/, data/, outputs/
 │       └── workflows/    # Registered workflow definitions
 └── db.sqlite             # Messages, tasks, events
 ```
 
-Agents are [Claude Code](https://docs.anthropic.com/en/docs/claude-code) instances. The Delegate agent is the EM — it reads your messages, breaks down work, assigns tasks, and coordinates the team. Engineers work in git worktrees and communicate through a message bus. The daemon dispatches agent turns as async tasks, multiplexing across the whole team. All storage is local files — plaintext or sqlite.
+Agents are [Claude Code](https://docs.anthropic.com/en/docs/claude-code) instances. The Delegate agent is the EM — it reads your messages, breaks down work, assigns tasks, and coordinates the team. Engineers work in git worktrees and communicate through a message bus. Researchers run autonomous experiment loops in their worktrees. The daemon dispatches agent turns as async tasks, multiplexing across the whole team. All storage is local files — plaintext or sqlite.
 
 There's no magic. You can `ls` into any agent's directory and see exactly what they're doing. Worklogs, memory journals, context files — it's all plain text.
+
+For detailed internal architecture (module map, adapter system, extension points), see [docs/architecture.md](docs/architecture.md).
 
 ## Sandboxing & Permissions
 
@@ -145,16 +161,17 @@ Every agent turn runs with a programmatic guard that inspects each tool call bef
 |------|-------------------|
 | Manager | Entire team directory (`~/.delegate/teams/<team>/`) |
 | Engineer | Own agent directory, task worktree(s), team `shared/` folder |
+| Researcher | Same as engineer |
 
 Writes outside these paths are denied with an error message — the model sees the denial and can adjust.
 
-The same guard also enforces a **bash deny-list** — commands containing dangerous substrings are blocked before execution:
+The same guard also enforces a **bash deny-list** — commands containing dangerous substrings are blocked before execution (case-insensitive matching):
 
 ```
-sqlite3, DROP TABLE, DELETE FROM, rm -rf .git
+sqlite3, rm -rf .git, DROP TABLE, DELETE FROM, TRUNCATE, ALTER TABLE
 ```
 
-This prevents agents from directly manipulating the database or destroying git metadata, even if they attempt it via bash.
+SQL deny patterns are defined inline in `DENIED_BASH_PATTERNS` (case-insensitive matching). This prevents agents from executing destructive SQL or destroying git metadata, even if they attempt it via bash.
 
 **2. Disallowed git commands (`disallowed_tools`)**
 
@@ -167,6 +184,8 @@ git branch, git remote, git filter-branch, git reflog expire
 ```
 
 Agents never see these tools and cannot invoke them — branch management is handled by Delegate's merge worker instead.
+
+**Exception: researcher role.** Researchers need to discard failed experiments, so they are granted `git reset --hard`, `git checkout`, and `git branch` within their worktree. All other git restrictions (push, rebase, merge, fetch, etc.) remain enforced.
 
 **3. OS-level bash sandbox (macOS Seatbelt / Linux bubblewrap)**
 
@@ -191,13 +210,13 @@ delegate network reset                   # Restore curated defaults
 
 **5. In-process MCP tools (protected data access)**
 
-Agents interact with the database, task system, and mailbox through in-process MCP tools that run inside the daemon (outside the agent sandbox). This means agents never need shell access to `protected/` — all operations go through validated code paths. Agent identity is baked into each tool closure, preventing impersonation: an agent cannot send messages as another agent or access data outside its team.
+Agents interact with the task system and mailbox through in-process MCP tools that run inside the daemon (outside the agent sandbox). This means agents never need shell access to `protected/` — all operations go through validated code paths. Agent identity is baked into each tool closure, preventing impersonation: an agent cannot send messages as another agent or access data outside its team.
 
 **6. Daemon-managed worktree lifecycle**
 
 Git operations that modify branch topology — `git worktree add`, `git worktree remove`, branch creation, rebase, and merge — run exclusively in the **daemon process**, which is unsandboxed. Agents never run these commands directly. When a manager creates a task with `--repo`, only the DB record and branch name are saved; the daemon creates the actual worktree before dispatching any turns to the assigned worker. This clean separation means agents can write code and commit inside their worktrees but cannot create, remove, or manipulate worktrees or branches.
 
-Together these six layers mean: the model can only write to directories Delegate explicitly allows, cannot touch your git branch topology, cannot access the database directly, cannot contact unauthorized domains, cannot escape the sandbox even through creative bash commands, and all infrastructure operations happen in a controlled daemon context.
+Together these six layers mean: the model can only write to directories Delegate explicitly allows, cannot touch your git branch topology, cannot contact unauthorized domains, cannot escape the sandbox even through creative bash commands, and all infrastructure operations happen in a controlled daemon context.
 
 ## Configuration
 
@@ -222,9 +241,14 @@ delegate team add backend --agents 3 --repo /path/to/repo
 delegate team list
 delegate repo add myteam /path/to/another-repo --test-cmd "pytest -x"
 delegate agent add myteam carol --role engineer
+delegate agent add myteam rosalind --role researcher  # Add a research agent
 
-delegate workflow init myteam                     # Register default workflow
+delegate workflow init myteam                     # Register default + research workflows
 delegate workflow add myteam ./my-workflow.py     # Register custom workflow
+
+delegate repo prefer-main myteam myrepo conftest.py yarn.lock  # Files that always use main's version
+delegate repo prefer-main myteam myrepo --show    # Show current patterns
+delegate repo prefer-main myteam myrepo --clear   # Clear all patterns
 
 delegate network show                             # View network allowlist
 delegate network allow api.github.com             # Allow a domain
@@ -232,15 +256,58 @@ delegate network disallow example.com             # Remove a domain
 delegate network reset                            # Restore curated defaults
 ```
 
-### Set Auto Approval
+### Merge Policy & Reviewer
 
 By default, Delegate expects you to do a final code review and give explicit
-approval before merging into your local repo's main. If you wanted, you can set 
-it to auto approval:
+approval before merging into your local repo's main. There are two ways to
+automate this step — they work differently and offer different safety guarantees:
 
+**Option 1: AI Reviewer (recommended).** Add a reviewer agent and set the reviewer to AI mode:
 ```bash
-delegate repo set-approval myteam my-repo auto
+# 1. Add a reviewer agent to the team
+delegate agent add myteam reviewer --role reviewer
+
+# 2. Enable via the "AI Review" toggle in the Tasks panel UI
+#    Or via CLI:
+delegate team set-reviewer myteam ai
+
+# Or via the API:
+curl -X POST localhost:3548/teams/myteam/reviewer \
+  -H 'Content-Type: application/json' \
+  -d '{"mode": "ai"}'
+
+# Optional: adjust the score threshold (default: 3.5 out of 5)
+delegate team set-reviewer myteam ai --threshold 4.0
 ```
+When tasks reach `in_approval`, the reviewer agent evaluates diffs using MCP
+tools (`task_diff`, `task_approve`, `task_reject`), scores code on correctness,
+readability, style, test quality, and simplicity, and approves only if the
+average score meets the configured threshold. Sensitive files (CI configs,
+secrets, agent instructions) are never auto-approved — they are escalated to you
+for human review. If the score falls below the threshold, the task is rejected
+and the manager is notified.
+
+**Option 2: No-review merge policy.** For simpler setups without a reviewer agent:
+```bash
+delegate repo set-merge-policy myteam my-repo no-review
+
+# To switch back to requiring review:
+delegate repo set-merge-policy myteam my-repo review-needed
+```
+
+#### How they differ
+
+| | AI Reviewer (Option 1) | No-review merge policy (Option 2) |
+|---|---|---|
+| **Reviews the diff?** | Yes — LLM scores on 5 quality dimensions | No — skips review entirely |
+| **Can reject bad code?** | Yes — rejects if score is below threshold | No — everything merges if tests pass |
+| **Sensitive file checks?** | Yes — blocks and escalates to human | No |
+| **Quality gate** | AI code review + pre-merge tests | Pre-merge tests only |
+| **How it works** | Sets a verdict (`approved`/`rejected`), merge worker checks the verdict before proceeding | Merge worker sees `merge_policy: no-review` and marks the task ready immediately — no verdict needed |
+
+In short: the AI reviewer is an **automated reviewer** that reads the diff and
+decides whether it's good enough. No-review is a **bypass** that skips the
+approval step entirely and merges anything that passes tests.
 
 ## How it works
 

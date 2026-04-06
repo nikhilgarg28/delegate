@@ -72,12 +72,11 @@ class TestFilePathResolution:
         data = r.json()
         assert "Test content for path resolution" in data["content"]
 
-    def test_tilde_path_nonexistent(self, client):
-        """Tilde paths pointing to non-existent files should return 404."""
+    def test_tilde_path_outside_project(self, client):
+        """Tilde paths outside the project tree should return 403."""
         r = client.get(f"/teams/{TEAM}/files/content",
                        params={"path": "~/nonexistent-delegate-test-file-99999.md"})
-        assert r.status_code == 404
-        assert "not found" in r.json()["detail"].lower()
+        assert r.status_code == 403
 
     def test_delegate_relative_path(self, client, test_file, tmp_team):
         """Delegate-relative paths should be resolved from hc_home."""
@@ -104,8 +103,7 @@ class TestFilePathResolution:
         assert r.status_code == 404
         assert "not found" in r.json()["detail"].lower()
 
-    def test_absolute_nonexistent_file(self, client):
-        """Non-existent absolute paths should return 404."""
+    def test_absolute_path_outside_project(self, client):
+        """Absolute paths outside the project tree should return 403."""
         r = client.get(f"/teams/{TEAM}/files/content", params={"path": "/tmp/nonexistent-file-12345.md"})
-        assert r.status_code == 404
-        assert "not found" in r.json()["detail"].lower()
+        assert r.status_code == 403

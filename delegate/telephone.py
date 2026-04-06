@@ -62,6 +62,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import signal
 import time
 import uuid
 from dataclasses import dataclass
@@ -361,6 +363,11 @@ class Telephone:
 
         self._client: Any = None  # ClaudeSDKClient instance
         self._stale_client: Any = None  # queued for disconnect on next send
+        # Track subprocess PIDs directly — the SDK's async disconnect chain
+        # (query.close → transport.close → terminate) is unreliable due to
+        # multiple suppress(Exception) blocks and async lock acquisition.
+        # We use os.kill(SIGTERM) as the primary cleanup mechanism.
+        self._child_pids: set[int] = set()  # all PIDs spawned for this telephone
         self._effective_write_paths: list[Path] | None = (
             list(self._allowed_write_paths) if self._allowed_write_paths is not None else None
         )
@@ -412,16 +419,84 @@ class Telephone:
         """
         await self._ensure_client()
 
+    async def interrupt(self) -> None:
+        """Interrupt the current turn and reset conversation state.
+
+        Sends the SDK interrupt signal to stop the in-progress query,
+        then resets the telephone so the next send() starts a fresh
+        generation (preserving memory).
+        """
+        if self._client is not None:
+            try:
+                await self._client.interrupt()
+            except Exception:
+                pass
+        # Reset conversation so agent starts fresh on next turn
+        self.reset()
+
+    @staticmethod
+    def _get_client_pid(client: Any) -> int | None:
+        """Extract the subprocess PID from a ClaudeSDKClient instance.
+
+        Reaches into SDK internals — fragile, but necessary for reliable
+        process cleanup.
+        """
+        try:
+            transport = getattr(client, "_transport", None) or getattr(
+                getattr(client, "_query", None), "transport", None
+            )
+            proc = getattr(transport, "_process", None) if transport else None
+            if proc is None:
+                return None
+            pid = getattr(proc, "pid", None)
+            return pid if isinstance(pid, int) else None
+        except Exception:
+            return None
+
+    def _kill_pid(self, pid: int, sig: int = signal.SIGTERM) -> None:
+        """Send a signal to a tracked subprocess PID."""
+        try:
+            os.kill(pid, sig)
+            logger.debug("Telephone %s: sent signal %d to PID %d", self.id[:8], sig, pid)
+        except ProcessLookupError:
+            pass  # already dead
+        except OSError:
+            logger.debug("Telephone %s: failed to signal PID %d", self.id[:8], pid, exc_info=True)
+
+    async def _disconnect_client(self, client: Any) -> None:
+        """Disconnect a SDK client with direct PID kill as primary mechanism.
+
+        The SDK's async disconnect chain (query.close → transport.close →
+        terminate) is unreliable — it has multiple ``suppress(Exception)``
+        blocks that silently swallow errors, causing the process to survive.
+
+        We capture the PID first, then attempt SDK disconnect for state
+        cleanup, and **always** follow up with os.kill(SIGTERM) to ensure
+        the subprocess actually dies.
+        """
+        pid = self._get_client_pid(client)
+        # Attempt SDK disconnect for clean conversation state teardown.
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
+        # Always kill the subprocess directly — don't trust the SDK chain.
+        if pid:
+            self._kill_pid(pid, signal.SIGTERM)
+            self._child_pids.discard(pid)
+
     async def close(self) -> None:
         """Disconnect the SDK client and release the subprocess."""
         for client in (self._client, self._stale_client):
             if client is not None:
-                try:
-                    await client.disconnect()
-                except Exception:
-                    pass
+                await self._disconnect_client(client)
         self._client = None
         self._stale_client = None
+        # Belt-and-suspenders: kill ALL tracked PIDs that may have been
+        # missed (e.g., from failed rotations where reset() was never called).
+        for pid in list(self._child_pids):
+            self._kill_pid(pid, signal.SIGTERM)
+        self._child_pids.clear()
 
     async def __aenter__(self) -> "Telephone":
         return self
@@ -504,11 +579,27 @@ class Telephone:
         # when can_use_tool was set.
         await self._client.query(effective_prompt)
 
+        prompt_too_long = False
         async for msg in self._client.receive_response():
             self._track_message(msg)
+            # Detect "Prompt is too long" from Claude Code CLI — the context
+            # window is full but usage.input_tokens is 0 so needs_rotation
+            # never fires.  Flag it and force a rotation after yielding.
+            if hasattr(msg, "content"):
+                for block in msg.content:
+                    if hasattr(block, "text") and "prompt is too long" in (block.text or "").lower():
+                        prompt_too_long = True
             yield msg
 
         self.turns += 1
+
+        # Force rotation on prompt-too-long so the next send() starts fresh.
+        if prompt_too_long and self.turns > 0:
+            logger.info(
+                "Telephone %s: prompt too long detected — forcing rotation",
+                self.id[:8],
+            )
+            await self.rotate(summary_prompt=None)
 
     async def rotate(self, summary_prompt: str | None = _UNSET) -> str | None:
         """Rotate the conversation — summarise, update memory, reset.
@@ -598,17 +689,16 @@ class Telephone:
         """Lazily connect a ``ClaudeSDKClient``, creating one if needed.
 
         Also cleans up any stale client left over from a prior
-        ``reset()``.
+        ``reset()``.  Uses SIGKILL as a fallback if the normal
+        disconnect path fails — this prevents the runaway subprocess
+        leak that previously accumulated hundreds of orphaned processes.
         """
         if self._client is not None:
             return
 
         # Disconnect the old subprocess from a previous generation.
         if self._stale_client is not None:
-            try:
-                await self._stale_client.disconnect()
-            except Exception:
-                pass
+            await self._disconnect_client(self._stale_client)
             self._stale_client = None
 
         from claude_agent_sdk import ClaudeSDKClient
@@ -616,6 +706,12 @@ class Telephone:
         options = self._build_options()
         self._client = ClaudeSDKClient(options)
         await self._client.connect()
+
+        # Track the subprocess PID for reliable cleanup.
+        pid = self._get_client_pid(self._client)
+        if pid:
+            self._child_pids.add(pid)
+            logger.debug("Telephone %s: spawned subprocess PID %d (gen %d)", self.id[:8], pid, self.generation)
 
     def _build_options(self) -> Any:
         """Assemble ``ClaudeAgentOptions`` for the client.
@@ -801,8 +897,9 @@ class Telephone:
             # --- Bash deny-list ---
             if tool_name == "Bash" and _bash_deny:
                 cmd = tool_input.get("command", "")
+                cmd_upper = cmd.upper()
                 for pattern in _bash_deny:
-                    if pattern in cmd:
+                    if pattern.upper() in cmd_upper:
                         return _deny(f"Command denied: contains '{pattern}'")
 
             return _allow()

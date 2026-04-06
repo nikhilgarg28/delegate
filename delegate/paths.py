@@ -182,6 +182,15 @@ def _load_team_map(hc_home: Path) -> dict[str, str]:
     return data
 
 
+def _reload_team_map(hc_home: Path) -> dict[str, str]:
+    """Force-reload team map from disk, bypassing cache."""
+    mp = _team_map_path(hc_home)
+    data = json.loads(mp.read_text()) if mp.exists() else {}
+    with _team_map_lock:
+        _team_map_cache[str(hc_home)] = data
+    return data
+
+
 def _save_team_map(hc_home: Path, data: dict[str, str]) -> None:
     """Persist the team name → UUID mapping."""
     mp = _team_map_path(hc_home)
@@ -216,6 +225,10 @@ def resolve_team_uuid(hc_home: Path, team_name: str) -> str:
     team name unchanged (fallback for tests and pre-UUID data).
     """
     data = _load_team_map(hc_home)
+    if team_name in data:
+        return data[team_name]
+    # Cache miss — reload from disk in case an external process updated the file
+    data = _reload_team_map(hc_home)
     return data.get(team_name, team_name)
 
 
@@ -291,6 +304,22 @@ def task_worktree_dir(hc_home: Path, team: str, repo_name: str, task_id: int) ->
     """Per-task worktree directory: ``teams/{team}/worktrees/{repo}/T{id}/``."""
     from delegate.task import format_task_id
     return team_dir(hc_home, team) / "worktrees" / repo_name / format_task_id(task_id)
+
+
+# Mapping from artifact category (used in tool schemas) to subdirectory name.
+# The canonical source is delegate.adapters.DEFAULT_ARTIFACT_CATEGORIES.
+from delegate.adapters import DEFAULT_ARTIFACT_CATEGORIES as ARTIFACT_CATEGORIES
+
+
+def task_artifacts_dir(hc_home: Path, team: str, task_id: int) -> Path:
+    """Per-task artifacts directory: ``teams/{team}/artifacts/T{id}/``.
+
+    Unlike worktrees, this directory persists after task completion.
+    Used for model checkpoints, training logs, evaluation reports,
+    and other large binary outputs that don't belong in git.
+    """
+    from delegate.task import format_task_id
+    return team_dir(hc_home, team) / "artifacts" / format_task_id(task_id)
 
 
 def shared_dir(hc_home: Path, team: str) -> Path:

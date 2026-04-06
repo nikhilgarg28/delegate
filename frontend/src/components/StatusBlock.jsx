@@ -1,6 +1,7 @@
 import { useState, useEffect } from "preact/hooks";
 import { currentTeam, openPanel } from "../state.js";
 import * as api from "../api.js";
+import { taskIdStr } from "../utils.js";
 
 /**
  * Renders /status command output - task-focused status summary.
@@ -82,8 +83,6 @@ export function StatusBlock({ result }) {
     openPanel('task', taskId);
   };
 
-  const formatTaskId = (id) => `T${String(id).padStart(4, '0')}`;
-
   const statusLabels = {
     in_progress: 'In Progress',
     in_review: 'In Review',
@@ -121,7 +120,7 @@ export function StatusBlock({ result }) {
                         href="#"
                         onClick={(e) => handleTaskClick(e, id)}
                       >
-                        {formatTaskId(id)}
+                        {taskIdStr(id)}
                       </a>
                     </>
                   ))}

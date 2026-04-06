@@ -36,6 +36,25 @@ Test 7: Cancel mid-work
 Test 8: Multi-repo task
   Create task spanning two repos → agent works in both → merge
   Verify: both repos have their changes, all-or-nothing (if one fails, neither merges)
+
+Test 8b: Main-prefer file reconciliation
+  Configure prefer-main patterns for conftest.py → agent edits conftest.py
+  on feature branch → approve → merge worker rebases → Phase 2.5 resets
+  conftest.py to main's version → tests pass → merge succeeds
+  Verify: feature code preserved, conftest.py matches main, merge commit
+  includes the reset, no stale shared-file edits in final history
+
+Test 8c: Main-prefer with rebase_to_main MCP tool
+  Configure prefer-main patterns → agent has stale conftest.py edits →
+  agent calls rebase_to_main → result JSON includes reconciled_files →
+  conftest.py is staged with main's version
+  Verify: reconciled_files reported, file content matches main, agent's
+  feature changes are intact
+
+Test 8d: Main-prefer no-op when no patterns configured
+  No prefer-main patterns configured → merge proceeds normally
+  Verify: Phase 2.5 is a no-op, no files reset, identical behavior to
+  before the feature was added
 Tier 2: Workflow engine
 Test 9: Happy path through all stages
   todo → in_progress → in_review → in_approval → merging → done
@@ -70,6 +89,24 @@ Test 15: Custom workflow
   Define a minimal custom workflow with 3 stages
   → run a task through it
   Verify: custom stages execute, default workflow unaffected
+
+Test 15b: Research workflow happy path
+  Create task with workflow=research → todo → researching → reporting → done
+  Verify: worktree created on enter, researcher assigned via DRI,
+  human assigned on reporting, completed_at set on done
+
+Test 15c: Research workflow loop back
+  Researching → reporting → researching (human sends back for more experiments)
+  Verify: DRI reassigned on re-entry, worktree still intact
+
+Test 15d: Research workflow cancellation
+  Researching → cancelled
+  Verify: completed_at set, worktree cleaned up
+
+Test 15e: Researcher sandbox
+  Verify: researcher role allows git reset --hard, git checkout, git branch
+  Verify: engineer role still blocks all git commands
+  Verify: researcher still blocked from git push, git rebase, git merge
 Tier 3: UI (Playwright)
 Test 16: Page loads, sidebar shows agents and tasks
   Verify: agents listed with status, tasks listed with status

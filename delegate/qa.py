@@ -249,16 +249,31 @@ def check_test_coverage(repo_path: Path, min_coverage: int = MIN_COVERAGE_PERCEN
         return True, "Python not found, skipping coverage check."
 
 
-def _extract_task_id_from_branch(branch: str) -> int | None:
+def _extract_task_id_from_branch(branch: str, hc_home: Path | None = None, team: str | None = None) -> int | None:
     """Extract a task ID from a branch name, if present.
 
     Supports formats:
-        delegate/<team_id>/<team>/T<id>  (current convention)
-        delegate/<team>/T<id>            (legacy)
-        <agent>/T<id>                    (legacy)
-        <agent>/T<id>-<slug>             (legacy)
-        <agent>/<project>/<id>-<slug>    (legacy)
+        delegate/<team_id>/<team>/PREFIX-NNNN  (per-project display_id)
+        delegate/<team_id>/<team>/T<id>        (current convention)
+        delegate/<team>/T<id>                  (legacy)
+        <agent>/T<id>                          (legacy)
+        <agent>/T<id>-<slug>                   (legacy)
+        <agent>/<project>/<id>-<slug>          (legacy)
     """
+    # Try per-project display_id: delegate/<team_id>/<team>/PREFIX-NNNN or <agent>/PREFIX-NNNN
+    match = re.match(r"(?:delegate/[^/]+/[^/]+|[^/]+)/([A-Z]{2,4}-\d{4,})", branch)
+    if match:
+        display_id = match.group(1)
+        if hc_home and team:
+            from delegate.db import get_connection
+            conn = get_connection(hc_home, team)
+            try:
+                row = conn.execute("SELECT id FROM tasks WHERE display_id = ?", (display_id,)).fetchone()
+                if row:
+                    return row[0]
+            finally:
+                conn.close()
+        return None
     # Try current convention: delegate/<team_id>/<team>/T<id>
     # Also matches legacy: delegate/<team>/T<id>
     match = re.match(r"delegate/[^/]+/(?:[^/]+/)?T(\d+)(?:-|$)", branch)
@@ -277,6 +292,23 @@ def _extract_task_id_from_branch(branch: str) -> int | None:
 
 def _auto_detect_task_branch(hc_home: Path, team: str, branch: str) -> None:
     """Try to match a branch name to a task and store it."""
+    # Try per-project display_id format first: delegate/<tid>/<team>/PREFIX-NNNN or <agent>/PREFIX-NNNN
+    display_match = re.match(r"(?:delegate/[^/]+/[^/]+|[^/]+)/([A-Z]{2,4}-\d{4,})", branch)
+    if display_match:
+        display_id = display_match.group(1)
+        from delegate.db import get_connection
+        conn = get_connection(hc_home, team)
+        try:
+            row = conn.execute("SELECT id FROM tasks WHERE display_id = ?", (display_id,)).fetchone()
+            if row:
+                try:
+                    set_task_branch(hc_home, team, row[0], branch)
+                except FileNotFoundError:
+                    logger.debug("No task %s found for branch %s", display_id, branch)
+                return
+        finally:
+            conn.close()
+
     branch_match = re.match(r"([^/]+)/([^/]+)/(\d+)-", branch)
     if not branch_match:
         # Also try the new naming convention: <team>/T<id>
@@ -312,7 +344,7 @@ def handle_review_request(
         - Reports CHANGES_REQUESTED to requester and manager
     """
     _auto_detect_task_branch(hc_home, team, req.branch)
-    task_id = _extract_task_id_from_branch(req.branch)
+    task_id = _extract_task_id_from_branch(req.branch, hc_home, team)
     log_event(hc_home, team, f"QA reviewing {req.requester.capitalize()}'s changes ({req.branch})", task_id=task_id)
 
     try:
@@ -408,7 +440,7 @@ def _report_result(hc_home: Path, team: str, req: ReviewRequest, result: ReviewR
     except ValueError:
         logger.warning("Could not send result to manager")
 
-    task_id = _extract_task_id_from_branch(result.branch)
+    task_id = _extract_task_id_from_branch(result.branch, hc_home, team)
     if result.approved:
         log_event(hc_home, team, f"QA approved ({result.branch}) \u2713", task_id=task_id)
     else:

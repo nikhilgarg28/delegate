@@ -332,7 +332,7 @@ def broadcast_turn_event(
     task_id: int | None = None,
     sender: str = "",
 ) -> None:
-    """Broadcast a turn lifecycle event (turn_started or turn_ended) to all SSE clients.
+    """Broadcast a turn lifecycle event to all SSE clients.
 
     Also maintains the in-memory ``_active_turns`` registry so that
     ``get_active_turns()`` always reflects who is currently in a turn.
@@ -340,7 +340,7 @@ def broadcast_turn_event(
     state for clients that missed SSE events (e.g. on reconnect).
 
     Args:
-        event_type: 'turn_started' or 'turn_ended'
+        event_type: 'turn_started', 'turn_ended', or 'turn_interrupted'
         agent: The agent name
         team: The team this turn belongs to
         task_id: Optional task ID the turn is associated with
@@ -358,7 +358,7 @@ def broadcast_turn_event(
             "sender": sender,
             "timestamp": ts,
         }
-    elif event_type == "turn_ended":
+    elif event_type in ("turn_ended", "turn_interrupted"):
         _active_turns.pop(key, None)
 
     payload = {

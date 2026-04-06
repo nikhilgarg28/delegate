@@ -8,7 +8,7 @@ import {
 import * as api from "../api.js";
 import {
   cap, prettyName, esc, fmtStatus, fmtTimestamp, fmtElapsed, fmtTokens, fmtCost,
-  fmtRelativeTime, taskIdStr, renderMarkdown, linkifyTaskRefs, linkifyFilePaths,
+  fmtRelativeTime, taskIdStr, registerTaskDisplayIds, renderMarkdown, linkifyTaskRefs, linkifyFilePaths,
   agentifyRefs, flattenDiffDict, flattenCommitsDict, diff2HtmlRender, diff2HtmlParse,
   stripEmojis, handleCopyClick, toApiPath, fmtCompactDuration, displayName,
 } from "../utils.js";
@@ -117,7 +117,7 @@ function panelTitle(entry, allTasks) {
   if (!entry) return "";
   if (entry.type === "task") {
     const t = (allTasks || []).find(t => t.id === entry.target);
-    return taskIdStr(entry.target) + (t ? " " + t.title : "");
+    return taskIdStr(entry.target, t && t.prefix, t && t.seq) + (t ? " " + t.title : "");
   }
   if (entry.type === "agent") return cap(entry.target || "");
   if (entry.type === "file") return (entry.target || "").split("/").pop() || "File";
@@ -136,6 +136,14 @@ const LinkedDiv = forwardRef(function LinkedDiv({ html, class: cls, style }, ref
     if (copyBtn) { e.stopPropagation(); e.preventDefault(); handleCopyClick(copyBtn); return; }
     const taskLink = e.target.closest("[data-task-id]");
     if (taskLink) { e.stopPropagation(); pushPanel("task", parseInt(taskLink.dataset.taskId, 10)); return; }
+    const taskSeqLink = e.target.closest("[data-task-seq]");
+    if (taskSeqLink) {
+      e.stopPropagation();
+      const displayId = taskSeqLink.dataset.taskSeq;
+      const match = (tasks.peek() || []).find(t => t.display_id === displayId);
+      if (match) pushPanel("task", match.id);
+      return;
+    }
     const agentLink = e.target.closest("[data-agent-name]");
     if (agentLink) { e.stopPropagation(); pushPanel("agent", agentLink.dataset.agentName); return; }
     const fileLink = e.target.closest("[data-file-path]");
@@ -157,6 +165,7 @@ function RetryMergeButton({ task }) {
       // Refresh task list - task.team is available if needed
       if (task.team) {
         const refreshed = await api.fetchTasks(task.team);
+        registerTaskDisplayIds(refreshed);
         tasks.value = refreshed;
       }
     } catch (err) {
@@ -187,12 +196,14 @@ function ApprovalBar({ task, currentReview, onAction, onEdit }) {
   const { status, approval_status, rejection_reason } = task;
   const reviewSummary = currentReview && currentReview.summary;
   const commentCount = currentReview && currentReview.comments ? currentReview.comments.length : 0;
+  const isAutoReview = currentReview && currentReview.reviewer === "auto-approver";
 
   // Already approved
   if (status === "done" || approval_status === "approved" || result === "approved") {
     return (
       <div class="task-approval-bar task-approval-bar-resolved">
         <span class="approval-badge approval-badge-approved">&#10004; Approved</span>
+        {isAutoReview && <span class="approval-badge" style={{ background: "rgba(99,102,241,0.10)", color: "var(--accent)" }}>AI Reviewed</span>}
         {(summary || reviewSummary) && (
           <span class="task-approval-bar-summary">{summary || reviewSummary}</span>
         )}
@@ -205,6 +216,7 @@ function ApprovalBar({ task, currentReview, onAction, onEdit }) {
     return (
       <div class="task-approval-bar task-approval-bar-resolved">
         <span class="approval-badge approval-badge-rejected">&#10006; Rejected</span>
+        {isAutoReview && <span class="approval-badge" style={{ background: "rgba(99,102,241,0.10)", color: "var(--accent)" }}>AI Reviewed</span>}
         {reason && <span class="task-approval-bar-summary">{reason}</span>}
       </div>
     );
@@ -1219,11 +1231,11 @@ export function TaskSidePanel() {
   const handleAction = useCallback(() => {
     const filter = taskTeamFilter.value;
     if (filter === "all") {
-      api.fetchAllTasks().then(list => { tasks.value = list; });
+      api.fetchAllTasks().then(list => { registerTaskDisplayIds(list); tasks.value = list; });
     } else if (filter === "current") {
-      api.fetchTasks(currentTeam.value).then(list => { tasks.value = list; });
+      api.fetchTasks(currentTeam.value).then(list => { registerTaskDisplayIds(list); tasks.value = list; });
     } else if (task && task.team) {
-      api.fetchTasks(task.team).then(list => { tasks.value = list; });
+      api.fetchTasks(task.team).then(list => { registerTaskDisplayIds(list); tasks.value = list; });
     }
   }, [task]);
 
@@ -1291,8 +1303,8 @@ export function TaskSidePanel() {
         <div class="task-panel-header">
           <div class="task-panel-header-line-1">
             <span class="task-panel-id copyable">
-              {taskIdStr(id)}
-              <CopyBtn text={taskIdStr(id)} />
+              {taskIdStr(id, t && t.prefix, t && t.seq)}
+              <CopyBtn text={taskIdStr(id, t && t.prefix, t && t.seq)} />
             </span>
             {taskTeamFilter.peek() === "all" && t && t.team && (
               <span class="task-team-name">{prettyName(t.team)}</span>

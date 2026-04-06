@@ -15,7 +15,6 @@ Usage:
     delegate repo update <team> <name> <new_path>
 """
 
-import json
 import logging
 import re
 import subprocess
@@ -27,11 +26,15 @@ from delegate.paths import repos_dir as _repos_dir, repo_path as _repo_path, tas
 from delegate.config import (
     add_repo as _config_add_repo,
     get_repos as _config_get_repos,
-    update_repo_approval as _config_update_approval,
+    update_merge_policy as _config_update_merge_policy,
     update_repo_test_cmd as _config_update_test_cmd,
 )
 
 logger = logging.getLogger(__name__)
+
+
+class BranchExistsError(Exception):
+    """Raised when a worktree branch already exists in the repo."""
 
 # Cache: resolved repo path → default branch name ("main" or "master")
 _default_branch_cache: dict[str, str] = {}
@@ -67,6 +70,84 @@ def get_default_branch(repo_dir: str | Path) -> str:
     return "main"
 
 
+def ensure_default_branch_checked_out(repo_dir: str | Path) -> bool:
+    """Verify the main repo has its default branch checked out.
+
+    If a delegate/worktree branch is accidentally checked out in the
+    main repo (e.g. due to partial cleanup or agent error), reset it
+    to the default branch.  This is a defensive self-healing measure.
+
+    Returns True if a correction was made, False if already correct.
+    """
+    repo_dir = str(Path(repo_dir).resolve())
+    db = get_default_branch(repo_dir)
+
+    result = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=repo_dir,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if result.returncode != 0:
+        return False
+
+    current = result.stdout.strip()
+    if current == db or current == "HEAD":
+        # Already on default branch (or detached HEAD — leave alone)
+        return False
+
+    # Only auto-reset delegate-managed branches.  If the user has their
+    # own branch checked out (e.g. feature/xyz), leave it alone — the
+    # ff-merge code handles this via update-ref without touching the
+    # working tree.  We only fix the case where a delegate worktree
+    # branch leaked into the main repo's HEAD.
+    if not current.startswith("delegate/") and not current.startswith("_merge/"):
+        return False
+
+    # Wrong branch — check it's not a bare repo or in a rebase
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=repo_dir,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if status.returncode != 0:
+        return False
+
+    dirty = status.stdout.strip()
+    if dirty:
+        logger.warning(
+            "Main repo %s is on branch %r (not %s) with uncommitted "
+            "changes — skipping auto-reset to avoid data loss",
+            repo_dir, current, db,
+        )
+        return False
+
+    logger.warning(
+        "Main repo %s has branch %r checked out instead of %s — "
+        "resetting to %s (self-healing)",
+        repo_dir, current, db, db,
+    )
+    checkout = subprocess.run(
+        ["git", "checkout", db],
+        cwd=repo_dir,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    if checkout.returncode != 0:
+        logger.error(
+            "Failed to reset %s to %s: %s",
+            repo_dir, db, checkout.stderr.strip(),
+        )
+        return False
+
+    logger.info("Self-healed: %s now on %s (was %s)", repo_dir, db, current)
+    return True
+
+
 def _derive_name(source: str) -> str:
     """Derive a repo name from a local path.
 
@@ -85,13 +166,33 @@ def _resolve_repo_dir(hc_home: Path, team: str, name: str) -> Path:
     return _repo_path(hc_home, team, name)
 
 
+def _detect_remote_url(repo_path: Path) -> str | None:
+    """Auto-detect the git remote URL (origin) for a local repo."""
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
 def register_repo(
     hc_home: Path,
     team: str,
     source: str,
     name: str | None = None,
-    approval: str | None = None,
+    merge_policy: str | None = None,
     test_cmd: str | None = None,
+    remote_url: str | None = None,
+    *,
+    approval: str | None = None,
 ) -> str:
     """Register a local repository for a team.
 
@@ -100,9 +201,11 @@ def register_repo(
         team: Team name.
         source: Local path to the repository root (must contain .git/).
         name: Name for the repo (default: derived from source).
-        approval: Merge approval mode — 'auto' or 'manual'.
-                  Defaults to 'manual' for new repos.
+        merge_policy: Merge policy — 'no-review' or 'review-needed'.
+                      Defaults to 'review-needed' for new repos.
         test_cmd: Optional shell command to run tests.
+        remote_url: Git remote URL for satellite sync (auto-detected if not provided).
+        approval: **Deprecated** — legacy alias for merge_policy.
 
     Returns:
         The name used for the repo.
@@ -111,6 +214,10 @@ def register_repo(
         FileNotFoundError: If the source path doesn't exist or has no .git/.
         ValueError: If the source is a remote URL (not supported).
     """
+    # Legacy mapping
+    if approval is not None and merge_policy is None:
+        from delegate.config import _legacy_approval_to_policy
+        merge_policy = _legacy_approval_to_policy(approval)
     # Reject remote URLs
     if source.startswith(("http://", "https://", "git@", "ssh://")):
         raise ValueError(
@@ -145,10 +252,10 @@ def register_repo(
         else:
             logger.info("Repo '%s' already registered at %s", name, source_path)
 
-        # Update approval setting if explicitly provided
-        if approval is not None:
-            _config_update_approval(hc_home, team, name, approval)
-            logger.info("Updated approval for '%s' to '%s'", name, approval)
+        # Update merge_policy setting if explicitly provided
+        if merge_policy is not None:
+            _config_update_merge_policy(hc_home, team, name, merge_policy)
+            logger.info("Updated merge_policy for '%s' to '%s'", name, merge_policy)
 
         # Update test_cmd setting if explicitly provided
         if test_cmd is not None:
@@ -160,8 +267,19 @@ def register_repo(
         link_path.symlink_to(source_path)
         logger.info("Created symlink %s -> %s", link_path, source_path)
 
-        # Register in team config (new repo — default approval to 'manual')
-        _config_add_repo(hc_home, team, name, str(source_path), approval=approval or "manual", test_cmd=test_cmd)
+        # Register in team config (new repo — default merge_policy to 'review-needed')
+        _config_add_repo(hc_home, team, name, str(source_path), merge_policy=merge_policy or "review-needed", test_cmd=test_cmd)
+
+    # Auto-detect remote_url if not explicitly provided
+    if remote_url is None:
+        remote_url = _detect_remote_url(source_path)
+    if remote_url:
+        from delegate.config import update_repo_remote_url
+        try:
+            update_repo_remote_url(hc_home, team, name, remote_url)
+            logger.info("Set remote_url for '%s': %s", name, remote_url)
+        except KeyError:
+            pass
 
     logger.info("Registered repo '%s' for team '%s' from %s", name, team, source_path)
     return name
@@ -298,12 +416,16 @@ def create_task_worktree(
     wt_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Fetch latest before creating worktree (best effort)
-    subprocess.run(
-        ["git", "fetch", "--all"],
-        cwd=str(real_repo),
-        capture_output=True,
-        check=False,  # Don't fail if fetch fails (offline, no remote)
-    )
+    try:
+        subprocess.run(
+            ["git", "fetch", "--all"],
+            cwd=str(real_repo),
+            capture_output=True,
+            check=False,  # Don't fail if fetch fails (offline, no remote)
+            timeout=15,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("git fetch --all timed out after 15s for %s — skipping", real_repo)
 
     # Record base SHA (current main HEAD) on the task (per-repo dict)
     try:
@@ -318,21 +440,53 @@ def create_task_worktree(
         logger.warning("Could not record base_sha for %s: %s", task_id, exc)
 
     # Defensive prune to clean up any stale worktree metadata before creating
-    subprocess.run(
-        ["git", "worktree", "prune"],
-        cwd=str(real_repo),
-        capture_output=True,
-        check=False,
-    )
+    try:
+        subprocess.run(
+            ["git", "worktree", "prune"],
+            cwd=str(real_repo),
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("git worktree prune timed out after 10s for %s — skipping", real_repo)
 
-    # Create worktree with a new branch off the default branch (main or master)
+    # Create worktree with a new branch off the default branch (main or master).
+    # If the branch already exists (e.g. agent committed before worktree was
+    # cleaned up), raise BranchExistsError so the caller can mark the task
+    # as blocked instead of retrying forever.
     default_branch = get_default_branch(real_repo)
-    subprocess.run(
-        ["git", "worktree", "add", str(wt_path), "-b", branch, default_branch],
+    branch_exists = subprocess.run(
+        ["git", "rev-parse", "--verify", branch],
         cwd=str(real_repo),
         capture_output=True,
-        check=True,
-    )
+    ).returncode == 0
+
+    if branch_exists:
+        raise BranchExistsError(
+            f"Branch {branch!r} already exists in {real_repo}. "
+            f"Worktree cannot be created with -b. Resolve manually: "
+            f"git -C {real_repo} worktree add {wt_path} {branch}"
+        )
+
+    try:
+        subprocess.run(
+            ["git", "worktree", "add", str(wt_path), "-b", branch, default_branch],
+            cwd=str(real_repo),
+            capture_output=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        # If worktree creation failed, the branch may have been created
+        # but the directory not set up.  Clean up the orphaned branch to
+        # prevent BranchExistsError on the next retry.
+        subprocess.run(
+            ["git", "branch", "-D", branch],
+            cwd=str(real_repo),
+            capture_output=True,
+            check=False,
+        )
+        raise
 
     logger.info("Created worktree at %s (branch: %s)", wt_path, branch)
 

@@ -5,6 +5,7 @@ import { javascript } from "@codemirror/lang-javascript";
 import { python } from "@codemirror/lang-python";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { getTaskFile, postReviewerEdits, completeTaskFiles } from "../api.js";
+import { taskIdStr } from "../utils.js";
 import { FileAutocomplete } from "./FileAutocomplete.jsx";
 
 // Detect language extension from filename for syntax highlighting.
@@ -366,7 +367,7 @@ export function ReviewerEditModal({ taskId, changedFiles, onDone, onDiscard }) {
         {/* Header bar */}
         <div class="rem-header">
           <div class="rem-header-left">
-            <span class="rem-header-title">Edit &mdash; T{String(taskId).padStart(4, "0")}</span>
+            <span class="rem-header-title">Edit &mdash; {taskIdStr(taskId)}</span>
           </div>
           <div class="rem-header-right">
             {error && <span class="rem-error-msg">{error}</span>}

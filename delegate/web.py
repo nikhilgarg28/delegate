@@ -31,6 +31,7 @@ as asyncio tasks when agents have unread messages.
 import asyncio
 import base64
 import contextlib
+import functools
 import json
 import logging
 import mimetypes
@@ -38,6 +39,9 @@ import os
 import shutil
 import signal as signal_mod
 import subprocess
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -65,6 +69,77 @@ from delegate.task import list_tasks as _list_tasks, get_task as _get_task, get_
 from delegate.chat import get_messages as _get_messages, get_task_stats as _get_task_stats, get_agent_stats as _get_agent_stats, get_team_agent_stats as _get_team_agent_stats, log_event as _log_event
 from delegate.mailbox import send as _send, read_inbox as _read_inbox, read_outbox as _read_outbox, count_unread as _count_unread
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Dedicated thread-pool for DB / file-IO operations.
+#
+# The default asyncio executor is shared by *everything* — using a dedicated
+# pool prevents DB-heavy agent turns from starving HTTP handlers and other
+# async work.  16 threads is a good balance: SQLite WAL allows concurrent
+# readers and the busy_timeout handles writer contention.
+# ---------------------------------------------------------------------------
+_db_pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="delegate-db")
+
+
+async def _run_in_db_pool(fn, *args, **kwargs):
+    """Run *fn(*args, **kwargs)* in the dedicated DB/IO thread pool."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_db_pool, functools.partial(fn, *args, **kwargs))
+
+
+# ---------------------------------------------------------------------------
+# Process pool for CPU / subprocess-heavy merge work.
+#
+# merge_once() is fully synchronous, takes only picklable args (Path, str),
+# and returns picklable results (list[MergeResult]).  Running it in a
+# ProcessPoolExecutor moves git rebase, test execution, and merge operations
+# off the main process — bypassing the GIL and freeing the event loop core.
+#
+# The pool is created lazily during the lifespan (not at import time) to
+# avoid spawning workers when the daemon is not enabled (e.g. tests).
+# ---------------------------------------------------------------------------
+_merge_pool: ProcessPoolExecutor | None = None
+
+
+def _init_merge_worker():
+    """Configure logging in merge worker processes.
+
+    forkserver children get a fresh interpreter with default (WARNING-only)
+    logging.  This sets up INFO-level output so merge diagnostics are visible.
+    """
+    import logging as _logging
+    _logging.basicConfig(
+        level=_logging.INFO,
+        format="%(name)s %(levelname)s %(message)s",
+    )
+
+
+def _create_merge_pool() -> ProcessPoolExecutor:
+    """Create a new merge ProcessPoolExecutor."""
+    return ProcessPoolExecutor(
+        max_workers=min(4, os.cpu_count() or 4),
+        mp_context=multiprocessing.get_context("forkserver"),
+        initializer=_init_merge_worker,
+    )
+
+
+async def _run_in_merge_pool(fn, *args, **kwargs):
+    """Run *fn* in the process pool for CPU/subprocess-heavy merge work.
+
+    Falls back to ``_run_in_db_pool`` if the merge pool is not initialised
+    (e.g. daemon not enabled, tests running without lifespan).
+    """
+    global _merge_pool
+    pool = _merge_pool
+    if pool is None:
+        return await _run_in_db_pool(fn, *args, **kwargs)
+    loop = asyncio.get_running_loop()
+    try:
+        return await loop.run_in_executor(pool, functools.partial(fn, *args, **kwargs))
+    except BrokenProcessPool:
+        logger.error("Merge process pool crashed — recreating")
+        _merge_pool = _create_merge_pool()
+        raise  # Let the caller's except handle the current failure
 
 
 # ---------------------------------------------------------------------------
@@ -168,15 +243,23 @@ def _reconcile_team_map(hc_home: Path) -> None:
     except Exception:
         pass
 
-    # Reconcile: DB → project_map.json
+    # Reconcile: DB → project_map.json (only if directory exists)
     for name, uid in db_data.items():
         if name not in map_data:
-            logger.info("Reconcile: adding team '%s' to project_map.json from DB", name)
-            register_team_path(hc_home, name, uid)
+            team_root = _team_dir(hc_home, name)
+            if team_root.is_dir():
+                logger.info("Reconcile: adding team '%s' to project_map.json from DB", name)
+                register_team_path(hc_home, name, uid)
+            else:
+                logger.info("Reconcile: skipping team '%s' — directory missing", name)
 
-    # Reconcile: project_map.json → DB
+    # Reconcile: project_map.json → DB (only if directory exists)
     for name, uid in map_data.items():
         if name not in db_data:
+            team_root = _team_dir(hc_home, name)
+            if not team_root.is_dir():
+                logger.info("Reconcile: skipping team '%s' — directory missing", name)
+                continue
             logger.info("Reconcile: adding team '%s' to DB from project_map.json", name)
             try:
                 conn = get_connection(hc_home)
@@ -240,6 +323,20 @@ def _agent_current_task(hc_home: Path, team: str, agent_name: str, ip_tasks: lis
     return None
 
 
+def _is_local_agent(hc_home: Path, team: str, agent: str) -> bool:
+    """Check if an agent runs locally (no host assigned, or host is None).
+
+    Agents with a non-None ``host`` field in state.yaml are satellite agents
+    and should be skipped by the coordinator's daemon loop.
+    """
+    ad = _agent_dir(hc_home, team, agent)
+    state_file = ad / "state.yaml"
+    if not state_file.exists():
+        return True  # unknown agent — treat as local
+    state = yaml.safe_load(state_file.read_text()) or {}
+    return state.get("host") is None
+
+
 def _list_team_agents(hc_home: Path, team: str) -> list[dict]:
     """List AI agents for a team (excludes human members)."""
     ad = _agents_dir(hc_home, team)
@@ -276,6 +373,7 @@ def _list_team_agents(hc_home: Path, team: str) -> list[dict]:
             "pid": True,  # All agents are always online — daemon dispatches turns
             "unread_inbox": unread,
             "team": team,
+            "host": state.get("host"),  # None = local, str = satellite name
             "last_active_at": _agent_last_active_at(d),
             "current_task": _agent_current_task(hc_home, team, d.name, ip_tasks),
         })
@@ -392,7 +490,7 @@ def _build_greeting(
             messages = read_inbox(hc_home, team, human, unread_only=False)
             new_messages = [
                 m for m in messages
-                if datetime.fromisoformat(m["created_at"].replace("Z", "+00:00")) > last_seen
+                if datetime.fromisoformat(m.time.replace("Z", "+00:00")) > last_seen
             ]
             if new_messages:
                 away_parts.append(f"{len(new_messages)} new message{'s' if len(new_messages) != 1 else ''}")
@@ -532,9 +630,28 @@ def _process_auto_stages(hc_home: Path, team: str) -> None:
 # ---------------------------------------------------------------------------
 
 # Module-level tracking of active agent asyncio tasks for shutdown
-_active_agent_tasks: set[asyncio.Task] = set()
+_active_agent_tasks: dict[tuple[str, str], asyncio.Task] = {}
 _active_merge_tasks: set[asyncio.Task] = set()
 _shutdown_flag: bool = False
+_exchange = None  # TelephoneExchange; set during lifespan
+_daemon_wakeup: asyncio.Event | None = None  # Set during lifespan
+
+
+def _wake_daemon():
+    """Thread-safe daemon wakeup — safe to call from sync HTTP handlers.
+
+    Uses ``call_soon_threadsafe`` because FastAPI sync endpoints run in
+    uvicorn's thread pool, not on the event loop thread.
+    """
+    evt = _daemon_wakeup
+    if evt is None:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+        loop.call_soon_threadsafe(evt.set)
+    except RuntimeError:
+        pass  # No running loop (tests, shutdown)
+
 
 def _ensure_task_infra(
     hc_home: Path,
@@ -559,10 +676,27 @@ def _ensure_task_infra(
     filesystem checks on every poll cycle.  It is cleared when a task
     transitions to ``done`` or ``cancelled``.
     """
-    from delegate.repo import create_task_worktree
-    from delegate.repo import get_task_worktree_path
+    from delegate.repo import (
+        create_task_worktree,
+        get_task_worktree_path,
+        BranchExistsError,
+        ensure_default_branch_checked_out,
+        get_repo_path,
+        list_repos,
+    )
     from delegate.task import _all_deps_resolved
     from delegate.env import write_env_scripts
+
+    # Self-heal: verify all registered repos have their default branch
+    # checked out in the main working copy.  This prevents cascading
+    # failures if a delegate branch was accidentally left checked out.
+    for repo_name in list_repos(hc_home, team):
+        try:
+            repo_dir = get_repo_path(hc_home, team, repo_name).resolve()
+            if repo_dir.is_dir():
+                ensure_default_branch_checked_out(repo_dir)
+        except Exception:
+            pass  # best-effort; don't block infra setup
 
     # Active statuses that need worktrees
     active_statuses = ("todo", "in_progress")
@@ -632,11 +766,97 @@ def _ensure_task_infra(
                                 exc_info=True,
                             )
                 infra_ready.add(key)
+            except BranchExistsError as exc:
+                # Branch exists but worktree doesn't — mark task as blocked
+                # so it stops retrying and surfaces to the manager.
+                logger.warning(
+                    "Branch conflict for %s/%s: %s",
+                    team, format_task_id(task_id), exc,
+                )
+                try:
+                    from delegate.task import update_task
+                    update_task(
+                        hc_home, team, task_id,
+                        status_detail=f"Blocked: {exc}",
+                    )
+                    from delegate.chat import log_event
+                    log_event(
+                        hc_home, team,
+                        f"{format_task_id(task_id)} blocked — branch already exists, worktree cannot be created",
+                        task_id=task_id,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to mark task %s/%s as blocked after branch conflict",
+                        team, format_task_id(task_id),
+                    )
+                infra_ready.add(key)  # stop retrying
             except Exception:
                 logger.exception(
                     "Failed to create worktree infra for %s/%s",
                     team, format_task_id(task_id),
                 )
+
+
+def _dispatch_review_request(
+    hc_home: Path,
+    team: str,
+    reviewer_name: str,
+    recently_dispatched: set[tuple[str, int]],
+) -> None:
+    """Send a review request to the reviewer agent for the top-priority in_approval task.
+
+    Only one review at a time — skips if the top candidate was already dispatched.
+    """
+    from delegate.config import get_reviewer_config
+    from delegate.task import list_tasks as _list_tasks, format_task_id
+    from delegate.review import get_current_review
+    from delegate.mailbox import send as send_message, read_inbox
+
+    cfg = get_reviewer_config(hc_home, team)
+    if cfg["mode"] != "ai":
+        return
+
+    # Collect in_approval tasks without a verdict
+    candidates = []
+    for task in _list_tasks(hc_home, team, status="in_approval"):
+        review = get_current_review(hc_home, team, task["id"])
+        if review and review.get("verdict") is not None:
+            continue
+        candidates.append(task)
+
+    if not candidates:
+        return
+
+    # Skip if the reviewer has ANY unclaimed messages — one review at a time.
+    # This prevents flooding the reviewer with duplicate requests.
+    # Check seen_at IS NULL (not just processed_at IS NULL) so stale
+    # claimed messages from previous sessions don't block new dispatches.
+    from delegate.mailbox import has_unclaimed_messages
+    if has_unclaimed_messages(hc_home, team, reviewer_name):
+        return
+
+    # Sort by merge priority
+    from delegate.merge import _sort_merge_candidates
+    candidates = _sort_merge_candidates(hc_home, team, candidates)
+
+    # Pick only the top candidate
+    task = candidates[0]
+    task_id = task["id"]
+
+    # Idempotency: skip if already dispatched recently
+    key = (team, task_id)
+    if key in recently_dispatched:
+        return
+
+    title = task.get("title", f"T{task_id:04d}")
+    send_message(
+        hc_home, team, "system", reviewer_name,
+        f"Please review {format_task_id(task_id)}: {title}",
+        task_id=task_id,
+    )
+    recently_dispatched.add(key)
+    logger.info("Dispatched review request for %s to %s", format_task_id(task_id), reviewer_name)
 
 
 async def _daemon_loop(
@@ -662,17 +882,36 @@ async def _daemon_loop(
     are reused across turns (the normal production path).  When ``None``,
     each turn falls back to a one-shot ``sdk_query()`` call.
     """
+    import time as _time
+
     from delegate.runtime import run_turn, list_ai_agents
     from delegate.merge import merge_once
     from delegate.bootstrap import get_member_by_role
-    from delegate.mailbox import send as send_message, agents_with_unread
-    from delegate.task import format_task_id
+    from delegate.mailbox import send as send_message, agents_with_unread, agents_with_unread_prioritized
+    from delegate.config import get_human_members
+    from delegate.task import format_task_id, list_tasks as _list_tasks_fn, IN_PROGRESS_STATUSES, QUEUED_STATUSES
+    from delegate.config import SYSTEM_USER
+    from delegate.activity import broadcast_turn_event
+
+    _ACTIVE_STATUSES = QUEUED_STATUSES | IN_PROGRESS_STATUSES  # precomputed union
 
     logger.info("Daemon loop started — polling every %.1fs", interval)
 
+    human_names = [m["name"] for m in get_human_members(hc_home)]
+
     sem = asyncio.Semaphore(max_concurrent)
-    merge_sem = asyncio.Semaphore(1)
+    merge_sems: dict[str, asyncio.Semaphore] = {}  # per-team merge semaphores
     in_flight: set[tuple[str, str]] = set()  # (team, agent) pairs currently running
+    in_flight_lock = asyncio.Lock()  # guards check-then-add on in_flight
+
+    # Stall detector state
+    last_stall_check: float = 0.0
+    recently_nudged: set[tuple[str, str, int]] = set()  # (team, agent, task_id)
+    last_nudge_clear: float = 0.0
+
+    # Reviewer dispatch state — prevents duplicate review requests
+    recently_dispatched: set[tuple[str, int]] = set()  # (team, task_id)
+    last_dispatch_clear: float = 0.0
 
     # In-memory cache: (team, task_id) pairs whose worktrees are confirmed.
     # Cleared when tasks transition to done/cancelled.
@@ -737,6 +976,7 @@ async def _daemon_loop(
                     )
             except asyncio.CancelledError:
                 logger.info("Turn cancelled | agent=%s | team=%s", agent, team)
+                broadcast_turn_event('turn_interrupted', agent, team=team)
                 raise
             except Exception:
                 logger.exception("Uncaught error in turn | agent=%s | team=%s", agent, team)
@@ -749,6 +989,102 @@ async def _daemon_loop(
     # is looking at the screen. Frontend uses localStorage to track last-greeted
     # timestamp and only triggers greeting after meaningful absence (30+ min).
 
+    # --- Per-team processing (runs concurrently across teams) ---
+    async def _process_team(team: str) -> None:
+        """Handle infra, dispatch, and auto-stages for one team.
+
+        Called concurrently for every team via asyncio.gather() so that
+        slow worktree creation in one team doesn't block dispatch in others.
+        """
+        if _shutdown_flag:
+            return
+
+        # --- Ensure worktree infrastructure for active tasks ---
+        try:
+            await _run_in_db_pool(
+                _ensure_task_infra, hc_home, team, infra_ready,
+            )
+        except Exception:
+            logger.exception("Error ensuring task infra for team %s", team)
+
+        # Find agents with unread messages and dispatch turns.
+        # Both DB queries run in the dedicated thread pool so the
+        # event loop stays free for HTTP / SSE traffic.
+        ai_agents = set(await _run_in_db_pool(list_ai_agents, hc_home, team))
+        unread_prioritized = await _run_in_db_pool(
+            agents_with_unread_prioritized, hc_home, team, human_names,
+        )
+        needing_turn = [
+            a for a in unread_prioritized
+            if a in ai_agents and _is_local_agent(hc_home, team, a)
+        ]
+        for agent in needing_turn:
+            if _shutdown_flag:
+                break
+
+            key = (team, agent)
+            async with in_flight_lock:
+                if key in in_flight:
+                    continue
+                in_flight.add(key)
+            agent_task = asyncio.create_task(_dispatch_turn(team, agent))
+            _active_agent_tasks[key] = agent_task
+            agent_task.add_done_callback(lambda t, k=key: _active_agent_tasks.pop(k, None))
+
+        # Clear recently_dispatched every 5 minutes
+        nonlocal last_dispatch_clear
+        now_d = _time.monotonic()
+        if now_d - last_dispatch_clear > 300:
+            recently_dispatched.clear()
+            last_dispatch_clear = now_d
+
+        # Process auto stages — per-team semaphore so different teams
+        # can merge/approve in parallel (previously a single global sem
+        # serialized all teams).
+        if not _shutdown_flag:
+            team_merge_sem = merge_sems.setdefault(team, asyncio.Semaphore(1))
+
+            async def _run_auto_stages(t: str) -> None:
+                async with team_merge_sem:
+                    reviewer_name = await _run_in_db_pool(
+                        get_member_by_role, hc_home, t, "reviewer",
+                    )
+                    if reviewer_name:
+                        try:
+                            _dispatch_review_request(
+                                hc_home, t, reviewer_name, recently_dispatched,
+                            )
+                        except Exception:
+                            logger.debug("_dispatch_review_request error for %s", t, exc_info=True)
+                    else:
+                        from delegate.auto_approve import auto_approve_once
+                        try:
+                            await _run_in_db_pool(auto_approve_once, hc_home, t)
+                        except Exception:
+                            logger.debug("auto_approve_once error for %s", t, exc_info=True)
+
+                    results = await _run_in_merge_pool(merge_once, hc_home, t)
+                    for mr in results:
+                        if mr.success:
+                            logger.info("Merged %s in %s: %s", mr.task_id, t, mr.message)
+                            infra_ready.discard((t, mr.task_id))
+                            _notify_manager(
+                                t,
+                                f"Task {format_task_id(mr.task_id)} has been merged successfully. Check status of tasks and agents -- make any necessary assignment decisions.",
+                            )
+                        else:
+                            logger.warning("Merge failed %s in %s: %s", mr.task_id, t, mr.message)
+                            _notify_manager(
+                                t,
+                                f"Task {format_task_id(mr.task_id)} merge failed: {mr.message}",
+                            )
+
+                    await _run_in_db_pool(_process_auto_stages, hc_home, t)
+
+            merge_task = asyncio.create_task(_run_auto_stages(team))
+            _active_merge_tasks.add(merge_task)
+            merge_task.add_done_callback(_active_merge_tasks.discard)
+
     # --- Main loop ---
     while True:
         try:
@@ -758,82 +1094,88 @@ async def _daemon_loop(
                 logger.info("Shutdown flag set — exiting daemon loop")
                 break
 
-            teams = _list_teams(hc_home)
+            teams = await _run_in_db_pool(_list_teams, hc_home)
             human_name = get_default_human(hc_home)
 
-            for team in teams:
-                # Check shutdown flag before dispatching new tasks
-                if _shutdown_flag:
-                    break
+            # Process all teams concurrently — each team's infra setup,
+            # agent dispatch, and auto-stages run in parallel.
+            await asyncio.gather(
+                *[_process_team(t) for t in teams],
+                return_exceptions=True,
+            )
 
-                # --- Ensure worktree infrastructure for active tasks ---
-                # Runs in a thread (unsandboxed daemon process) before any
-                # agent turns are dispatched, so worktrees are guaranteed
-                # to exist by the time an agent receives a turn.
-                try:
-                    await asyncio.to_thread(
-                        _ensure_task_infra, hc_home, team, infra_ready,
-                    )
-                except Exception:
-                    logger.exception(
-                        "Error ensuring task infra for team %s", team,
-                    )
-
-                # Find agents with unread messages and dispatch turns
-                ai_agents = set(list_ai_agents(hc_home, team))
-                needing_turn = [
-                    a for a in agents_with_unread(hc_home, team)
-                    if a in ai_agents
-                ]
-                for agent in needing_turn:
-                    # Check shutdown flag before dispatching
-                    if _shutdown_flag:
-                        break
-
-                    key = (team, agent)
-                    if key not in in_flight:
-                        in_flight.add(key)
-                        agent_task = asyncio.create_task(_dispatch_turn(team, agent))
-                        _active_agent_tasks.add(agent_task)
-                        agent_task.add_done_callback(_active_agent_tasks.discard)
-
-                # Process auto stages (merge, etc.) — serialized, one at a time
-                if not _shutdown_flag:
-                    async def _run_auto_stages(t: str) -> None:
-                        async with merge_sem:
-                            # Legacy merge path (for tasks without workflow).
-                            results = await asyncio.to_thread(
-                                merge_once, hc_home, t,
+            # --- Stall detector: nudge worker agents with assigned tasks but no activity ---
+            now = _time.monotonic()
+            if now - last_stall_check > 600:
+                last_stall_check = now
+                if now - last_nudge_clear > 3000:
+                    recently_nudged.clear()
+                    last_nudge_clear = now
+                for team in teams:
+                    try:
+                        manager, all_tasks = await asyncio.gather(
+                            _run_in_db_pool(get_member_by_role, hc_home, team, "manager"),
+                            _run_in_db_pool(_list_tasks_fn, hc_home, team),
+                        )
+                        active_assigned = [
+                            t for t in all_tasks
+                            if t.get("assignee")
+                            and t.get("assignee") != manager
+                            and t.get("status") in _ACTIVE_STATUSES
+                        ]
+                        if not active_assigned:
+                            continue
+                        unread_agents_raw, ai_agents_raw = await asyncio.gather(
+                            _run_in_db_pool(agents_with_unread, hc_home, team),
+                            _run_in_db_pool(list_ai_agents, hc_home, team),
+                        )
+                        unread_agents = set(unread_agents_raw)
+                        ai_agent_set = set(ai_agents_raw)
+                        for t in active_assigned:
+                            assignee = t["assignee"]
+                            tid = t["id"]
+                            key = (team, assignee, tid)
+                            if assignee not in ai_agent_set:
+                                continue
+                            if assignee in unread_agents:
+                                continue
+                            async with in_flight_lock:
+                                if (team, assignee) in in_flight:
+                                    continue
+                            if key in recently_nudged:
+                                continue
+                            title = t.get("title", f"T{tid:04d}")
+                            status = t.get("status", "unknown")
+                            nudge_body = (
+                                f"You are assigned to T{tid:04d} ({title}) which is {status}. "
+                                f"Please check the task and continue working on it, or report any blockers."
                             )
-                            for mr in results:
-                                if mr.success:
-                                    logger.info("Merged %s in %s: %s", mr.task_id, t, mr.message)
-                                    # Clear infra_ready for done tasks
-                                    infra_ready.discard((t, mr.task_id))
-                                    # Notify manager of task completion
-                                    _notify_manager(
-                                        t,
-                                        f"Task {format_task_id(mr.task_id)} has been merged successfully. Check status of tasks and agents -- make any necessary assignment decisions.",
-                                    )
-                                else:
-                                    logger.warning("Merge failed %s in %s: %s", mr.task_id, t, mr.message)
-                                    _notify_manager(
-                                        t,
-                                        f"Task {format_task_id(mr.task_id)} merge failed: {mr.message}",
-                                    )
-
-                            # Workflow auto-stage processing
-                            await asyncio.to_thread(_process_auto_stages, hc_home, t)
-
-                    merge_task = asyncio.create_task(_run_auto_stages(team))
-                    _active_merge_tasks.add(merge_task)
-                    merge_task.add_done_callback(_active_merge_tasks.discard)
+                            await _run_in_db_pool(
+                                send_message,
+                                hc_home, team, SYSTEM_USER, assignee,
+                                nudge_body, task_id=tid,
+                            )
+                            recently_nudged.add(key)
+                            logger.info("Stall detector nudged %s for T%04d in %s", assignee, tid, team)
+                    except Exception:
+                        logger.exception("Stall detector error for team %s", team)
         except asyncio.CancelledError:
             logger.info("Daemon loop cancelled")
             raise
         except Exception:
             logger.exception("Error during daemon cycle")
-        await asyncio.sleep(interval)
+
+        # Wait for either a wakeup signal (new message sent) or the poll
+        # interval to elapse.  clear() before wait() ensures signals
+        # arriving between wakeup and the next wait are not lost.
+        if _daemon_wakeup is not None:
+            _daemon_wakeup.clear()
+            try:
+                await asyncio.wait_for(_daemon_wakeup.wait(), timeout=interval)
+            except asyncio.TimeoutError:
+                pass
+        else:
+            await asyncio.sleep(interval)
 
 
 def _find_frontend_dir() -> Path | None:
@@ -875,6 +1217,59 @@ def _start_esbuild_watch(frontend_dir: Path) -> subprocess.Popen | None:
     return proc
 
 
+async def _reap_orphaned_subprocesses(
+    exchange: "TelephoneExchange",
+    interval: float = 120.0,
+) -> None:
+    """Periodically kill child Claude processes not tracked by the exchange.
+
+    Safety net for the subprocess leak described in
+    ``docs/bug-daemon-subprocess-leak.md``.  Every *interval* seconds,
+    enumerates child processes of this daemon, identifies those that look
+    like Claude SDK subprocesses (``claude`` in the binary name), and
+    kills any whose PID is not held by a tracked Telephone.
+    """
+    import signal as _signal
+    from delegate.daemon import find_claude_pids
+
+    await asyncio.sleep(60)  # let the first batch of telephones spin up
+
+    while True:
+        try:
+            # Collect PIDs the exchange knows about.
+            tracked_pids: set[int] = set()
+            for tel in exchange._telephones.values():
+                for client in (tel._client, tel._stale_client):
+                    if client is None:
+                        continue
+                    transport = getattr(client, "_transport", None) or getattr(
+                        getattr(client, "_query", None), "transport", None
+                    )
+                    proc = getattr(transport, "_process", None) if transport else None
+                    pid = getattr(proc, "pid", None)
+                    if pid:
+                        tracked_pids.add(pid)
+
+            orphan_pids = find_claude_pids(
+                ppid_filter=os.getpid(),
+                exclude_pids=tracked_pids,
+            )
+            for pid in orphan_pids:
+                try:
+                    logger.warning("Reaper: killing orphaned Claude subprocess PID %d", pid)
+                    os.kill(pid, _signal.SIGTERM)
+                except (ProcessLookupError, PermissionError):
+                    pass
+            if orphan_pids:
+                logger.info("Reaper: killed %d orphaned subprocess(es)", len(orphan_pids))
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            logger.debug("Reaper error", exc_info=True)
+
+        await asyncio.sleep(interval)
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Start/stop the daemon loop and frontend watcher with the server.
@@ -894,6 +1289,7 @@ async def _lifespan(app: FastAPI):
     _shutdown_flag = False
 
     task = None
+    reaper_task = None
     esbuild_proc: subprocess.Popen | None = None
     exchange: TelephoneExchange | None = None
     daemon_lock_fd: int | None = None
@@ -913,7 +1309,24 @@ async def _lifespan(app: FastAPI):
         budget_str = os.environ.get("DELEGATE_TOKEN_BUDGET")
         token_budget = int(budget_str) if budget_str else None
 
+        # Kill orphaned Claude processes from any previous daemon before
+        # spawning new ones.  After restart, old orphans are reparented to
+        # PID 1 and invisible to the periodic reaper.
+        from delegate.daemon import sweep_orphaned_claude_processes
+        sweep_orphaned_claude_processes()
+
         exchange = TelephoneExchange()
+        global _exchange
+        _exchange = exchange
+
+        # Process pool for merge operations — runs git rebase, tests, and
+        # merges in separate OS processes, bypassing the GIL.
+        global _merge_pool
+        _merge_pool = _create_merge_pool()
+
+        # Event for instant daemon wakeup when messages arrive.
+        global _daemon_wakeup
+        _daemon_wakeup = asyncio.Event()
 
         # Reconcile project_map.json with the DB projects table.
         # If either source is incomplete (e.g. after a partial nuke),
@@ -923,6 +1336,12 @@ async def _lifespan(app: FastAPI):
 
         task = asyncio.create_task(
             _daemon_loop(hc_home, interval, max_concurrent, token_budget, exchange=exchange)
+        )
+
+        # Safety-net: periodically reap orphaned Claude subprocesses that
+        # survived disconnect (see docs/bug-daemon-subprocess-leak.md).
+        reaper_task = asyncio.create_task(
+            _reap_orphaned_subprocesses(exchange)
         )
 
     # Always do a one-shot frontend build if frontend/ exists and node is available
@@ -976,6 +1395,12 @@ async def _lifespan(app: FastAPI):
             except OSError:
                 pass
 
+    # Cancel the reaper task
+    if enable and reaper_task is not None:
+        reaper_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reaper_task
+
     if task is not None:
         # Set shutdown flag before cancelling the daemon loop
         _shutdown_flag = True
@@ -986,6 +1411,7 @@ async def _lifespan(app: FastAPI):
         with contextlib.suppress(asyncio.CancelledError):
             await task
         logger.info("Daemon loop stopped")
+        _daemon_wakeup = None
 
         # Cancel all in-flight merge tasks
         if _active_merge_tasks:
@@ -1011,21 +1437,22 @@ async def _lifespan(app: FastAPI):
         # Cancel all in-flight agent tasks with timeout
         if _active_agent_tasks:
             logger.info("Waiting for %d agent session(s) to finish...", len(_active_agent_tasks))
-            # Snapshot the set before iteration to avoid mutation during iteration
-            for agent_task in list(_active_agent_tasks):
+            # Snapshot the values before iteration to avoid mutation during iteration
+            agent_tasks_snapshot = list(_active_agent_tasks.values())
+            for agent_task in agent_tasks_snapshot:
                 agent_task.cancel()
 
             # Wait for tasks to finish with 10 second timeout
             try:
                 await asyncio.wait_for(
-                    asyncio.gather(*_active_agent_tasks, return_exceptions=True),
+                    asyncio.gather(*agent_tasks_snapshot, return_exceptions=True),
                     timeout=10.0
                 )
                 logger.info("All agent sessions finished")
             except asyncio.TimeoutError:
                 logger.warning(
                     "Timeout waiting for agent sessions — %d task(s) still running",
-                    len([t for t in _active_agent_tasks if not t.done()])
+                    len([t for t in agent_tasks_snapshot if not t.done()])
                 )
             _active_agent_tasks.clear()
 
@@ -1039,6 +1466,14 @@ async def _lifespan(app: FastAPI):
                 logger.warning("Timeout closing Telephone conversations")
             except Exception:
                 logger.exception("Error closing Telephone conversations")
+            _exchange = None
+
+        # Shut down the merge process pool — running merges complete,
+        # queued merges are cancelled (they retry on next daemon start).
+        if _merge_pool is not None:
+            logger.info("Shutting down merge process pool...")
+            _merge_pool.shutdown(wait=True, cancel_futures=True)
+            _merge_pool = None
 
     # Clean up PID file (background daemon may exit without going through
     # stop_daemon — e.g. port conflict, crash, OS signal).
@@ -1086,6 +1521,21 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     app = FastAPI(title="Delegate UI", lifespan=_lifespan)
     app.state.hc_home = hc_home
 
+    # CORS — restrict to localhost origins by default.
+    from fastapi.middleware.cors import CORSMiddleware
+    port = int(os.environ.get("DELEGATE_PORT", "3548"))
+    cors_origins = [
+        f"http://localhost:{port}",
+        f"http://127.0.0.1:{port}",
+    ]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     # --- Config endpoint ---
 
     @app.get("/config")
@@ -1127,6 +1577,10 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
             result = []
             for row in teams_rows:
                 team_name = row["name"]
+                # Skip teams whose directory no longer exists (orphaned DB rows)
+                team_root = _team_dir(hc_home, team_name)
+                if not team_root.is_dir():
+                    continue
                 # Cheap dir scan: count agent vs human dirs (no YAML/DB per agent)
                 agent_count = 0
                 human_count = 0
@@ -1192,11 +1646,17 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
             tasks_data = _list_tasks(hc_home, initial_team)
             messages_data = _get_messages(hc_home, initial_team, limit=100)
 
+            from delegate.config import get_reviewer_config, get_auto_approver_config, get_task_freeze_config, get_max_tasks_config
+            reviewer_cfg = get_reviewer_config(hc_home, initial_team)
             result["initial_data"] = {
                 "tasks": tasks_data,
                 "agents": agents_data,
                 "agent_stats": agent_stats,
                 "messages": messages_data,
+                "reviewer": reviewer_cfg,
+                "auto_approver": get_auto_approver_config(hc_home, initial_team),  # compat
+                "task_freeze": get_task_freeze_config(hc_home, initial_team),
+                "max_tasks": get_max_tasks_config(hc_home, initial_team),
             }
 
         return result
@@ -1210,6 +1670,88 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         Returns: List of team objects with name, team_id, created_at, agent_count, task_count
         """
         return _get_teams_list()
+
+    # --- Reviewer endpoints ---
+
+    @app.get("/teams/{team}/reviewer")
+    def get_reviewer(team: str):
+        """Return the reviewer config for a team."""
+        from delegate.config import get_reviewer_config
+        return get_reviewer_config(hc_home, team)
+
+    @app.post("/teams/{team}/reviewer")
+    def post_reviewer(team: str, body: dict):
+        """Update reviewer config (mode, threshold, model, auto_merge)."""
+        from delegate.config import update_reviewer_config
+        kwargs = {}
+        if "mode" in body:
+            kwargs["mode"] = str(body["mode"])
+        if "threshold" in body:
+            kwargs["threshold"] = float(body["threshold"])
+        if "model" in body:
+            kwargs["model"] = str(body["model"])
+        if "auto_merge" in body:
+            kwargs["auto_merge"] = bool(body["auto_merge"])
+        return update_reviewer_config(hc_home, team, **kwargs)
+
+    # --- Auto-approver endpoints (deprecated — kept for backwards compat) ---
+
+    @app.get("/teams/{team}/auto-approver")
+    def get_auto_approver(team: str):
+        """**Deprecated** — use /teams/{team}/reviewer instead."""
+        from delegate.config import get_auto_approver_config
+        return get_auto_approver_config(hc_home, team)
+
+    @app.post("/teams/{team}/auto-approver")
+    def post_auto_approver(team: str, body: dict):
+        """**Deprecated** — use /teams/{team}/reviewer instead."""
+        from delegate.config import update_auto_approver_config
+        kwargs = {}
+        if "enabled" in body:
+            kwargs["enabled"] = bool(body["enabled"])
+        if "threshold" in body:
+            kwargs["threshold"] = float(body["threshold"])
+        if "model" in body:
+            kwargs["model"] = str(body["model"])
+        return update_auto_approver_config(hc_home, team, **kwargs)
+
+    # --- Task-freeze endpoints ---
+
+    @app.get("/teams/{team}/task-freeze")
+    def get_task_freeze(team: str):
+        """Return the task-freeze config for a team."""
+        from delegate.config import get_task_freeze_config
+        return get_task_freeze_config(hc_home, team)
+
+    @app.post("/teams/{team}/task-freeze")
+    def post_task_freeze(team: str, body: dict):
+        """Update task-freeze config (enabled)."""
+        from delegate.config import update_task_freeze_config
+        kwargs = {}
+        if "enabled" in body:
+            kwargs["enabled"] = bool(body["enabled"])
+        return update_task_freeze_config(hc_home, team, **kwargs)
+
+    # --- Max-tasks limit endpoints ---
+
+    @app.get("/teams/{team}/max-tasks")
+    def get_max_tasks(team: str):
+        """Return the max-tasks config for a team."""
+        from delegate.config import get_max_tasks_config
+        return get_max_tasks_config(hc_home, team)
+
+    @app.post("/teams/{team}/max-tasks")
+    def post_max_tasks(team: str, body: dict):
+        """Update max-tasks config (enabled, limit_in_progress, limit_queued)."""
+        from delegate.config import update_max_tasks_config
+        kwargs = {}
+        if "enabled" in body:
+            kwargs["enabled"] = bool(body["enabled"])
+        if "limit_in_progress" in body:
+            kwargs["limit_in_progress"] = int(body["limit_in_progress"])
+        if "limit_queued" in body:
+            kwargs["limit_queued"] = int(body["limit_queued"])
+        return update_max_tasks_config(hc_home, team, **kwargs)
 
     # --- Workflow endpoints (team-scoped) ---
 
@@ -1257,6 +1799,13 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     def get_team_tasks(team: str, status: str | None = None, assignee: str | None = None):
         return _list_tasks(hc_home, team, status=status, assignee=assignee)
 
+    @app.get("/teams/{team}/tasks/merge-order")
+    def get_merge_order(team: str):
+        from delegate.merge import _sort_merge_candidates
+        all_approval = _list_tasks(hc_home, team, status="in_approval")
+        sorted_tasks = _sort_merge_candidates(hc_home, team, all_approval)
+        return {"order": [t["id"] for t in sorted_tasks]}
+
     # --- Message endpoints (team-scoped) ---
 
     @app.get("/teams/{team}/messages")
@@ -1285,6 +1834,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 detail=f"Recipient '{msg.recipient}' is not an agent in team '{team}'",
             )
         _send(hc_home, team, human_name, msg.recipient, msg.content)
+        _wake_daemon()
         return {"status": "queued"}
 
     @app.post("/teams/{team}/greet")
@@ -1402,8 +1952,6 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
             400: Invalid file type or file too large
             413: Payload too large
         """
-        from fastapi import UploadFile
-        from datetime import datetime, timezone
         from delegate.uploads import (
             validate_file,
             validate_file_size,
@@ -1756,7 +2304,10 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         # 1d. No duplicate project name
         from delegate.db import get_connection
         conn = get_connection(hc_home)
-        existing = conn.execute("SELECT 1 FROM projects WHERE name = ?", (name,)).fetchone()
+        try:
+            existing = conn.execute("SELECT 1 FROM projects WHERE name = ?", (name,)).fetchone()
+        finally:
+            conn.close()
         if existing:
             raise HTTPException(status_code=409, detail=f"Project '{name}' already exists")
 
@@ -1895,6 +2446,36 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         broadcast_teams_refresh()
 
         return {"ok": True}
+
+    # --- Cleanup endpoints ---
+
+    @app.get("/teams/{team}/cleanup/preview")
+    def cleanup_preview(team: str, max_age: int = 14):
+        """Preview what cleanup would do for a team (dry-run)."""
+        from delegate.cleanup import preview_cleanup
+        preview = preview_cleanup(hc_home, team_name=team, max_age_days=max_age)
+        return preview.to_dict()
+
+    @app.post("/teams/{team}/cleanup")
+    def cleanup_team(team: str, max_age: int = 14):
+        """Execute cleanup for a team: prune old data, caches, logs, worktrees."""
+        from delegate.cleanup import run_cleanup
+        result = run_cleanup(hc_home, team_name=team, max_age_days=max_age)
+        return result.to_dict()
+
+    @app.get("/cleanup/preview")
+    def cleanup_preview_all(max_age: int = 14):
+        """Preview what cleanup would do across all teams (dry-run)."""
+        from delegate.cleanup import preview_cleanup
+        preview = preview_cleanup(hc_home, max_age_days=max_age)
+        return preview.to_dict()
+
+    @app.post("/cleanup")
+    def cleanup_all(max_age: int = 14):
+        """Execute cleanup across all teams."""
+        from delegate.cleanup import run_cleanup
+        result = run_cleanup(hc_home, max_age_days=max_age)
+        return result.to_dict()
 
     @app.get("/teams/{team}/default-cwd")
     def get_default_cwd(team: str):
@@ -2938,6 +3519,7 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
                 detail=f"Recipient '{msg.recipient}' is not an agent in team '{team}'",
             )
         _send(hc_home, team, human_name, msg.recipient, msg.content)
+        _wake_daemon()
         return {"status": "queued"}
 
     # --- Agent endpoints (team-scoped) ---
@@ -3122,6 +3704,156 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
         from delegate.activity import get_recent
         return get_recent(team, name, n=n)
 
+    @app.post("/api/agents/restart-all")
+    async def restart_all_agents(team: str | None = None):
+        """Restart all agent Telephone sessions across all (or one) team.
+
+        Cancels every in-flight agent turn, closes and removes every
+        cached Telephone (killing the Claude subprocess), and clears the
+        in-flight tracking set.  The daemon loop will re-dispatch agents
+        with unread messages on the next cycle, creating fresh Telephone
+        sessions.
+
+        Use this after a usage-limit reset to unstick agents whose
+        cached Telephones are wedged on API errors.
+        """
+        from delegate.activity import broadcast_turn_event
+
+        teams = [team] if team else _list_teams(hc_home)
+        cancelled = 0
+        closed = 0
+
+        # 1. Cancel all active agent asyncio tasks
+        for key, task in list(_active_agent_tasks.items()):
+            agent_team, agent_name = key
+            if team and agent_team != team:
+                continue
+            if not task.done():
+                task.cancel()
+                cancelled += 1
+                broadcast_turn_event(
+                    "turn_interrupted", agent_name, team=agent_team,
+                )
+
+        # 2. Close and remove all cached Telephones (kills subprocesses)
+        if _exchange is not None:
+            for (t, a), tel in list(_exchange._telephones.items()):
+                if team and t != team:
+                    continue
+                try:
+                    await tel.close()
+                except Exception:
+                    logger.debug("Error closing telephone %s/%s", t, a, exc_info=True)
+                _exchange._telephones.pop((t, a), None)
+                closed += 1
+
+        # 3. Wake the daemon so it re-dispatches immediately
+        if _daemon_wakeup is not None:
+            _daemon_wakeup.set()
+
+        logger.info(
+            "restart-all: cancelled %d turns, closed %d telephones (team=%s)",
+            cancelled, closed, team or "all",
+        )
+        return {
+            "status": "restarted",
+            "turns_cancelled": cancelled,
+            "telephones_closed": closed,
+            "teams": teams,
+        }
+
+    @app.post("/api/agents/{agent}/interrupt")
+    async def interrupt_agent(agent: str, team: str | None = None):
+        """Interrupt an agent's current turn and reset its conversation.
+
+        If the agent is currently running a turn, cancels the asyncio task
+        and sends an interrupt signal to the Telephone subprocess. The agent
+        will be available for new turns on the next daemon cycle.
+        """
+        from delegate.activity import broadcast_turn_event
+
+        # Resolve team: use provided team, or scan all teams
+        teams = [team] if team else _list_teams(hc_home)
+        resolved_team = None
+        for t in teams:
+            if (t, agent) in _active_agent_tasks:
+                resolved_team = t
+                break
+
+        # If not found in active tasks, check if agent exists in any team
+        if resolved_team is None:
+            for t in teams:
+                ad = _agent_dir(hc_home, t, agent)
+                if ad.is_dir():
+                    resolved_team = t
+                    break
+
+        if resolved_team is None:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent}' not found")
+
+        key = (resolved_team, agent)
+
+        # Cancel the asyncio task if running
+        task = _active_agent_tasks.get(key)
+        was_running = task is not None and not task.done()
+        if was_running:
+            task.cancel()
+
+        # Send interrupt signal to the Telephone
+        if _exchange is not None:
+            tel = _exchange.get(resolved_team, agent)
+            if tel is not None:
+                await tel.interrupt()
+
+        if was_running:
+            return {"status": "interrupted", "agent": agent, "team": resolved_team}
+        return {"status": "not_running", "agent": agent, "team": resolved_team}
+
+    @app.post("/api/agents/{agent}/nudge")
+    async def nudge_agent(agent: str, team: str | None = None):
+        """Send a system nudge message to an agent to check its assigned tasks.
+
+        If the agent has active assigned tasks, the nudge lists them.
+        The daemon loop will dispatch a turn on the next cycle.
+        """
+        from delegate.config import SYSTEM_USER
+        from delegate.mailbox import send as send_message
+        from delegate.task import list_tasks
+
+        # Resolve team
+        teams = [team] if team else _list_teams(hc_home)
+        resolved_team = None
+        for t in teams:
+            ad = _agent_dir(hc_home, t, agent)
+            if ad.is_dir():
+                resolved_team = t
+                break
+
+        if resolved_team is None:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent}' not found")
+
+        active_tasks = [
+            t for t in list_tasks(hc_home, resolved_team, assignee=agent)
+            if t.get("status") not in ("done", "cancelled")
+        ]
+
+        if active_tasks:
+            task_lines = ", ".join(
+                f"T{t['id']:04d} ({t.get('title', 'untitled')}, status: {t.get('status', '?')})"
+                for t in active_tasks
+            )
+            body = f"Nudge: you have assigned tasks that need attention: {task_lines}. Please review and continue working."
+        else:
+            body = "Nudge: please check if there are any tasks or messages that need your attention."
+
+        send_message(hc_home, resolved_team, SYSTEM_USER, agent, body)
+        return {
+            "status": "nudged",
+            "agent": agent,
+            "team": resolved_team,
+            "active_tasks": len(active_tasks),
+        }
+
     @app.get("/teams/{team}/activity/stream")
     async def activity_stream(team: str):
         """SSE endpoint streaming real-time agent activity events.
@@ -3261,20 +3993,45 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
     def _resolve_file_path(team: str, path: str) -> Path:
         """Resolve a file path from an API ``path`` parameter.
 
-        Paths starting with ``/`` are treated as absolute and used directly.
-        Paths starting with ``~`` are expanded via the home directory.
-        Other paths are resolved relative to ``hc_home`` for backward
-        compatibility with older stored paths.
+        Absolute and ``~``-prefixed paths are allowed only if they fall
+        within the delegate home directory or registered repo directories.
+        Other paths are resolved relative to ``hc_home``.
 
-        Returns the resolved ``Path``, or raises 404.
+        Returns the resolved ``Path``, or raises 403/404.
         """
         if path.startswith("/"):
             target = Path(path).resolve()
         elif path.startswith("~"):
             target = Path(path).expanduser().resolve()
         else:
-            # Backward compat: resolve delegate-relative paths from hc_home
             target = (hc_home / path).resolve()
+
+        # Build allowed roots: hc_home + all registered repo paths
+        hc_resolved = hc_home.resolve()
+        allowed_roots = [hc_resolved]
+        try:
+            from delegate.repo import list_repos, get_repo_path
+            for repo_name in list_repos(hc_home, team):
+                rp = get_repo_path(hc_home, team, repo_name)
+                if rp.exists():
+                    allowed_roots.append(rp.resolve())
+        except Exception:
+            pass
+
+        # Also allow worktree directories (they may be outside hc_home)
+        try:
+            from delegate.paths import task_worktree_dir
+            wt_base = task_worktree_dir(hc_home, team).resolve()
+            allowed_roots.append(wt_base)
+        except Exception:
+            pass
+
+        target_str = str(target)
+        if not any(target_str.startswith(str(root)) for root in allowed_roots):
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied: path is outside the project directory",
+            )
 
         if not target.exists():
             raise HTTPException(
@@ -3401,6 +4158,473 @@ def create_app(hc_home: Path | None = None) -> FastAPI:
             media_type = guessed_type or "application/octet-stream"
 
         return Response(content=file_bytes, media_type=media_type)
+
+    # ===================================================================
+    # /internal/* — Satellite API endpoints (bearer-token protected)
+    # ===================================================================
+
+    from fastapi import Request, Depends, Cookie
+    from fastapi.responses import RedirectResponse
+
+    async def _require_satellite_token(request: Request) -> str:
+        """Dependency: validate bearer token for /internal/* routes.
+
+        Returns the satellite name on success, raises 401 on failure.
+
+        TODO: Add per-team/agent authorization.  Currently any valid satellite
+        token grants access to *all* teams and agents.  Each /internal/*
+        endpoint should verify that the satellite actually owns the
+        team/agent it is operating on (e.g. check agent state.yaml
+        ``host`` field matches the satellite name).
+        """
+        from delegate.auth import validate_satellite_token
+
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing bearer token")
+        token = auth_header[7:]
+        satellite_name = validate_satellite_token(hc_home, token)
+        if satellite_name is None:
+            raise HTTPException(status_code=401, detail="Invalid bearer token")
+        return satellite_name
+
+    # --- Satellite polling ---
+
+    @app.get("/internal/satellite/poll")
+    def satellite_poll(satellite_id: str, _sat: str = Depends(_require_satellite_token)):
+        """Return agents with unread messages whose host matches this satellite."""
+        from delegate.mailbox import agents_with_unread
+        from delegate.runtime import list_ai_agents
+
+        result = []
+        for team in _list_teams(hc_home):
+            ai_agents = set(list_ai_agents(hc_home, team))
+            for agent_name in agents_with_unread(hc_home, team):
+                if agent_name not in ai_agents:
+                    continue
+                # Check if this agent is assigned to this satellite
+                ad = _agent_dir(hc_home, team, agent_name)
+                state_file = ad / "state.yaml"
+                if not state_file.exists():
+                    continue
+                state = yaml.safe_load(state_file.read_text()) or {}
+                if state.get("host") == satellite_id:
+                    result.append({
+                        "team": team,
+                        "agent": agent_name,
+                        "role": state.get("role", "engineer"),
+                        "model": state.get("model", "sonnet"),
+                    })
+        return {"agents": result}
+
+    # --- Mailbox proxies ---
+
+    class MailboxSendBody(BaseModel):
+        team: str
+        sender: str
+        recipient: str
+        message: str
+        task_id: int | None = None
+
+    @app.post("/internal/mailbox/send")
+    def internal_mailbox_send(body: MailboxSendBody, _sat: str = Depends(_require_satellite_token)):
+        msg_id = _send(hc_home, body.team, body.sender, body.recipient, body.message, task_id=body.task_id)
+        return {"id": msg_id}
+
+    class MailboxClaimBody(BaseModel):
+        team: str
+        agent: str
+        limit: int = 50
+
+    @app.post("/internal/mailbox/claim")
+    def internal_mailbox_claim(body: MailboxClaimBody, _sat: str = Depends(_require_satellite_token)):
+        from delegate.mailbox import claim_inbox_batch
+        messages = claim_inbox_batch(hc_home, body.team, body.agent, limit=body.limit)
+        return {"messages": [
+            {
+                "id": m.id,
+                "sender": m.sender,
+                "recipient": m.recipient,
+                "body": m.body,
+                "task_id": m.task_id,
+                "time": m.time,
+                "delivered_at": m.delivered_at,
+                "seen_at": m.seen_at,
+                "processed_at": m.processed_at,
+            }
+            for m in messages
+        ]}
+
+    class MailboxMarkProcessedBody(BaseModel):
+        team: str
+        message_ids: list[int]
+
+    @app.post("/internal/mailbox/mark-processed")
+    def internal_mailbox_mark_processed(body: MailboxMarkProcessedBody, _sat: str = Depends(_require_satellite_token)):
+        from delegate.mailbox import mark_processed_batch
+        mark_processed_batch(hc_home, body.team, body.message_ids)
+        return {"ok": True}
+
+    @app.get("/internal/mailbox/inbox")
+    def internal_mailbox_inbox(team: str, agent: str, _sat: str = Depends(_require_satellite_token)):
+        messages = _read_inbox(hc_home, team, agent, unread_only=True)
+        return {"messages": [
+            {
+                "id": m.id,
+                "sender": m.sender,
+                "body": m.body,
+                "task_id": m.task_id,
+                "time": m.time,
+            }
+            for m in messages
+        ]}
+
+    # --- Task proxies ---
+
+    class TaskCreateBody(BaseModel):
+        team: str
+        title: str
+        assignee: str
+        description: str = ""
+        priority: str = "medium"
+        repo: str = ""
+        depends_on: list[int] | None = None
+
+    @app.post("/internal/task/create")
+    def internal_task_create(body: TaskCreateBody, _sat: str = Depends(_require_satellite_token)):
+        from delegate.task import create_task
+        task = create_task(
+            hc_home, body.team,
+            title=body.title,
+            assignee=body.assignee,
+            description=body.description,
+            priority=body.priority,
+            repo=body.repo,
+            depends_on=body.depends_on,
+        )
+        return task
+
+    @app.get("/internal/task/list")
+    def internal_task_list(team: str, status: str | None = None, assignee: str | None = None, _sat: str = Depends(_require_satellite_token)):
+        kwargs = {}
+        if status:
+            kwargs["status"] = status
+        if assignee:
+            kwargs["assignee"] = assignee
+        return _list_tasks(hc_home, team, **kwargs)
+
+    @app.get("/internal/task/show")
+    def internal_task_show(team: str, task_id: int, _sat: str = Depends(_require_satellite_token)):
+        return _get_task(hc_home, team, task_id)
+
+    class TaskStatusBody(BaseModel):
+        team: str
+        task_id: int
+        new_status: str
+
+    @app.post("/internal/task/status")
+    def internal_task_status(body: TaskStatusBody, _sat: str = Depends(_require_satellite_token)):
+        _change_status(hc_home, body.team, body.task_id, body.new_status)
+        return {"ok": True}
+
+    class TaskAssignBody(BaseModel):
+        team: str
+        task_id: int
+        assignee: str
+
+    @app.post("/internal/task/assign")
+    def internal_task_assign(body: TaskAssignBody, _sat: str = Depends(_require_satellite_token)):
+        _update_task(hc_home, body.team, body.task_id, assignee=body.assignee)
+        return {"ok": True}
+
+    class TaskCommentInternalBody(BaseModel):
+        team: str
+        task_id: int
+        author: str
+        body: str
+
+    @app.post("/internal/task/comment")
+    def internal_task_comment(body: TaskCommentInternalBody, _sat: str = Depends(_require_satellite_token)):
+        from delegate.task import add_comment
+        cid = add_comment(hc_home, body.team, body.task_id, body.author, body.body)
+        return {"id": cid}
+
+    class TaskCancelBody(BaseModel):
+        team: str
+        task_id: int
+
+    @app.post("/internal/task/cancel")
+    def internal_task_cancel(body: TaskCancelBody, _sat: str = Depends(_require_satellite_token)):
+        from delegate.task import cancel_task
+        return cancel_task(hc_home, body.team, body.task_id)
+
+    class TaskAttachBody(BaseModel):
+        team: str
+        task_id: int
+        file_path: str
+
+    @app.post("/internal/task/attach")
+    def internal_task_attach(body: TaskAttachBody, _sat: str = Depends(_require_satellite_token)):
+        task = _get_task(hc_home, body.team, body.task_id)
+        attachments = list(task.get("attachments", []))
+        if body.file_path not in attachments:
+            attachments.append(body.file_path)
+        _update_task(hc_home, body.team, body.task_id, attachments=attachments)
+        return {"ok": True}
+
+    class TaskDetachBody(BaseModel):
+        team: str
+        task_id: int
+        file_path: str
+
+    @app.post("/internal/task/detach")
+    def internal_task_detach(body: TaskDetachBody, _sat: str = Depends(_require_satellite_token)):
+        task = _get_task(hc_home, body.team, body.task_id)
+        attachments = list(task.get("attachments", []))
+        if body.file_path in attachments:
+            attachments.remove(body.file_path)
+        _update_task(hc_home, body.team, body.task_id, attachments=attachments)
+        return {"ok": True}
+
+    # --- Repo proxy ---
+
+    @app.get("/internal/repo/list")
+    def internal_repo_list(team: str, _sat: str = Depends(_require_satellite_token)):
+        from delegate.config import get_repos
+        repos = get_repos(hc_home, team)
+        result = []
+        for name, meta in repos.items():
+            result.append({
+                "name": name,
+                "source": meta.get("source", ""),
+                "remote_url": meta.get("remote_url", ""),
+                "approval": meta.get("approval", "manual"),
+            })
+        return {"repos": result}
+
+    # --- Session & activity proxies ---
+
+    class SessionStartBody(BaseModel):
+        team: str
+        agent: str
+        task_id: int | None = None
+
+    @app.post("/internal/session/start")
+    def internal_session_start(body: SessionStartBody, _sat: str = Depends(_require_satellite_token)):
+        from delegate.chat import start_session
+        session_id = start_session(hc_home, body.team, body.agent, task_id=body.task_id)
+        return {"session_id": session_id}
+
+    class SessionEndBody(BaseModel):
+        team: str
+        session_id: int
+        tokens_in: int = 0
+        tokens_out: int = 0
+        cost_usd: float = 0.0
+        cache_read_tokens: int = 0
+        cache_write_tokens: int = 0
+
+    @app.post("/internal/session/end")
+    def internal_session_end(body: SessionEndBody, _sat: str = Depends(_require_satellite_token)):
+        from delegate.chat import end_session
+        end_session(
+            hc_home, body.team, body.session_id,
+            tokens_in=body.tokens_in,
+            tokens_out=body.tokens_out,
+            cost_usd=body.cost_usd,
+            cache_read_tokens=body.cache_read_tokens,
+            cache_write_tokens=body.cache_write_tokens,
+        )
+        return {"ok": True}
+
+    class ActivityBroadcastBody(BaseModel):
+        agent: str
+        team: str
+        tool: str
+        detail: str
+        task_id: int | None = None
+
+    @app.post("/internal/activity/broadcast")
+    def internal_activity_broadcast(body: ActivityBroadcastBody, _sat: str = Depends(_require_satellite_token)):
+        from delegate.activity import broadcast as _broadcast
+        _broadcast(body.agent, body.team, body.tool, body.detail, task_id=body.task_id)
+        return {"ok": True}
+
+    class TurnEventBody(BaseModel):
+        event_type: str
+        agent: str
+        team: str = ""
+        task_id: int | None = None
+        sender: str = ""
+
+    @app.post("/internal/activity/turn-event")
+    def internal_turn_event(body: TurnEventBody, _sat: str = Depends(_require_satellite_token)):
+        from delegate.activity import broadcast_turn_event as _bte
+        _bte(body.event_type, body.agent, team=body.team, task_id=body.task_id, sender=body.sender)
+        return {"ok": True}
+
+    # --- Agent config proxy ---
+
+    @app.get("/internal/agent/config")
+    def internal_agent_config(team: str, agent: str, _sat: str = Depends(_require_satellite_token)):
+        """Return agent config needed by satellite to build prompts."""
+        ad = _agent_dir(hc_home, team, agent)
+        state_file = ad / "state.yaml"
+        if not state_file.exists():
+            raise HTTPException(status_code=404, detail=f"Agent '{agent}' not found")
+
+        state = yaml.safe_load(state_file.read_text()) or {}
+
+        # Read bio
+        bio_file = ad / "bio.md"
+        bio = bio_file.read_text() if bio_file.exists() else ""
+
+        # Read context.md
+        context_file = ad / "context.md"
+        context = context_file.read_text() if context_file.exists() else ""
+
+        # Read preamble from prompt.py
+        from delegate.prompt import Prompt
+        preamble = Prompt(hc_home, team, agent).build_preamble()
+
+        return {
+            "role": state.get("role", "engineer"),
+            "model": state.get("model", "sonnet"),
+            "token_budget": state.get("token_budget"),
+            "bio": bio,
+            "context": context,
+            "preamble": preamble,
+        }
+
+    class WriteContextBody(BaseModel):
+        team: str
+        agent: str
+        content: str
+
+    @app.post("/internal/agent/write-context")
+    def internal_agent_write_context(body: WriteContextBody, _sat: str = Depends(_require_satellite_token)):
+        ad = _agent_dir(hc_home, body.team, body.agent)
+        (ad / "context.md").write_text(body.content)
+        return {"ok": True}
+
+    class WriteWorklogBody(BaseModel):
+        team: str
+        agent: str
+        session_id: int
+        content: str
+
+    @app.post("/internal/agent/write-worklog")
+    def internal_agent_write_worklog(body: WriteWorklogBody, _sat: str = Depends(_require_satellite_token)):
+        ad = _agent_dir(hc_home, body.team, body.agent)
+        logs_dir = ad / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        worklog_path = logs_dir / f"{body.session_id}.worklog.md"
+        worklog_path.write_text(body.content)
+        return {"ok": True}
+
+    # ===================================================================
+    # Web UI passphrase authentication middleware
+    # ===================================================================
+
+    @app.middleware("http")
+    async def _passphrase_auth_middleware(request: Request, call_next):
+        """Require session cookie for web UI routes when passphrase is set.
+
+        Exempted paths:
+        - /internal/* (uses bearer token auth)
+        - /login (login page and form submission)
+        - /static/* (CSS/JS assets)
+        - /manifest.json, /sw.js (PWA files)
+        """
+        from delegate.auth import is_passphrase_enabled, validate_session_cookie
+
+        path = request.url.path
+        # Skip auth for internal API, login, and static routes
+        if (
+            path.startswith("/internal/")
+            or path == "/login"
+            or path.startswith("/static/")
+            or path == "/manifest.json"
+            or path == "/sw.js"
+        ):
+            return await call_next(request)
+
+        if not is_passphrase_enabled(hc_home):
+            return await call_next(request)
+
+        # Check session cookie
+        cookie = request.cookies.get("delegate_session")
+        if cookie and validate_session_cookie(hc_home, cookie):
+            return await call_next(request)
+
+        # Redirect to login for HTML requests, return 401 for API
+        if path.startswith("/api/") or path.startswith("/teams/"):
+            # Check if it's an API call (Accept: application/json)
+            accept = request.headers.get("accept", "")
+            if "application/json" in accept or "text/html" not in accept:
+                raise HTTPException(status_code=401, detail="Authentication required")
+
+        return RedirectResponse(url="/login", status_code=302)
+
+    # --- Login page ---
+
+    @app.get("/login", response_class=HTMLResponse)
+    def login_page():
+        from delegate.auth import is_passphrase_enabled
+        if not is_passphrase_enabled(hc_home):
+            return RedirectResponse(url="/", status_code=302)
+        return """<!DOCTYPE html>
+<html><head><title>Delegate Login</title>
+<style>
+body{background:#1e1e1e;color:#e0e0e0;font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+form{background:#2d2d2d;padding:2rem;border-radius:8px;min-width:300px}
+h2{margin-top:0;color:#f0f0f0}
+input{width:100%;padding:0.5rem;margin:0.5rem 0;box-sizing:border-box;background:#3d3d3d;border:1px solid #555;color:#e0e0e0;border-radius:4px}
+button{width:100%;padding:0.5rem;margin-top:0.5rem;background:#4a9eff;color:white;border:none;border-radius:4px;cursor:pointer}
+button:hover{background:#3a8eef}
+.error{color:#ff6b6b;font-size:0.9em}
+</style></head>
+<body><form method="post" action="/login">
+<h2>Delegate</h2>
+<input type="password" name="passphrase" placeholder="Passphrase" autofocus>
+<button type="submit">Login</button>
+</form></body></html>"""
+
+    @app.post("/login")
+    async def login_submit(request: Request):
+        from delegate.auth import verify_passphrase, create_session_cookie
+        form = await request.form()
+        passphrase = form.get("passphrase", "")
+        if verify_passphrase(hc_home, passphrase):
+            cookie = create_session_cookie(hc_home)
+            response = RedirectResponse(url="/", status_code=302)
+            is_dev = os.environ.get("DELEGATE_DEV") == "1"
+            response.set_cookie(
+                key="delegate_session",
+                value=cookie,
+                httponly=True,
+                samesite="lax",
+                secure=not is_dev,
+                max_age=7 * 24 * 3600,
+            )
+            return response
+        return HTMLResponse("""<!DOCTYPE html>
+<html><head><title>Delegate Login</title>
+<style>
+body{background:#1e1e1e;color:#e0e0e0;font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+form{background:#2d2d2d;padding:2rem;border-radius:8px;min-width:300px}
+h2{margin-top:0;color:#f0f0f0}
+input{width:100%;padding:0.5rem;margin:0.5rem 0;box-sizing:border-box;background:#3d3d3d;border:1px solid #555;color:#e0e0e0;border-radius:4px}
+button{width:100%;padding:0.5rem;margin-top:0.5rem;background:#4a9eff;color:white;border:none;border-radius:4px;cursor:pointer}
+button:hover{background:#3a8eef}
+.error{color:#ff6b6b;font-size:0.9em}
+</style></head>
+<body><form method="post" action="/login">
+<h2>Delegate</h2>
+<p class="error">Invalid passphrase</p>
+<input type="password" name="passphrase" placeholder="Passphrase" autofocus>
+<button type="submit">Login</button>
+</form></body></html>""", status_code=401)
 
     # --- Static files ---
     _static_dir = Path(__file__).parent / "static"

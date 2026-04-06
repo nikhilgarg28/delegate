@@ -18,7 +18,7 @@ import {
   msgStatusUpdate,
 } from "./state.js";
 import * as api from "./api.js";
-import { cap, prettyName } from "./utils.js";
+import { cap, prettyName, registerTaskDisplayIds, taskIdStr } from "./utils.js";
 import { Sidebar } from "./components/Sidebar.jsx";
 import { ChatPanel } from "./components/ChatPanel.jsx";
 import { TasksPanel } from "./components/TasksPanel.jsx";
@@ -297,6 +297,7 @@ function App() {
         bootstrapTeamRef.current = initial;  // mark so team-switch effect skips fetch
         batch(() => {
           tasks.value = d.tasks || [];
+          registerTaskDisplayIds(tasks.value);
           agents.value = d.agents || [];
           agentStatsMap.value = d.agent_stats || {};
           knownAgentNames.value = (d.agents || []).map(a => a.name);
@@ -318,13 +319,20 @@ function App() {
   // ── Polling loop (reads currentTeam.value and taskTeamFilter dynamically each cycle) ──
   // NOTE: Does NOT run immediately on mount — bootstrap already loaded initial data.
   // The first poll fires after 2 seconds, giving the UI time to become interactive.
+  // Uses setTimeout chain (not setInterval) to prevent connection stacking when the
+  // server is slow — only one poll cycle in-flight at a time.
   useEffect(() => {
     let active = true;
+    let timer = null;
     const poll = async () => {
       if (!active) return;
       const t = currentTeam.value;
       const filter = taskTeamFilter.value;
-      if (!t) return; // No team yet — bootstrap will set one
+      if (!t) {
+        // No team yet — retry after delay
+        if (active) timer = setTimeout(poll, 2000);
+        return;
+      }
 
       try {
         const taskDataPromise = filter === "all"
@@ -360,6 +368,7 @@ function App() {
         }
 
         if (active && t === currentTeam.value && filter === taskTeamFilter.value) {
+          registerTaskDisplayIds(taskData);
           batch(() => {
             tasks.value = taskData;
             agents.value = agentData;
@@ -379,11 +388,13 @@ function App() {
       } catch (e) {
         showToast("Failed to refresh data", "error");
       }
+      // Schedule next poll only after this one completes
+      if (active) timer = setTimeout(poll, 2000);
     };
 
     // Start polling after delay — initial data comes from /bootstrap
-    const interval = setInterval(poll, 2000);
-    return () => { active = false; clearInterval(interval); };
+    timer = setTimeout(poll, 2000);
+    return () => { active = false; clearTimeout(timer); };
   }, []);
 
   // ── Team switch: clear data + re-fetch ──
@@ -448,6 +459,7 @@ function App() {
         ]);
         // Guard: only apply if the team hasn't changed while we were fetching
         if (t !== currentTeam.value) return;
+        registerTaskDisplayIds(taskData);
         batch(() => {
           tasks.value = taskData;
           agents.value = agentData;
@@ -697,6 +709,7 @@ function App() {
             if (entry.assignee !== undefined) updated.assignee = entry.assignee;
             const next = [...cur];
             next[idx] = updated;
+            registerTaskDisplayIds([updated]);
             tasks.value = next;
 
             // Invalidate task panel cache so reopening shows fresh data
@@ -708,7 +721,7 @@ function App() {
 
             if (entry.assignee && entry.assignee.toLowerCase() === human.toLowerCase() &&
                 (entry.status === "in_approval" || entry.status === "merge_failed")) {
-              const title = `T${String(tid).padStart(4, "0")} "${task.title}"`;
+              const title = `${taskIdStr(tid)} "${task.title}"`;
               const body = entry.status === "in_approval"
                 ? "Needs your approval"
                 : "Merge failed -- needs resolution";
@@ -716,7 +729,7 @@ function App() {
             }
 
             if (entry.status === "done") {
-              const title = `T${String(tid).padStart(4, "0")} "${task.title}"`;
+              const title = `${taskIdStr(tid)} "${task.title}"`;
               const body = "Merged successfully";
               showActionToast({ title, body, taskId: tid, type: "success" });
             }

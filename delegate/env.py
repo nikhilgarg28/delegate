@@ -246,6 +246,45 @@ def _detect_at(directory: Path, rel_path: str = ".") -> _Component | None:
             test_cmd=f'(cd {dir_expr} && python -m pytest tests/ -x -q)' if not is_root else 'python -m pytest tests/ -x -q',
         )
 
+    # ── Python: Conda / Mamba (environment.yml) ──
+    _has_yml = _has_file(directory, "environment.yml")
+    _has_yaml = _has_file(directory, "environment.yaml")
+    if _has_yml or _has_yaml:
+        env_file = "environment.yml" if _has_yml else "environment.yaml"
+        if is_root:
+            snippet = (
+                'cd "$WORKTREE_ROOT"\n'
+                '# Conda/mamba environment setup\n'
+                '_conda_cmd="conda"\n'
+                'if command -v mamba >/dev/null 2>&1; then _conda_cmd="mamba"; fi\n'
+                f'if [ -d .conda-env ]; then\n'
+                f'  "$_conda_cmd" env update -f {env_file} -p .conda-env --quiet 2>/dev/null || true\n'
+                f'else\n'
+                f'  "$_conda_cmd" env create -f {env_file} -p .conda-env --quiet 2>/dev/null || true\n'
+                f'fi\n'
+                'if [ -d .conda-env ]; then\n'
+                '  export PATH="$WORKTREE_ROOT/.conda-env/bin:$PATH"\n'
+                '  export CONDA_PREFIX="$WORKTREE_ROOT/.conda-env"\n'
+                'fi'
+            )
+        else:
+            snippet = (
+                f'# {rel_path}/ deps (conda)\n'
+                f'_conda_cmd="conda"\n'
+                f'if command -v mamba >/dev/null 2>&1; then _conda_cmd="mamba"; fi\n'
+                f'if [ -d {dir_expr}/.conda-env ]; then\n'
+                f'  (cd {dir_expr} && "$_conda_cmd" env update -f {env_file} -p .conda-env --quiet 2>/dev/null) || true\n'
+                f'else\n'
+                f'  (cd {dir_expr} && "$_conda_cmd" env create -f {env_file} -p .conda-env --quiet 2>/dev/null) || true\n'
+                f'fi'
+            )
+        return _Component(
+            name="python-conda",
+            rel_path=rel_path,
+            setup_snippet=snippet,
+            test_cmd=f'(cd {dir_expr} && python -m pytest tests/ -x -q)' if not is_root else 'python -m pytest tests/ -x -q',
+        )
+
     # ── Python: pyproject.toml or requirements.txt (no lockfile) ──
     if _has_file(directory, "pyproject.toml") or _has_file(directory, "requirements.txt"):
         has_pyproject = _has_file(directory, "pyproject.toml")

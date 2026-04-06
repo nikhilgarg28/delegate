@@ -268,14 +268,21 @@ export function formatToolDetail(toolName, detail) {
 
 // ── Linkify helpers (produce HTML strings for dangerouslySetInnerHTML) ──
 export function linkifyTaskRefs(html) {
-  return html.replace(/(^[^<]+|>[^<]*)/g, match =>
-    match.replace(/(?<!\/)T(\d{4})\b/g, (full, digits) => {
+  return html.replace(/(^[^<]+|>[^<]*)/g, match => {
+    // Match per-project display IDs: PREFIX-NNNN (e.g. POLY-0001)
+    let result = match.replace(/\b([A-Z]{2,4})-(\d{4})\b/g, (full, prefix, digits) => {
+      const seq = parseInt(digits, 10);
+      if (seq === 0) return full;
+      return '<span class="task-link copyable" data-task-seq="' + full + '">' + full + copyBtnHtml(full) + "</span>";
+    });
+    // Match legacy T0001 format
+    result = result.replace(/(?<!\/)T(\d{4})\b/g, (full, digits) => {
       const id = parseInt(digits, 10);
-      // Skip T0000 (system placeholder)
       if (id === 0) return full;
       return '<span class="task-link copyable" data-task-id="' + id + '">' + full + copyBtnHtml(full) + "</span>";
-    })
-  );
+    });
+    return result;
+  });
 }
 
 /**
@@ -344,7 +351,7 @@ export { diff2HtmlRender, diff2HtmlParse };
 // Fallback hardcoded mapping is kept for backward compatibility.
 const _tierMap = {
   in_approval: 0, merging: 0, merge_failed: 0,
-  in_progress: 1, in_review: 1,
+  in_progress: 1, in_review: 1, researching: 1, reporting: 0,
   todo: 2,
   done: 3, cancelled: 4,
 };
@@ -355,7 +362,23 @@ export function taskTier(t) {
   return 2;
 }
 
-export function taskIdStr(id) {
+// Cache of task id -> display string (e.g. "RANA-0124").
+// Populated by registerTaskDisplayIds() whenever task lists are loaded.
+const _taskDisplayCache = new Map();
+
+export function registerTaskDisplayIds(taskList) {
+  if (!Array.isArray(taskList)) return;
+  for (const t of taskList) {
+    if (t.prefix && t.seq) {
+      _taskDisplayCache.set(t.id, t.prefix + "-" + String(t.seq).padStart(4, "0"));
+    }
+  }
+}
+
+export function taskIdStr(id, prefix, seq) {
+  if (prefix && seq) return prefix + "-" + String(seq).padStart(4, "0");
+  const cached = _taskDisplayCache.get(id);
+  if (cached) return cached;
   return "T" + String(id).padStart(4, "0");
 }
 
@@ -363,12 +386,13 @@ export function taskIdStr(id) {
 export const roleBadgeMap = {
   engineer: "Engineer", worker: "Worker", manager: "Manager", qa: "QA",
   design: "Design", backend: "Backend", frontend: "Frontend",
+  researcher: "Researcher",
 };
 
 // ── Agent dot helpers ──
 export function getAgentDotClass(agent, tasksList, stats) {
   if (!agent.pid) return "dot-offline";
-  const assignedTask = tasksList.find(t => t.assignee === agent.name && t.status === "in_progress");
+  const assignedTask = tasksList.find(t => t.assignee === agent.name && (t.status === "in_progress" || t.status === "researching"));
   const taskUpdated = assignedTask ? new Date(assignedTask.updated_at) : null;
   const lastActive = stats && stats.last_active ? new Date(stats.last_active) : null;
   const timestamps = [taskUpdated, lastActive].filter(Boolean);
@@ -383,7 +407,7 @@ export function getAgentDotClass(agent, tasksList, stats) {
 
 export function getAgentDotTooltip(dotClass, agent, tasksList) {
   if (dotClass === "dot-offline") return "Offline";
-  const assignedTask = tasksList.find(t => t.assignee === agent.name && t.status === "in_progress");
+  const assignedTask = tasksList.find(t => t.assignee === agent.name && (t.status === "in_progress" || t.status === "researching"));
   const lastTs = assignedTask && assignedTask.updated_at ? assignedTask.updated_at : null;
   const timeStr = lastTs ? fmtRelativeTime(lastTs) : "";
   if (dotClass === "dot-active" || dotClass === "dot-manager-active") return "Active" + (timeStr ? " \u2014 last activity " + timeStr : "");

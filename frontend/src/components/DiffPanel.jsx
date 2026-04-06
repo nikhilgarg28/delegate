@@ -11,6 +11,7 @@ import {
   renderMarkdown, msgStatusIcon, taskIdStr, toApiPath, displayFilePath,
   fmtCompactDuration,
 } from "../utils.js";
+import { showToast } from "../toast.js";
 
 // ── Live timer hook ──
 // Returns a compact elapsed-time string (e.g. "42s", "5m") updated every second.
@@ -494,11 +495,59 @@ function panelTitle(entry, allTasks) {
   if (!entry) return "";
   if (entry.type === "task") {
     const t = (allTasks || []).find(t => t.id === entry.target);
-    return "T" + String(entry.target).padStart(4, "0") + (t ? " " + t.title : "");
+    return taskIdStr(entry.target) + (t ? " " + t.title : "");
   }
   if (entry.type === "agent") return cap(entry.target || "");
   if (entry.type === "file") return (entry.target || "").split("/").pop() || "File";
   return "";
+}
+
+// ── Agent action buttons (Nudge / Interrupt) ──
+function AgentActionButtons({ agentName }) {
+  const team = currentTeam.value;
+  const turnState = allTeamsTurnState.value;
+  const turn = turnState[team]?.[agentName];
+  const isRunning = !!turn?.inTurn;
+
+  const [nudging, setNudging] = useState(false);
+  const [interrupting, setInterrupting] = useState(false);
+
+  const onNudge = async () => {
+    setNudging(true);
+    try {
+      await api.nudgeAgent(agentName, team);
+      showToast(`Nudged ${agentName}`, "success");
+    } catch (e) {
+      showToast(`Nudge failed: ${e.message}`, "error");
+    } finally {
+      setNudging(false);
+    }
+  };
+
+  const onInterrupt = async () => {
+    setInterrupting(true);
+    try {
+      await api.interruptAgent(agentName, team);
+      showToast(`Interrupted ${agentName}`, "success");
+    } catch (e) {
+      showToast(`Interrupt failed: ${e.message}`, "error");
+    } finally {
+      setInterrupting(false);
+    }
+  };
+
+  return (
+    <div class="agent-action-buttons">
+      <button class="btn-secondary" disabled={nudging} onClick={onNudge}>
+        {nudging ? "..." : "Nudge"}
+      </button>
+      {isRunning && (
+        <button class="btn-secondary btn-interrupt" disabled={interrupting} onClick={onInterrupt}>
+          {interrupting ? "..." : "Interrupt"}
+        </button>
+      )}
+    </div>
+  );
 }
 
 // ── Agent turn timer (inner component to isolate setInterval hook) ──
@@ -535,10 +584,11 @@ export function DiffPanel() {
           </div>
         )}
         <div class="diff-panel-header">
-          {mode === "diff" && <div class="diff-panel-title">{"T" + String(target).padStart(4, "0")}</div>}
+          {mode === "diff" && <div class="diff-panel-title">{taskIdStr(target)}</div>}
           {mode === "agent" && (
             <div class="diff-panel-title diff-panel-title-agent">
               <span>{cap(target || "")}</span>
+              <AgentActionButtons agentName={target} />
               <AgentTurnTimer agentName={target} />
             </div>
           )}

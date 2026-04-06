@@ -114,6 +114,10 @@ html, body { height: 100%; }
   --status-merge_failed-bg:rgba(241,76,76,0.10);
   --status-cancelled:      var(--semantic-gray);
   --status-cancelled-bg:   rgba(85,85,85,0.10);
+  --status-researching:    #b0b0b0;
+  --status-researching-bg: rgba(176,176,176,0.10);
+  --status-reporting:      var(--semantic-red);
+  --status-reporting-bg:   rgba(241,76,76,0.10);
 
   /* ── Agent status dots — 3-tier (no red on agents) ──
      Whitish: active (agent working)
@@ -373,6 +377,8 @@ body {
 .sb-dot.dot-rejected    { background: var(--status-rejected); }
 .sb-dot.dot-merge_failed { background: var(--status-merge_failed); }
 .sb-dot.dot-cancelled   { background: var(--status-cancelled); }
+.sb-dot.dot-researching { background: var(--status-researching); }
+.sb-dot.dot-reporting   { background: var(--status-reporting); }
 
 /* Scrollable container for agent list */
 .sb-agents-scroll {
@@ -1319,6 +1325,8 @@ body {
 .badge-merge_failed::before { background: var(--status-merge_failed); }
 .badge-cancelled::before   { background: var(--status-cancelled); }
 .badge-cancelled { text-decoration: line-through; }
+.badge-researching::before { background: var(--status-researching); }
+.badge-reporting::before   { background: var(--status-reporting); }
 
 /* ================================================================
    Task VCS / Diff buttons
@@ -1803,6 +1811,23 @@ body {
   white-space: nowrap;
   line-height: 1;
 }
+
+/* Stop/interrupt button in footer bar */
+.delegate-footer-interrupt {
+  margin-left: auto;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid rgba(241,76,76,0.3);
+  background: transparent;
+  color: #f14c4c;
+  cursor: pointer;
+  transition: border-color 100ms, background 100ms;
+}
+.delegate-footer-interrupt:hover { border-color: #f14c4c; background: rgba(241,76,76,0.08); }
+.delegate-footer-interrupt:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Bouncing dots — green to match manager */
 .delegate-footer-dots {
@@ -2558,6 +2583,11 @@ select option:hover {
 .fb-add-btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 6px; border: 1px dashed var(--border-default); background: transparent; color: var(--text-muted); font-family: inherit; font-size: 12px; cursor: pointer; transition: color 100ms, border-color 100ms; }
 .fb-add-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
 .fb-add-btn svg { flex-shrink: 0; }
+.merge-sort-toggle { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 6px; border: 1px dashed var(--border-default); background: transparent; color: var(--text-muted); font-family: inherit; font-size: 12px; cursor: pointer; transition: color 100ms, border-color 100ms, background 100ms; white-space: nowrap; }
+.merge-sort-toggle:hover { color: var(--text-primary); border-color: var(--text-muted); }
+.merge-sort-toggle.active { color: var(--text-primary); border-color: var(--text-secondary); border-style: solid; background: color-mix(in srgb, var(--text-secondary) 10%, transparent); }
+.merge-sort-toggle.locked { opacity: 0.7; cursor: default; }
+.merge-sort-toggle svg { flex-shrink: 0; }
 .fb-clear-btn { padding: 5px 8px; border-radius: 4px; border: none; background: transparent; color: var(--text-muted); font-family: inherit; font-size: 11px; cursor: pointer; transition: color 100ms; }
 .fb-clear-btn:hover { color: var(--text-primary); }
 .fb-dropdown {
@@ -2657,6 +2687,10 @@ select option:hover {
 .diff-panel-title { font-size: 15px; font-weight: 600; color: var(--text-heading); margin-bottom: 4px; }
 .diff-panel-title-agent { display: flex; align-items: center; gap: 10px; }
 .diff-panel-title-agent .live-timer { font-size: 12px; font-weight: 400; color: var(--text-muted); font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; margin-left: auto; }
+.agent-action-buttons { display: flex; gap: 6px; margin-left: 8px; }
+.agent-action-buttons button { padding: 4px 10px; font-size: 12px; border-radius: 4px; }
+.agent-action-buttons .btn-interrupt { color: #f14c4c; border-color: rgba(241,76,76,0.3); }
+.agent-action-buttons .btn-interrupt:hover { border-color: #f14c4c; }
 .diff-panel-branch { font-size: 12px; color: var(--text-secondary); font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; margin-bottom: 8px; }
 .diff-panel-commits { display: flex; flex-wrap: wrap; gap: 6px; }
 .diff-panel-commit { font-size: 11px; font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; background: var(--bg-active); color: var(--text-secondary); padding: 2px 8px; border-radius: 4px; }
@@ -3493,6 +3527,8 @@ select option:hover {
 .sidebar-task-dot.dot-rejected { background: var(--status-rejected); }
 .sidebar-task-dot.dot-merge_failed { background: var(--status-merge_failed); }
 .sidebar-task-dot.dot-cancelled { background: var(--status-cancelled); }
+.sidebar-task-dot.dot-researching { background: var(--status-researching); }
+.sidebar-task-dot.dot-reporting { background: var(--status-reporting); }
 .sidebar-agent-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .sidebar-agent-dot.dot-active          { background: var(--dot-active); }
 .sidebar-agent-dot.dot-manager-active  { background: var(--dot-manager-active); }
