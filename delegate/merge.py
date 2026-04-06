@@ -52,6 +52,7 @@ The merge worker is called from the daemon loop (via ``merge_once``).
 """
 
 import enum
+import heapq
 import logging
 import os
 import random
@@ -60,16 +61,22 @@ import time
 import uuid
 from pathlib import Path
 
-from delegate.config import get_repo_approval
+from delegate.config import get_merge_policy, get_reviewer_config
 from delegate.notify import notify_conflict
 from delegate.review import get_current_review
 from delegate.task import (
     get_task, change_status, update_task, list_tasks,
     format_task_id, transition_task, assign_task,
+    increment_merge_attempts,
 )
 from delegate.chat import log_event
 from delegate.paths import team_dir as _team_dir
-from delegate.repo import get_repo_path, get_default_branch, remove_task_worktree
+from delegate.repo import (
+    get_repo_path,
+    get_default_branch,
+    remove_task_worktree,
+    ensure_default_branch_checked_out,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -295,11 +302,17 @@ def _squash_reapply(
     """
     # Get the combined diff: main...branch (three-dot = changes on branch
     # since the merge-base, i.e. the feature's net contribution)
-    diff_result = _run_git(["diff", f"main...{branch}"], cwd=repo_dir)
+    # Use --binary so binary files (images, compiled assets) are included.
+    diff_result = subprocess.run(
+        ["git", "diff", "--binary", f"main...{branch}"],
+        cwd=repo_dir,
+        capture_output=True,
+        timeout=120,
+    )
     if diff_result.returncode != 0:
-        return False, f"Could not compute diff: {diff_result.stderr}"
+        return False, f"Could not compute diff: {diff_result.stderr.decode('utf-8', errors='replace')}"
 
-    patch = diff_result.stdout
+    patch = diff_result.stdout  # bytes (binary diff)
     if not patch.strip():
         # No diff — nothing to apply (branch is already at main)
         return True, "No changes to apply"
@@ -310,11 +323,12 @@ def _squash_reapply(
         cwd=wt_dir,
         input=patch,
         capture_output=True,
-        text=True,
         timeout=120,
     )
     if apply_result.returncode != 0:
-        return False, apply_result.stderr + apply_result.stdout
+        stderr = apply_result.stderr.decode("utf-8", errors="replace")
+        stdout = apply_result.stdout.decode("utf-8", errors="replace")
+        return False, stderr + stdout
 
     # Commit the applied changes
     commit_result = _run_git(
@@ -464,8 +478,11 @@ _run_pipeline = _run_pre_merge
 # Fast-forward merge (operates on refs only — no checkout needed)
 # ---------------------------------------------------------------------------
 
-def _ff_merge(repo_dir: str, branch: str) -> tuple[bool, str]:
-    """Fast-forward merge the branch into the default branch.
+def _ff_merge_impl(repo_dir: str, tip: str, *, resolve_tip: bool) -> tuple[bool, str]:
+    """Core fast-forward merge logic.
+
+    If *resolve_tip* is True, *tip* is treated as a branch name and resolved
+    to its commit SHA.  If False, *tip* is treated as a raw commit SHA.
 
     Behaviour depends on the user's checkout state in the main repo:
 
@@ -479,75 +496,17 @@ def _ff_merge(repo_dir: str, branch: str) -> tuple[bool, str]:
     """
     db = get_default_branch(repo_dir)
 
-    # Get branch tip
-    branch_result = _run_git(["rev-parse", branch], cwd=repo_dir)
-    if branch_result.returncode != 0:
-        return False, f"Could not resolve {branch}: {branch_result.stderr}"
-    branch_tip = branch_result.stdout.strip()
-
-    # Verify branch is a descendant of the default branch (fast-forward check)
-    ancestor_check = _run_git(
-        ["merge-base", "--is-ancestor", db, branch], cwd=repo_dir,
-    )
-    if ancestor_check.returncode != 0:
-        return False, f"Fast-forward not possible: {branch} is not a descendant of {db}"
-
-    # Check what the user has checked out in the main repo
-    head_result = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_dir)
-    user_branch = head_result.stdout.strip() if head_result.returncode == 0 else ""
-
-    if user_branch == db:
-        # User is on the default branch — check for uncommitted changes
-        status_result = _run_git(["status", "--porcelain"], cwd=repo_dir)
-        dirty = status_result.stdout.strip()
-        if dirty:
-            return False, (
-                f"Main repo has uncommitted changes on {db} — "
-                "commit or stash them before merging.\n"
-                f"Dirty files:\n{dirty[:500]}"
-            )
-
-        # Clean checkout: use merge --ff-only to update ref + working tree
-        result = _run_git(["merge", "--ff-only", branch], cwd=repo_dir)
-        if result.returncode != 0:
-            return False, f"Fast-forward merge failed: {result.stderr}"
-        return True, f"{db} fast-forwarded to {branch_tip[:12]} (working tree updated)"
-
+    # Resolve or verify the tip commit
+    if resolve_tip:
+        branch_result = _run_git(["rev-parse", tip], cwd=repo_dir)
+        if branch_result.returncode != 0:
+            return False, f"Could not resolve {tip}: {branch_result.stderr}"
+        tip_sha = branch_result.stdout.strip()
     else:
-        # User is on another branch: move ref only via atomic CAS
-        main_result = _run_git(["rev-parse", db], cwd=repo_dir)
-        if main_result.returncode != 0:
-            return False, f"Could not resolve {db}: {main_result.stderr}"
-        main_tip = main_result.stdout.strip()
-
-        result = _run_git(
-            ["update-ref", f"refs/heads/{db}", branch_tip, main_tip],
-            cwd=repo_dir,
-        )
-        if result.returncode != 0:
-            return False, f"Atomic update-ref failed (concurrent push?): {result.stderr}"
-        return True, f"{db} fast-forwarded to {branch_tip[:12]} (ref-only, user on {user_branch})"
-
-
-def _ff_merge_to_sha(repo_dir: str, tip_sha: str) -> tuple[bool, str]:
-    """Fast-forward merge the default branch to a specific commit SHA.
-
-    Used after the disposable worktree is removed — we have the rebased tip
-    SHA but no longer have a branch ref for it (the temp branch is gone).
-
-    Behaviour mirrors ``_ff_merge``:
-    - default branch checked out + dirty → fail (protect uncommitted work)
-    - default branch checked out + clean → ``git merge --ff-only <sha>``
-    - other branch checked out → ``git update-ref`` CAS to sha
-
-    Returns ``(success, output)``.
-    """
-    db = get_default_branch(repo_dir)
-
-    # Verify tip_sha is an ancestor of nothing — just check it exists
-    verify = _run_git(["cat-file", "-e", tip_sha], cwd=repo_dir)
-    if verify.returncode != 0:
-        return False, f"Commit not found: {tip_sha}"
+        verify = _run_git(["cat-file", "-e", tip], cwd=repo_dir)
+        if verify.returncode != 0:
+            return False, f"Commit not found: {tip}"
+        tip_sha = tip
 
     # Verify tip is a descendant of the default branch (fast-forward check)
     ancestor_check = _run_git(
@@ -571,6 +530,7 @@ def _ff_merge_to_sha(repo_dir: str, tip_sha: str) -> tuple[bool, str]:
                 f"Dirty files:\n{dirty[:500]}"
             )
 
+        # Clean checkout: use merge --ff-only to update ref + working tree
         result = _run_git(["merge", "--ff-only", tip_sha], cwd=repo_dir)
         if result.returncode != 0:
             return False, f"Fast-forward merge failed: {result.stderr}"
@@ -590,6 +550,65 @@ def _ff_merge_to_sha(repo_dir: str, tip_sha: str) -> tuple[bool, str]:
         if result.returncode != 0:
             return False, f"Atomic update-ref failed (concurrent push?): {result.stderr}"
         return True, f"{db} fast-forwarded to {tip_sha[:12]} (ref-only, user on {user_branch})"
+
+
+def _ff_merge(repo_dir: str, branch: str) -> tuple[bool, str]:
+    """Fast-forward merge a branch into the default branch."""
+    return _ff_merge_impl(repo_dir, branch, resolve_tip=True)
+
+
+def _ff_merge_to_sha(repo_dir: str, tip_sha: str) -> tuple[bool, str]:
+    """Fast-forward merge the default branch to a specific commit SHA."""
+    return _ff_merge_impl(repo_dir, tip_sha, resolve_tip=False)
+
+
+def _reconcile_main_prefer_files(
+    repo_dir: str, wt_dir: str, patterns: list[str],
+) -> list[str]:
+    """Reset files matching *patterns* to main's version in *wt_dir*.
+
+    After a rebase, some files may carry stale edits from the feature branch.
+    This function replaces those files with whatever main currently has, stages
+    the changes, and amends the latest commit so the reset is transparent.
+
+    Returns the list of files that were actually reset.
+    """
+    if not patterns:
+        return []
+
+    db = get_default_branch(repo_dir)
+
+    # Files that differ between the worktree HEAD and main
+    diff_result = _run_git(["diff", "--name-only", f"{db}..HEAD"], cwd=wt_dir)
+    if diff_result.returncode != 0:
+        logger.warning("main-prefer diff failed: %s", diff_result.stderr)
+        return []
+    changed_files = diff_result.stdout.strip().splitlines()
+
+    # Match changed files against the configured patterns
+    from fnmatch import fnmatch
+
+    to_reset: list[str] = []
+    for fname in changed_files:
+        for pat in patterns:
+            if fnmatch(fname, pat) or fname.endswith(f"/{pat}") or fname == pat:
+                to_reset.append(fname)
+                break
+
+    if not to_reset:
+        return []
+
+    # Replace each matched file with main's version
+    for fname in to_reset:
+        checkout = _run_git(["checkout", db, "--", fname], cwd=wt_dir)
+        if checkout.returncode != 0:
+            logger.warning("main-prefer checkout failed for %s: %s", fname, checkout.stderr)
+
+    # Stage and amend
+    _run_git(["add"] + to_reset, cwd=wt_dir)
+    _run_git(["commit", "--amend", "--no-edit"], cwd=wt_dir)
+
+    return to_reset
 
 
 # ---------------------------------------------------------------------------
@@ -873,6 +892,31 @@ def merge_task(
     update_task(hc_home, team, task_id, base_sha=main_head_dict)
 
     # -----------------------------------------------------------------------
+    # Phase 2.5: Reconcile main-prefer files.
+    # If the repo has configured file patterns that should always match main,
+    # replace those files with main's version and amend the merge commit.
+    # -----------------------------------------------------------------------
+
+    for repo_name in repos:
+        from delegate.config import get_main_prefer_files
+
+        patterns = get_main_prefer_files(hc_home, team, repo_name)
+        if patterns:
+            wt_path, _ = temp_worktrees[repo_name]
+            reconciled = _reconcile_main_prefer_files(
+                repo_dirs[repo_name], str(wt_path), patterns,
+            )
+            if reconciled:
+                # Re-read the tip SHA since we amended
+                tip_result = _run_git(["rev-parse", "HEAD"], cwd=str(wt_path))
+                if tip_result.returncode == 0:
+                    rebased_tips[repo_name] = tip_result.stdout.strip()
+                logger.info(
+                    "%s: reconciled main-prefer files in %s: %s",
+                    format_task_id(task_id), repo_name, reconciled,
+                )
+
+    # -----------------------------------------------------------------------
     # Phase 3: Run pre-merge tests in the merge worktree.
     # The merge worktree has setup.sh/premerge.sh (inherited from the feature
     # branch) and runs its own isolated environment via setup.sh.
@@ -911,6 +955,10 @@ def merge_task(
     for repo_name in repos:
         repo_str = repo_dirs[repo_name]
         rebased_tip = rebased_tips[repo_name]
+
+        # Self-heal: if the main repo has a delegate branch checked out
+        # (instead of main), reset it before attempting the ff-merge.
+        ensure_default_branch_checked_out(repo_str)
 
         pre_merge = _run_git(["rev-parse", get_default_branch(repo_str)], cwd=repo_str)
         merge_base_dict[repo_name] = pre_merge.stdout.strip() if pre_merge.returncode == 0 else ""
@@ -979,9 +1027,10 @@ def _handle_merge_failure(
     manager = _get_manager_name(hc_home, team)
 
     if reason.retryable:
-        current_attempts = task.get("merge_attempts", 0) + 1
+        # Atomically increment merge_attempts in SQL to avoid lost-update
+        # race when two merge workers process the same task concurrently.
+        current_attempts = increment_merge_attempts(hc_home, team, task_id)
         task_updates: dict = dict(
-            merge_attempts=current_attempts,
             status_detail=detail,
         )
 
@@ -1024,6 +1073,120 @@ def _handle_merge_failure(
     )
 
 
+def _sort_merge_candidates(
+    hc_home: Path,
+    team: str,
+    tasks: list[dict],
+) -> list[dict]:
+    """Sort approved tasks for optimal merge ordering.
+
+    Uses a topological sort (Kahn's algorithm) with priority tiebreakers:
+
+    1. **Dependency order** (correctness): If task B depends on task A and
+       both are in the candidate list, A merges first.
+    2. **Least file overlap** (primary tiebreaker): Tasks whose changed
+       files overlap least with other candidates merge first.
+    3. **Smallest diff** (secondary tiebreaker): Tasks with fewer changed
+       files merge first (smaller blast radius).
+
+    Returns a new list of tasks in optimal merge order.
+    """
+    if len(tasks) <= 1:
+        return list(tasks)
+
+    candidate_ids = {t["id"] for t in tasks}
+    task_by_id = {t["id"]: t for t in tasks}
+
+    # --- Compute changed files per task ---
+    changed_files: dict[int, set[str]] = {}
+    diff_failed: set[int] = set()  # tasks where git diff failed
+    for t in tasks:
+        tid = t["id"]
+        repos = t.get("repo", [])
+        base_sha_map = t.get("base_sha") or {}
+        branch = t.get("branch", "")
+        files: set[str] = set()
+        task_diff_ok = True
+        for repo_name in repos:
+            repo_path = get_repo_path(hc_home, team, repo_name)
+            base = base_sha_map.get(repo_name)
+            if not base or not branch:
+                task_diff_ok = False
+                continue
+            try:
+                diff_result = subprocess.run(
+                    ["git", "diff", "--name-only", f"{base}..{branch}"],
+                    cwd=str(repo_path),
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+            except Exception as exc:
+                logger.warning("_sort_merge_candidates: diff failed for task %s repo %s: %s", tid, repo_name, exc)
+                task_diff_ok = False
+                continue
+            if diff_result.returncode == 0:
+                for f in diff_result.stdout.strip().splitlines():
+                    files.add(f"{repo_name}:{f}")
+            else:
+                task_diff_ok = False
+        changed_files[tid] = files
+        if not task_diff_ok:
+            diff_failed.add(tid)
+
+    # --- Compute overlap counts ---
+    # Tasks with failed diffs get a high overlap score so they sort last
+    # (conservative: unknown files might conflict with anything).
+    overlap_count: dict[int, int] = {}
+    task_ids = list(candidate_ids)
+    for i, tid_a in enumerate(task_ids):
+        if tid_a in diff_failed:
+            overlap_count[tid_a] = len(tasks) * 1000
+            continue
+        count = 0
+        for j, tid_b in enumerate(task_ids):
+            if i != j:
+                count += len(changed_files.get(tid_a, set()) & changed_files.get(tid_b, set()))
+        overlap_count[tid_a] = count
+
+    # --- Build dependency graph (only edges within candidates) ---
+    in_degree: dict[int, int] = {t["id"]: 0 for t in tasks}
+    dependents: dict[int, list[int]] = {t["id"]: [] for t in tasks}
+    for t in tasks:
+        tid = t["id"]
+        for dep_id in t.get("depends_on", []):
+            if dep_id in candidate_ids:
+                in_degree[tid] += 1
+                dependents[dep_id].append(tid)
+
+    # --- Kahn's algorithm with priority heap ---
+    # Priority tuple: (overlap_count, file_count, task_id)
+    ready: list[tuple[int, int, int]] = []
+    for tid in candidate_ids:
+        if in_degree[tid] == 0:
+            fc = len(changed_files.get(tid, set()))
+            heapq.heappush(ready, (overlap_count.get(tid, 0), fc, tid))
+
+    sorted_tasks: list[dict] = []
+    while ready:
+        _, _, tid = heapq.heappop(ready)
+        sorted_tasks.append(task_by_id[tid])
+        for dep_tid in dependents[tid]:
+            in_degree[dep_tid] -= 1
+            if in_degree[dep_tid] == 0:
+                fc = len(changed_files.get(dep_tid, set()))
+                heapq.heappush(ready, (overlap_count.get(dep_tid, 0), fc, dep_tid))
+
+    # If there are cycles (shouldn't happen), append remaining tasks
+    if len(sorted_tasks) < len(tasks):
+        seen = {t["id"] for t in sorted_tasks}
+        for t in tasks:
+            if t["id"] not in seen:
+                sorted_tasks.append(t)
+
+    return sorted_tasks
+
+
 def merge_once(
     hc_home: Path,
     team: str,
@@ -1054,35 +1217,73 @@ def merge_once(
     processed_ids: set[int] = set()
 
     # --- 1. Newly approved tasks ---
+    # Collect all ready candidates first, then sort for optimal ordering.
+    reviewer_cfg = get_reviewer_config(hc_home, team)
+    auto_merge_enabled = reviewer_cfg.get("auto_merge", False)
+
+    ready_tasks: list[dict] = []
     for task in list_tasks(hc_home, team, status="in_approval"):
         task_id = task["id"]
         repos: list[str] = task.get("repo", [])
 
         if not repos:
+            # Task reached in_approval without a repo — cannot merge.
+            # Log a visible warning and notify the manager so this
+            # doesn't sit in in_approval indefinitely (root cause of
+            # TRAD-0024/TRAD-0025 silent failures).
+            logger.warning(
+                "%s: task in_approval has no repo — cannot merge; "
+                "was the task created without --repo?",
+                format_task_id(task_id),
+            )
+            log_event(
+                hc_home, team,
+                f"{format_task_id(task_id)} cannot merge — no repo "
+                f"associated with this task. Recreate with --repo.",
+                task_id=task_id,
+            )
             continue
 
-        approval_mode = get_repo_approval(hc_home, team, repos[0])
+        merge_policy = get_merge_policy(hc_home, team, repos[0])
 
         ready = False
-        if approval_mode == "auto":
+        if merge_policy == "no-review":
+            # no-review repos always auto-merge regardless of toggle
             ready = True
-        elif approval_mode == "manual":
+        elif merge_policy == "review-needed":
             review = get_current_review(hc_home, team, task_id)
             if review and review.get("verdict") == "approved":
-                ready = True
+                # Approved — but only proceed to merge if auto_merge is on.
+                # When auto_merge is off, the task stays in_approval for
+                # a human to manually trigger the merge from the UI.
+                if auto_merge_enabled:
+                    ready = True
+                else:
+                    logger.debug(
+                        "%s: approved but auto_merge is off — waiting for manual merge",
+                        task_id,
+                    )
             else:
                 logger.debug(
-                    "%s: needs human approval (verdict=%s)",
+                    "%s: needs review (verdict=%s)",
                     task_id, review.get("verdict") if review else "no review",
                 )
         else:
             logger.warning(
-                "%s: unknown approval mode '%s' for repos %s",
-                task_id, approval_mode, repos,
+                "%s: unknown merge_policy '%s' for repos %s",
+                task_id, merge_policy, repos,
             )
 
         if not ready:
             continue
+
+        ready_tasks.append(task)
+
+    # Sort candidates to minimize merge conflicts
+    sorted_candidates = _sort_merge_candidates(hc_home, team, ready_tasks)
+
+    for task in sorted_candidates:
+        task_id = task["id"]
 
         # Transition to merging with assignee = manager
         transition_task(hc_home, team, task_id, "merging", manager)
@@ -1124,11 +1325,7 @@ def merge_once(
         result = merge_task(hc_home, team, task_id)
         results.append(result)
 
-        if result.success:
-            # Successful merge — clear retry_after (task is done, but belt+suspenders)
-            # merge_task sets status to 'done', so this is just defensive cleanup.
-            pass
-        else:
+        if not result.success:
             _handle_merge_failure(hc_home, team, task_id, result)
 
     return results

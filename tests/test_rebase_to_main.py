@@ -1,10 +1,11 @@
 """Tests for rebase_to_main MCP tool.
 
 Verifies that:
-- Tool performs git reset --soft main in task worktree
+- Tool uses diff-apply to rebase onto main without phantom deletions
 - Tool updates task base_sha to new main HEAD
 - Tool checks for dirty/staged changes before rebasing
 - Tool returns detailed status per repo
+- Tool reports had_conflicts for real conflicts
 """
 
 import asyncio
@@ -129,7 +130,7 @@ class TestRebaseToMain:
         result_text = result["content"][0]["text"]
         result_data = json.loads(result_text)
         assert result_data["repos"]["myrepo"]["new_base_sha"] == new_main_sha
-        assert result_data["repos"]["myrepo"]["status"] == "reset_complete"
+        assert result_data["repos"]["myrepo"]["status"] == "applied_clean"
 
         # Verify task base_sha was updated
         task_after = get_task(hc_home, SAMPLE_TEAM, task["id"])
@@ -291,3 +292,147 @@ class TestRebaseToMain:
             check=True,
         )
         assert not diff_result.stdout.strip(), "Working tree should be clean"
+
+    def test_rebase_no_phantom_deletions(self, hc_home, tmp_path):
+        """After rebase, files added to main by other tasks are NOT staged as deletions."""
+        repo = _setup_git_repo(tmp_path)
+        _make_feature_branch(repo, "feature/test")
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        # Create task and worktree
+        task = create_task(hc_home, SAMPLE_TEAM, title="Test", assignee="tyson")
+        update_task(hc_home, SAMPLE_TEAM, task["id"], repo="myrepo", branch="feature/test")
+        change_status(hc_home, SAMPLE_TEAM, task["id"], "in_progress")
+
+        worktree_path = get_task_worktree_path(hc_home, SAMPLE_TEAM, "myrepo", task["id"])
+        worktree_path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "worktree", "add", str(worktree_path), "feature/test"],
+            cwd=str(repo),
+            capture_output=True,
+            check=True,
+        )
+
+        # Advance main with files from "another task"
+        _advance_main(repo, "other_task_file.py", "# From other task\n")
+        _advance_main(repo, "another_file.py", "# Another merged file\n")
+
+        # Call rebase_to_main tool
+        tools = build_agent_tools(hc_home, SAMPLE_TEAM, "tyson")
+        rebase_tool = next(t for t in tools if t.name == "rebase_to_main")
+        result = _call_async_tool(rebase_tool, {"task_id": task["id"]})
+
+        # Verify success
+        assert not result.get("isError"), f"Tool failed: {result}"
+        result_data = json.loads(result["content"][0]["text"])
+        assert result_data["repos"]["myrepo"]["status"] == "applied_clean"
+        assert result_data["had_conflicts"] is False
+
+        # Verify other tasks' files exist in working tree (not deleted)
+        assert (worktree_path / "other_task_file.py").exists(), \
+            "File from other task should exist in working tree"
+        assert (worktree_path / "another_file.py").exists(), \
+            "File from other task should exist in working tree"
+
+        # Verify other tasks' files are NOT staged as deletions
+        staged_result = subprocess.run(
+            ["git", "diff", "--cached", "--name-status"],
+            cwd=str(worktree_path),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        for line in staged_result.stdout.strip().splitlines():
+            if line:
+                status = line.split("\t")[0]
+                filename = line.split("\t")[1] if "\t" in line else ""
+                assert status != "D" or filename not in ("other_task_file.py", "another_file.py"), \
+                    f"Phantom deletion detected: {line}"
+
+    def test_rebase_with_real_conflict(self, hc_home, tmp_path):
+        """When feature and main modify the same file, rebase reports conflicts."""
+        repo = _setup_git_repo(tmp_path)
+        # Create feature that modifies README.md
+        _make_feature_branch(repo, "feature/test", filename="README.md", content="# Feature version\n")
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        # Create task and worktree
+        task = create_task(hc_home, SAMPLE_TEAM, title="Test", assignee="tyson")
+        update_task(hc_home, SAMPLE_TEAM, task["id"], repo="myrepo", branch="feature/test")
+        change_status(hc_home, SAMPLE_TEAM, task["id"], "in_progress")
+
+        worktree_path = get_task_worktree_path(hc_home, SAMPLE_TEAM, "myrepo", task["id"])
+        worktree_path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "worktree", "add", str(worktree_path), "feature/test"],
+            cwd=str(repo),
+            capture_output=True,
+            check=True,
+        )
+
+        # Advance main with a conflicting change to the same file
+        _advance_main(repo, "README.md", "# Main version — conflicting change\n")
+
+        # Call rebase_to_main tool
+        tools = build_agent_tools(hc_home, SAMPLE_TEAM, "tyson")
+        rebase_tool = next(t for t in tools if t.name == "rebase_to_main")
+        result = _call_async_tool(rebase_tool, {"task_id": task["id"]})
+
+        # Tool should succeed but report conflicts
+        assert not result.get("isError"), f"Tool failed unexpectedly: {result}"
+        result_data = json.loads(result["content"][0]["text"])
+        assert result_data["repos"]["myrepo"]["had_conflicts"] is True
+        assert result_data["repos"]["myrepo"]["status"] == "applied_conflicts"
+        assert result_data["had_conflicts"] is True
+
+        # Verify conflict markers exist in the working tree
+        readme_content = (worktree_path / "README.md").read_text()
+        assert "<<<<<<<" in readme_content, "Should have conflict markers"
+
+    def test_rebase_empty_diff(self, hc_home, tmp_path):
+        """When feature branch has no changes from base, rebase produces a clean state."""
+        repo = _setup_git_repo(tmp_path)
+        # Create a feature branch with NO actual changes (just branch off main)
+        subprocess.run(["git", "checkout", "-b", "feature/test"], cwd=str(repo),
+                        capture_output=True, check=True)
+        subprocess.run(["git", "checkout", "main"], cwd=str(repo),
+                        capture_output=True, check=True)
+        _register_repo_with_symlink(hc_home, "myrepo", repo)
+
+        # Create task and worktree
+        task = create_task(hc_home, SAMPLE_TEAM, title="Test", assignee="tyson")
+        update_task(hc_home, SAMPLE_TEAM, task["id"], repo="myrepo", branch="feature/test")
+        change_status(hc_home, SAMPLE_TEAM, task["id"], "in_progress")
+
+        worktree_path = get_task_worktree_path(hc_home, SAMPLE_TEAM, "myrepo", task["id"])
+        worktree_path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["git", "worktree", "add", str(worktree_path), "feature/test"],
+            cwd=str(repo),
+            capture_output=True,
+            check=True,
+        )
+
+        # Advance main so there's something new
+        _advance_main(repo)
+
+        # Call rebase_to_main tool
+        tools = build_agent_tools(hc_home, SAMPLE_TEAM, "tyson")
+        rebase_tool = next(t for t in tools if t.name == "rebase_to_main")
+        result = _call_async_tool(rebase_tool, {"task_id": task["id"]})
+
+        # Verify clean result with no changes staged
+        assert not result.get("isError"), f"Tool failed: {result}"
+        result_data = json.loads(result["content"][0]["text"])
+        assert result_data["repos"]["myrepo"]["status"] == "applied_clean"
+        assert result_data["had_conflicts"] is False
+
+        # No staged changes (empty diff means nothing to apply)
+        staged_result = subprocess.run(
+            ["git", "diff", "--cached", "--name-only"],
+            cwd=str(worktree_path),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert not staged_result.stdout.strip(), "No changes should be staged for empty diff"
