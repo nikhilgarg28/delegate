@@ -1,253 +1,253 @@
-# Merge Process Invariants
+# System Invariants
 
-This document describes the invariants, guarantees, and locking protocol for
-the Delegate merge flow. Audience: engineers working on `merge.py`, `runtime.py`,
-and `web.py`.
-
----
-
-## Merge Flow Steps
-
-The full merge sequence for a task in `in_approval` state:
-
-1. **Transition to merging** — `merge_once()` calls `transition_task(..., "merging", manager)`.
-
-2. **Phase 1: Rebase all repos** — For each repo in the task:
-   a. Create a disposable worktree + temp branch from the feature branch
-      (path: `teams/<team>/worktrees/_merge/<uid>/T<NNNN>/`).
-   b. `git rebase --onto main <base_sha> HEAD` inside the disposable worktree.
-   c. If rebase fails, attempt squash-reapply: create a fresh worktree from
-      main, compute `git diff main...feature`, apply via `git apply --3way`.
-   d. If squash-reapply also fails: true content conflict — escalate immediately
-      (`merge_failed`, notify manager with conflict context). No agent worktrees
-      are touched.
-   e. Collect the rebased tip SHA from the disposable worktree HEAD.
-
-   **All-or-nothing**: all repos are rebased before any agent worktree is touched.
-   If any repo's rebase fails, the others' disposable worktrees are cleaned up
-   and the function returns without modifying agent worktrees.
-
-3. **Acquire worktree lock** — `_acquire_worktree_lock(exchange, team, task_id)`.
-   Waits up to `WORKTREE_LOCK_TIMEOUT` (30 seconds). If the lock is unavailable,
-   aborts and returns `WORKTREE_ERROR` (non-retryable).
-
-4. **Phase 2: Reset all agent worktrees** — For each repo (while holding lock):
-   a. Capture the agent worktree's current HEAD (for rollback).
-   b. `git reset --hard <rebased-tip>` in the agent's feature worktree.
-      - Moves HEAD (still on feature branch) to rebased tip.
-      - Updates tracked files in the working tree.
-      - **Untracked files (environment artifacts) are preserved.**
-   c. If reset fails, roll back already-reset worktrees to their original HEAD.
-   d. If rollback also fails (shouldn't happen), log a warning and continue.
-
-5. **Release worktree lock** — Lock is released in a `finally` block regardless
-   of success or failure.
-
-6. **Update base_sha** — `update_task(..., base_sha=main_head_dict)` records the
-   current main HEAD as the new base_sha for each repo. This is done atomically
-   with the reset (before disposable WTs are removed).
-
-7. **Remove disposable worktrees** — All temp branches and worktrees created in
-   Phase 1 are removed. The agent worktree is now the canonical working copy.
-
-8. **Phase 3: Run pre-merge tests** — `_run_pre_merge()` is called with the
-   **agent worktree path** (not the disposable worktree). This ensures tests run
-   in the environment the agent built and reviewed (with `__pycache__`, installed
-   packages, build output intact).
-   - If a pre-merge script is configured for the repo, it is run.
-   - Otherwise, pytest/npm/make are auto-detected.
-   - If tests fail: task becomes `merge_failed`, agent worktree is left at the
-     rebased tip (agent can fix and resubmit without manual recovery).
-
-9. **Phase 4: Fast-forward merge** — `_ff_merge_to_sha(repo_dir, tip_sha)`.
-   Merges main to the rebased tip SHA (not a branch ref — the temp branch is
-   already removed).
-   - If user has `main` checked out and clean: `git merge --ff-only <sha>`.
-   - If user has `main` checked out and dirty: fail (retryable: `DIRTY_MAIN`).
-   - If user is on another branch: `git update-ref` with CAS (atomic, ref-only).
-
-10. **Record merge metadata** — `merge_base` and `merge_tip` are stored on the task.
-
-11. **Mark done** — `change_status(..., "done")`.
-
-12. **Clean up** — Feature branch and agent worktree are removed (if no sibling
-    tasks share the branch). Disposable worktrees were already removed in step 7.
-
-13. **Discard lock entry** — `exchange.discard_worktree_lock(team, task_id)` removes
-    the asyncio.Lock from the registry (prevents unbounded growth).
+This document describes the key invariants that underpin the correctness
+and security of the Delegate system.  Every contributor should understand
+these properties — violating any one of them can compromise agent
+isolation, data integrity, or system stability.
 
 ---
 
-## State Transitions
+## 1. Filesystem Isolation
 
-```
-in_approval
-    -> merging          (merge_once, on first attempt)
-    -> merge_failed     (non-retryable failure or max retries exhausted)
-    -> done             (successful merge)
+**Invariant:** Agents may only write to their designated directories.
+The `protected/` directory and other teams' directories are never
+writable from agent bash sessions.
 
-merging (retry loop, up to MAX_MERGE_ATTEMPTS=3):
-    -> merging          (retryable failure: DIRTY_MAIN, FF_NOT_POSSIBLE, UPDATE_REF_FAILED)
-    -> merge_failed     (non-retryable or max retries)
-    -> done             (success)
-```
+### Implementation
 
-Non-retryable reasons (escalate immediately):
-- `REBASE_CONFLICT` — rebase failed but squash also failed
-- `SQUASH_CONFLICT` — true content conflict (both strategies failed)
-- `PRE_MERGE_FAILED` — tests failed in agent worktree
-- `WORKTREE_ERROR` — could not create worktree, lock timeout, or reset failed
+- `add_dirs` (OS sandbox) is narrowed to:
+  - The agent's team working directory (`teams/<uuid>/`).
+  - The platform temp directory.
+  - `.git/` directories of registered repos (all agents, including managers).
+- The `protected/` subtree (DB, PID, logs, config, network allowlist)
+  lives outside every agent's sandbox.
 
-Retryable reasons (stay in `merging`, retry up to 3 times):
-- `DIRTY_MAIN` — main has uncommitted changes
-- `FF_NOT_POSSIBLE` — fast-forward not possible (branch not descendant)
-- `UPDATE_REF_FAILED` — concurrent push/update
+### Why It Matters
+
+Without filesystem isolation an agent could overwrite the database,
+modify another agent's workspace, tamper with the network allowlist,
+or corrupt the daemon PID file.
 
 ---
 
-## Worktree Isolation Guarantees
+## 2. Sandbox Layers (Defence in Depth)
 
-**Agent worktrees are only mutated during `merging` state**, and only via:
-1. `git reset --hard <rebased-tip>` — while holding the worktree lock.
+**Invariant:** Security is enforced at multiple independent layers.
+Bypassing one layer must not be sufficient to compromise the system.
 
-This is enforced by two complementary mechanisms:
+| Layer | Mechanism | What it guards |
+|-------|-----------|---------------|
+| **OS sandbox** | `SandboxSettings.add_dirs` | Filesystem write scope |
+| **Tool deny list** | `disallowed_tools` | Dangerous git operations |
+| **Bash deny patterns** | `denied_bash_patterns` + `can_use_tool` guard (case-insensitive) | `sqlite3`, `git push`, SQL patterns (`DROP TABLE`, etc.) |
+| **MCP tool boundary** | In-process MCP tools for data/metadata | DB reads/writes happen inside daemon, outside sandbox |
+| **Network allowlist** | `protected/network.yaml` → `SandboxSettings.network` | Domain-level egress filtering |
 
-### Mechanism A: Per-task AsyncRWLock (primary)
+### Why It Matters
 
-The `TelephoneExchange` maintains a registry of `AsyncRWLock` objects (a custom
-async read-write lock), keyed by `(team, task_id)`.
-
-- **Turn dispatcher** (`run_turn` in `runtime.py`): acquires a **read lock** at
-  the start of a turn and releases it at the very end (after all bookkeeping,
-  including the optional reflection turn). Lock is released in a `finally` block.
-  Multiple agent turns on the same task can hold the read lock simultaneously
-  (e.g. manager and DRI both active concurrently without contention).
-
-- **Merge worker** (`merge_task` in `merge.py`): acquires a **write lock** before
-  `git reset --hard` in Phase 2, releases immediately after all repos are reset.
-  The write lock waits for all active readers to finish and blocks new readers
-  while held. Uses `run_coroutine_threadsafe` since the merge worker runs in a
-  thread pool.
-
-Both run in the same asyncio event loop. `AsyncRWLock` uses `asyncio.Condition`
-internally.
-
-**Lock ordering**: only one write lock per task is ever held at a time (by the
-merge worker). No cross-task or cross-lock ordering constraint exists (no
-deadlock risk).
-
-### Mechanism B: Task state gate (defense-in-depth)
-
-The daemon dispatch loop (`_dispatch_turn` in `web.py`) checks: before dispatching
-a turn for agent `A`, query all tasks in `merging` state. If any has `dri == A`,
-skip dispatch for this cycle.
-
-This is defense-in-depth — the lock already prevents concurrent access. The
-state gate prevents even attempting to run a turn during the merge window, which
-would waste a turn and fight the lock.
+A single-layer sandbox can be circumvented by creative prompt
+injection or tool-use chains.  Layered enforcement makes exploitation
+exponentially harder.
 
 ---
 
-## Locking Protocol Summary
+## 3. Git State Management
 
-| Actor | When | Lock type | Lock held for |
-|-------|------|-----------|---------------|
-| `run_turn` | start of turn | read lock on `(team, task_id)` | entire turn duration |
-| `merge_task` | before Phase 2 | write lock on `(team, task_id)` | Phase 2 only (reset loop) |
-| daemon loop | before dispatch | (no lock — state gate is a read check) | n/a |
+**Invariant:** Agents never alter branch topology, interact with
+remotes, or modify the repository's `.git/` directory outside of
+sanctioned `git add` / `git commit` operations in their worktree.
 
----
+### Implementation
 
-## Multi-Repo All-or-Nothing Semantics
+- All topology-changing git commands (`rebase`, `merge`, `push`,
+  `pull`, `fetch`, `checkout`, `switch`, `reset --hard`, `branch`,
+  `worktree`, `remote`, `filter-branch`, `reflog expire`) are blocked
+  via both `disallowed_tools` and `denied_bash_patterns`.
+- Worktree creation and deletion are performed exclusively by the
+  daemon in `_ensure_task_infra`.
+- All agents (workers and managers) get read-write access to repo `.git/` dirs
+  (needed for `git add`/`git commit`) but never to the repo working tree itself.
 
-For tasks with multiple repos (`task["repo"] = ["repo_a", "repo_b", ...]`):
+### Why It Matters
 
-- **Rebase phase**: all repos are rebased before any agent worktree is touched.
-  If repo_b's rebase fails after repo_a succeeded, repo_a's disposable worktree
-  is cleaned up and the merge aborts without touching either agent worktree.
-
-- **Reset phase**: worktrees are reset in order. If reset fails for repo_b after
-  repo_a was already reset, repo_a is rolled back to its original HEAD.
-
-- **Test phase**: tests are run per-repo, in order. If repo_b's tests fail,
-  the merge fails and the agent worktrees are left at the rebased tip for both
-  repos (not rolled back — the agent should fix the failing tests and resubmit).
-
-- **FF-merge phase**: repos are merged in order. If repo_b's FF-merge fails after
-  repo_a succeeded, the task is left in a partially-merged state (retryable if
-  the failure is transient).
+Unconstrained git operations can destroy commit history, introduce
+unauthorized code into `main`, or create branch name collisions that
+break the worktree management system.
 
 ---
 
-## Agent Worktree State After Merge Outcomes
+## 4. UUID Identity
 
-| Outcome | Agent worktree state |
-|---------|---------------------|
-| Success | Removed (clean up) |
-| `PRE_MERGE_FAILED` | Feature branch at rebased tip, environment intact. Agent can fix tests and resubmit via `task status in_review`. |
-| `REBASE_CONFLICT` / `SQUASH_CONFLICT` | Unchanged (pre-rebase state). Agent uses `rebase_to_main` MCP tool to resolve conflicts manually. |
-| `WORKTREE_ERROR` (lock/reset) | May be partially reset or unchanged. Agent should check state. |
-| `DIRTY_MAIN` / retryable | Unchanged (reset not attempted yet). Retry happens automatically. |
+**Invariant:** Teams and members are identified internally by UUIDs.
+Human-readable names are display labels only; all database queries and
+filesystem paths use UUIDs.
 
----
+### Implementation
 
-## base_sha Update Semantics
+- `register_team_path_mapping(hc_home, name)` creates a stable UUID
+  for each team name, persisted in `protected/team_ids.json`.
+- `resolve_team_uuid(hc_home, name)` resolves a name to its UUID
+  (cached in-process).
+- `team_dir(hc_home, name)` returns `teams/<uuid>/`.
+- All SQL `WHERE` clauses filter on `team_uuid`, not `team`.
+- The `team` column in the database stores the human-readable name
+  for display; `team_uuid` stores the UUID for queries.
 
-`base_sha` is a per-repo dict stored on the task: `{repo_name: sha}`.
+### Why It Matters
 
-- **Set initially**: when the daemon creates the agent worktree, `base_sha` is set
-  to the main HEAD at that time. This records the point from which the agent's
-  commits are rebased.
-
-- **Updated during merge**: after Phase 2 (agent WT reset), `base_sha` is updated
-  to the current main HEAD (the rebase point used for this merge attempt). This
-  ensures that if the task is retried (e.g., after `PRE_MERGE_FAILED`), the next
-  rebase uses the correct base SHA and doesn't re-apply already-rebased commits.
+Using names directly would allow collisions when teams are deleted
+and recreated, cause filesystem path reuse with stale data, and
+break cross-team queries when names contain special characters.
 
 ---
 
-## Disposable Merge Worktrees
+## 5. Dependency Ordering
 
-Disposable worktrees are created in `teams/<team>/worktrees/_merge/<uid>/T<NNNN>/`.
+**Invariant:** A task's worktree is only created after all its
+`depends_on` dependencies have reached a terminal state (`done` or
+`cancelled`).
 
-- Created in Phase 1 for rebase.
-- Removed immediately after Phase 2 (before tests run).
-- Also removed on any failure that occurs after creation.
-- The `_merge/` directory and empty parent directories are pruned on cleanup.
+### Implementation
 
-**Tests do NOT run in disposable worktrees.** They run in the agent's feature
-worktree after the reset, preserving the agent's environment.
+- `_all_deps_resolved()` in `task.py` checks whether every dependency
+  task is in a terminal workflow stage.
+- `_ensure_task_infra()` in `web.py` skips worktree creation for
+  tasks with unresolved dependencies.
+- `update_task()` refuses to **add** new dependencies to a task whose
+  existing dependencies are all already resolved (work may have
+  started).  Removing dependencies is always allowed.
+
+### Why It Matters
+
+Creating a worktree before dependencies are resolved means the
+worktree branches off an older `main` that lacks the dependency's
+changes.  Agents then work on stale code, leading to conflicts and
+wasted effort.
 
 ---
 
-## When the Main Repo Working Directory Is Touched
+## 6. Daemon Singleton
 
-The main repo working tree is only updated during the FF-merge step (Phase 4),
-and only when the user has `main` checked out with a clean state. In that case,
-`git merge --ff-only` advances both the ref and the working tree.
+**Invariant:** At most one daemon process runs per `DELEGATE_HOME` at
+any time.
 
-If the user is on any other branch, only the `refs/heads/main` ref is updated
-atomically via `git update-ref` with compare-and-swap. The working tree is
-never touched in that case.
+### Implementation
+
+- **`fcntl.flock()`** — an exclusive advisory lock on
+  `protected/daemon.lock`.  The OS releases the lock automatically
+  when the process exits (even on `SIGKILL`), eliminating stale-lock
+  issues.
+- **PID file** (`protected/daemon.pid`) — a supplementary check for
+  `is_running()` and `stop_daemon()`.
+- Foreground mode acquires the lock in `start_daemon()`.
+- Background mode acquires the lock inside the child process's
+  `_lifespan()` startup.
+
+### Why It Matters
+
+Multiple daemons operating on the same database and worktrees
+concurrently would cause data corruption, duplicate agent sessions,
+and branch conflicts.
 
 ---
 
-## Notes for Implementors
+## 7. MCP Tool Boundary
 
-- `merge_task()` is **pure**: it returns `MergeResult` and does not change task
-  status. Status changes are the caller's responsibility (`merge_once()`).
+**Invariant:** Agents interact with Delegate's data layer (database,
+config, mailbox) exclusively through in-process MCP tools.  They
+never invoke `delegate` CLI commands or access the database directly.
 
-- The worktree write lock is acquired/released synchronously by the merge worker
-  (which runs in a thread pool via `asyncio.to_thread`). `run_coroutine_threadsafe`
-  is used to schedule both `acquire_write()` and `release_write()` on the event
-  loop, and `future.result()` waits for acquisition synchronously. Release is
-  fire-and-forget (not awaited) since we just need the write flag cleared.
+### Implementation
 
-- Agent turns acquire the read lock directly with `await lock.acquire_read()` /
-  `await lock.release_read()` since `run_turn` is an async function.
+- `build_agent_tools()` in `mcp_tools.py` exposes:
+  - **Communication:** `mailbox_send`, `mailbox_inbox`
+  - **Tasks:** `task_create`, `task_list`, `task_show`, `task_assign`,
+    `task_status`, `task_comment`, `task_cancel`, `task_attach`,
+    `task_detach`
+  - **Repos:** `repo_list`, `rebase_to_main`, `task_diff`
+  - **Approval:** `task_approve`, `task_reject`
+  - **Artifacts:** `artifact_save`, `artifact_list`, `artifact_path`
+  - **Background:** `run_background`, `check_background`,
+    `cancel_background`, `list_background`
+- These tools run in the daemon process, outside the agent's OS
+  sandbox, so they can read/write `protected/` files.
+- System prompts explicitly instruct agents to use MCP tools instead
+  of CLI commands.
+- `sqlite3` and SQL patterns (`DROP TABLE`, `DELETE FROM`, `TRUNCATE`,
+  `ALTER TABLE`) are in `denied_bash_patterns` as additional safety nets.
+- Admin operations (`delegate network`, `delegate team`,
+  `delegate workflow`) are **not** exposed via MCP — they remain
+  human-only CLI commands.
 
-- If the exchange is `None` (e.g., in unit tests), locking is skipped entirely.
-  Tests should pass `exchange=None` to `merge_task()`.
+### Why It Matters
 
-- `discard_worktree_lock()` is called after task completion to prevent unbounded
-  growth of the lock registry. It is safe to call on a non-existent key.
+Direct database access from agents would bypass authorization checks,
+allow arbitrary data modification, and break the UUID/team isolation
+model.
+
+---
+
+## 8. Network Isolation
+
+**Invariant:** Agent network egress is restricted to the domains in
+the global allowlist (`protected/network.yaml`).
+
+### Implementation
+
+- The allowlist defaults to a curated set of package manager
+  registries, git forges, and ML/data science domains (composed
+  from `adapters.CORE_DOMAINS` + `adapters.DOMAIN_GROUPS`).
+  Managed via `delegate network show/allow/disallow/reset`.
+- `network.yaml` lives in `protected/` — outside agent sandbox.
+- The allowlist is read at Telephone creation time and passed to
+  `SandboxSettings.network.allowedDomains`.
+- If the allowlist changes between turns, the Telephone is
+  destroyed and recreated (same pattern as repo-list change
+  detection).
+
+### Why It Matters
+
+Without network restrictions, a compromised or jailbroken agent
+could exfiltrate sensitive code, call unauthorized APIs, or download
+malicious payloads.
+
+---
+
+## 9. Database Migration Safety
+
+**Invariant:** Schema migrations are applied atomically with pre-
+migration backups and post-migration health verification.
+
+### Implementation
+
+- Migrations are numbered SQL files in `delegate/migrations/V*.sql`.
+- Before each migration, a timestamped backup of the database is
+  created in `protected/backups/`.
+- After each migration, `_verify_db_health()` checks for expected
+  tables.
+- On failure, the migration is rolled back and the backup is
+  restored.
+- The `schema_version` table tracks the current version; migrations
+  are idempotent (skipped if already applied).
+
+### Why It Matters
+
+A failed migration without backup could leave the database in an
+inconsistent state, losing task history, session data, and mailbox
+messages.
+
+---
+
+## Summary
+
+| # | Invariant | Key Mechanism |
+|---|-----------|---------------|
+| 1 | Filesystem isolation | `add_dirs` narrowed to team dir |
+| 2 | Defence in depth | 6 independent security layers |
+| 3 | Git state management | `disallowed_tools` + `denied_bash_patterns` |
+| 4 | UUID identity | `team_ids.json` + `team_uuid` column |
+| 5 | Dependency ordering | `_all_deps_resolved()` gates worktree creation + auto-advance |
+| 6 | Daemon singleton | `fcntl.flock()` + PID file |
+| 7 | MCP tool boundary | In-process tools, no CLI/DB from agents |
+| 8 | Network isolation | `protected/network.yaml` allowlist (curated defaults) |
+| 9 | Migration safety | Numbered files + backup + verify |

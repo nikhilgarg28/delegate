@@ -39,7 +39,7 @@ Bypassing one layer must not be sufficient to compromise the system.
 |-------|-----------|---------------|
 | **OS sandbox** | `SandboxSettings.add_dirs` | Filesystem write scope |
 | **Tool deny list** | `disallowed_tools` | Dangerous git operations |
-| **Bash deny patterns** | `denied_bash_patterns` + `can_use_tool` guard | `sqlite3`, `DROP TABLE`, `git push`, etc. |
+| **Bash deny patterns** | `denied_bash_patterns` + `can_use_tool` guard (case-insensitive) | `sqlite3`, `git push`, SQL patterns (`DROP TABLE`, etc.) |
 | **MCP tool boundary** | In-process MCP tools for data/metadata | DB reads/writes happen inside daemon, outside sandbox |
 | **Network allowlist** | `protected/network.yaml` → `SandboxSettings.network` | Domain-level egress filtering |
 
@@ -159,16 +159,22 @@ never invoke `delegate` CLI commands or access the database directly.
 
 ### Implementation
 
-- `create_agent_mcp_server()` in `mcp_tools.py` exposes
-  `mailbox_send`, `task_create`, `task_list`, `task_show`,
-  `task_assign`, `task_status`, `task_comment`, `task_cancel`,
-  `task_attach`, `task_detach`, `repo_list`, and `mailbox_inbox`.
+- `build_agent_tools()` in `mcp_tools.py` exposes:
+  - **Communication:** `mailbox_send`, `mailbox_inbox`
+  - **Tasks:** `task_create`, `task_list`, `task_show`, `task_assign`,
+    `task_status`, `task_comment`, `task_cancel`, `task_attach`,
+    `task_detach`
+  - **Repos:** `repo_list`, `rebase_to_main`, `task_diff`
+  - **Approval:** `task_approve`, `task_reject`
+  - **Artifacts:** `artifact_save`, `artifact_list`, `artifact_path`
+  - **Background:** `run_background`, `check_background`,
+    `cancel_background`, `list_background`
 - These tools run in the daemon process, outside the agent's OS
   sandbox, so they can read/write `protected/` files.
 - System prompts explicitly instruct agents to use MCP tools instead
   of CLI commands.
-- `sqlite3` and `DROP TABLE` / `DELETE FROM` are in
-  `denied_bash_patterns` as an additional safety net.
+- `sqlite3` and SQL patterns (`DROP TABLE`, `DELETE FROM`, `TRUNCATE`,
+  `ALTER TABLE`) are in `denied_bash_patterns` as additional safety nets.
 - Admin operations (`delegate network`, `delegate team`,
   `delegate workflow`) are **not** exposed via MCP — they remain
   human-only CLI commands.
@@ -188,8 +194,10 @@ the global allowlist (`protected/network.yaml`).
 
 ### Implementation
 
-- The allowlist defaults to `["*"]` (unrestricted) and is managed
-  via `delegate network show/allow/disallow/reset`.
+- The allowlist defaults to a curated set of package manager
+  registries, git forges, and ML/data science domains (composed
+  from `adapters.CORE_DOMAINS` + `adapters.DOMAIN_GROUPS`).
+  Managed via `delegate network show/allow/disallow/reset`.
 - `network.yaml` lives in `protected/` — outside agent sandbox.
 - The allowlist is read at Telephone creation time and passed to
   `SandboxSettings.network.allowedDomains`.
@@ -235,11 +243,11 @@ messages.
 | # | Invariant | Key Mechanism |
 |---|-----------|---------------|
 | 1 | Filesystem isolation | `add_dirs` narrowed to team dir |
-| 2 | Defence in depth | 5 independent security layers |
+| 2 | Defence in depth | 6 independent security layers |
 | 3 | Git state management | `disallowed_tools` + `denied_bash_patterns` |
 | 4 | UUID identity | `team_ids.json` + `team_uuid` column |
-| 5 | Dependency ordering | `_all_deps_resolved()` gates worktree creation |
+| 5 | Dependency ordering | `_all_deps_resolved()` gates worktree creation + auto-advance |
 | 6 | Daemon singleton | `fcntl.flock()` + PID file |
 | 7 | MCP tool boundary | In-process tools, no CLI/DB from agents |
-| 8 | Network isolation | `protected/network.yaml` allowlist |
+| 8 | Network isolation | `protected/network.yaml` allowlist (curated defaults) |
 | 9 | Migration safety | Numbered files + backup + verify |
