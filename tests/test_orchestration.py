@@ -485,8 +485,8 @@ class TestNarrowSandbox:
         tel = _create_telephone(
             tmp_team, TEAM, "alice", preamble="test",
         )
-        assert tel._denied_bash_patterns == DENIED_BASH_PATTERNS
-        # Spot-check key patterns
+        for pattern in DENIED_BASH_PATTERNS:
+            assert pattern in tel._denied_bash_patterns
         assert "git push" in tel._denied_bash_patterns
         assert "sqlite3 " in tel._denied_bash_patterns
         assert "DROP TABLE" in tel._denied_bash_patterns

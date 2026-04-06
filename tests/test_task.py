@@ -69,6 +69,32 @@ class TestCreateTask:
         with pytest.raises(ValueError, match="Assignee/DRI is required"):
             create_task(tmp_team, TEAM, title="Whitespace Assignee", assignee="   ")
 
+    def test_seq_starts_at_1(self, tmp_team):
+        task = create_task(tmp_team, TEAM, title="First", assignee="alice")
+        assert task["seq"] == 1
+
+    def test_seq_increments(self, tmp_team):
+        t1 = create_task(tmp_team, TEAM, title="First", assignee="alice")
+        t2 = create_task(tmp_team, TEAM, title="Second", assignee="alice")
+        assert t1["seq"] == 1
+        assert t2["seq"] == 2
+
+    def test_display_id_format(self, tmp_team):
+        task = create_task(tmp_team, TEAM, title="Build API", assignee="alice")
+        # TEAM = "testteam" -> prefix = "TEST"
+        assert task["display_id"] == "TEST-0001"
+
+    def test_display_id_increments(self, tmp_team):
+        t1 = create_task(tmp_team, TEAM, title="First", assignee="alice")
+        t2 = create_task(tmp_team, TEAM, title="Second", assignee="alice")
+        assert t1["display_id"] == "TEST-0001"
+        assert t2["display_id"] == "TEST-0002"
+
+    def test_format_task_id_uses_display_id(self, tmp_team):
+        task = create_task(tmp_team, TEAM, title="Build API", assignee="alice")
+        # After loading from DB, format_task_id should return display_id
+        assert format_task_id(task["id"]) == "TEST-0001"
+
 
 class TestGetTask:
     def test_get_existing(self, tmp_team):
@@ -352,7 +378,7 @@ class TestEventLogging:
         from delegate.chat import get_messages
         create_task(tmp_team, TEAM, title="Build API", assignee="alice", project="backend", priority="high")
         events = get_messages(tmp_team, TEAM, msg_type="event")
-        assert any("T0001 created" in e["content"] for e in events)
+        assert any("TEST-0001 created" in e["content"] for e in events)
 
     def test_assign_task_logs_event(self, tmp_team):
         from delegate.chat import get_messages
@@ -366,7 +392,7 @@ class TestEventLogging:
         t = create_task(tmp_team, TEAM, title="Build API", assignee="alice")
         change_status(tmp_team, TEAM, t["id"], "in_progress")
         events = get_messages(tmp_team, TEAM, msg_type="event")
-        assert any("T0001 Todo" in e["content"] and "In Progress" in e["content"] for e in events)
+        assert any("TEST-0001 Todo" in e["content"] and "In Progress" in e["content"] for e in events)
 
     def test_assign_task_suppress_log(self, tmp_team):
         from delegate.chat import get_messages
@@ -402,12 +428,12 @@ class TestEventLogging:
 
         # Verify the combined message format
         combined_msg = new_events[0]["content"]
-        assert "T0001" in combined_msg
+        assert "TEST-0001" in combined_msg
         assert "Todo" in combined_msg
         assert "In Progress" in combined_msg
         assert "assigned to Bob" in combined_msg
-        # Check it uses the no-colon format: "T0001 Todo → In Progress, assigned to Bob"
-        assert "T0001 Todo" in combined_msg
+        # Check it uses the no-colon format: "TEST-0001 Todo → In Progress, assigned to Bob"
+        assert "TEST-0001 Todo" in combined_msg
 
     def test_transition_task_updates_both_fields(self, tmp_team):
         from delegate.task import transition_task
@@ -551,7 +577,7 @@ class TestBranchMetadataBackfill:
         updated = change_status(tmp_team, TEAM, task["id"], "in_review")
         from delegate.paths import get_team_id
         tid = get_team_id(tmp_team, TEAM)
-        assert updated["branch"] == f"delegate/{tid}/{TEAM}/T0001"
+        assert updated["branch"] == f"delegate/{tid}/{TEAM}/TEST-0001"
 
     @patch("delegate.task.subprocess.run")
     def test_in_review_backfills_base_sha_when_empty(self, mock_run, _mock_gate, tmp_team):
@@ -615,7 +641,7 @@ class TestBranchMetadataBackfill:
         updated = change_status(tmp_team, TEAM, task["id"], "in_approval")
         from delegate.paths import get_team_id
         tid = get_team_id(tmp_team, TEAM)
-        assert updated["branch"] == f"delegate/{tid}/{TEAM}/T0001"
+        assert updated["branch"] == f"delegate/{tid}/{TEAM}/TEST-0001"
 
 
 @patch("delegate.task._validate_review_gate")
