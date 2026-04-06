@@ -29,10 +29,12 @@ lifetime is independent of DB sessions.
 
 import asyncio
 import difflib
+import functools
 import logging
 import os
 import random
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,6 +55,7 @@ from delegate.agent import (
 )
 from delegate.mailbox import (
     read_inbox,
+    claim_inbox_batch,
     mark_seen_batch,
     mark_processed_batch,
     Message,
@@ -64,6 +67,18 @@ from delegate.activity import broadcast as broadcast_activity, broadcast_thinkin
 from delegate.paths import team_dir
 
 logger = logging.getLogger(__name__)
+
+# Dedicated thread pool for blocking DB/IO operations inside run_turn().
+# Prevents synchronous SQLite calls from blocking the asyncio event loop
+# that handles HTTP traffic, SSE streams, and agent subprocess I/O.
+_db_pool = ThreadPoolExecutor(max_workers=16, thread_name_prefix="runtime-db")
+
+
+async def _to_db(fn, *args, **kwargs):
+    """Run *fn* in the runtime DB thread pool, keeping the event loop free."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_db_pool, functools.partial(fn, *args, **kwargs))
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -113,7 +128,39 @@ DENIED_BASH_PATTERNS = [
     "sqlite3 ",          # trailing space avoids matching variable names
     "DROP TABLE",
     "DELETE FROM",
+    "TRUNCATE ",
+    "ALTER TABLE",
 ]
+
+# Git commands that the researcher role is allowed to use beyond the
+# standard restrictions.  git checkout and git branch are needed for
+# managing experiment branches within the worktree.
+_RESEARCHER_GIT_ALLOWLIST = {
+    "git checkout",
+    "git branch",
+}
+
+
+def _sandbox_for_role(role: str) -> tuple[list[str], list[str]]:
+    """Return (disallowed_tools, denied_bash_patterns) adjusted for *role*.
+
+    Researchers need ``git checkout`` and ``git branch`` to manage
+    experiment branches within their worktree.  All other restrictions
+    remain.  ``git reset --hard`` is NOT allowed — researchers commit
+    reverts instead to preserve experiment history.
+    """
+    if role != "researcher":
+        return DISALLOWED_TOOLS, list(DENIED_BASH_PATTERNS)
+
+    disallowed = [
+        t for t in DISALLOWED_TOOLS
+        if not any(cmd in t for cmd in _RESEARCHER_GIT_ALLOWLIST)
+    ]
+    denied = [
+        p for p in DENIED_BASH_PATTERNS
+        if p not in _RESEARCHER_GIT_ALLOWLIST
+    ]
+    return disallowed, denied
 
 # Reflection: ~1-in-20 coin flip per turn
 REFLECTION_PROBABILITY = 0.05
@@ -157,7 +204,7 @@ class TelephoneExchange:
             try:
                 await tel.close()
             except Exception:
-                pass
+                logger.debug("Error closing Telephone", exc_info=True)
         self._telephones.clear()
 
 
@@ -424,6 +471,10 @@ MCP_TOOL_FORMATTERS: dict[str, Any] = {
     "repo_list": lambda inp: ("repo", "list repos"),
     # Git — category: "git"
     "rebase_to_main": lambda inp: ("git", f'rebase T{inp.get("task_id", 0):04d} to main'),
+    # Review — category: "review"
+    "task_diff": lambda inp: ("review", f'diff T{inp.get("task_id", 0):04d}'),
+    "task_approve": lambda inp: ("review", f'approve T{inp.get("task_id", 0):04d}'),
+    "task_reject": lambda inp: ("review", f'reject T{inp.get("task_id", 0):04d}'),
 }
 
 
@@ -571,6 +622,7 @@ def _create_telephone(
     role: str = "engineer",
     model: str | None = None,
     ad: Path | None = None,
+    mcp_server_factory: Any | None = None,
 ) -> Any:
     """Create a new Telephone for an agent.
 
@@ -598,6 +650,11 @@ def _create_telephone(
 
     The ``on_rotation`` callback writes the rotation summary
     to the agent's ``context.md``.
+
+    When ``mcp_server_factory`` is provided, it is called as
+    ``mcp_server_factory(team, agent)`` to produce the MCP server
+    instead of using the local ``create_agent_mcp_server``.  This is
+    used by satellites to inject HTTP-backed remote MCP tools.
     """
     if ad is None:
         ad = _agent_dir(hc_home, team, agent)
@@ -619,11 +676,12 @@ def _create_telephone(
     git_dirs = _repo_git_dirs(hc_home, team)
     add_dirs.extend(git_dirs)
 
-    # In-process MCP server — runs inside daemon, outside agent sandbox.
-    # Gives agents safe access to DB/config via tool calls instead of CLI.
-    from delegate.mcp_tools import create_agent_mcp_server
-
-    mcp_server = create_agent_mcp_server(hc_home, team, agent)
+    # MCP server — pluggable: local (default) or remote (satellite)
+    if mcp_server_factory is not None:
+        mcp_server = mcp_server_factory(team, agent)
+    else:
+        from delegate.mcp_tools import create_agent_mcp_server
+        mcp_server = create_agent_mcp_server(hc_home, team, agent)
     mcp_servers = {"delegate": mcp_server} if mcp_server is not None else None
 
     # Network allowlist — read from protected/network.yaml
@@ -639,14 +697,16 @@ def _create_telephone(
     cache_root.mkdir(parents=True, exist_ok=True)
     settings_env = build_cache_env(str(cache_root))
 
+    disallowed, denied = _sandbox_for_role(role)
+
     return Telephone(
         preamble=preamble,
         cwd=team_dir(hc_home, team),
         model=model,
         allowed_write_paths=_write_paths_for_role(hc_home, team, agent, role) + [tmpdir],
         add_dirs=add_dirs,
-        disallowed_tools=DISALLOWED_TOOLS,
-        denied_bash_patterns=DENIED_BASH_PATTERNS,
+        disallowed_tools=disallowed,
+        denied_bash_patterns=denied,
         on_rotation=_on_rotation,
         sandbox_enabled=True,
         mcp_servers=mcp_servers,
@@ -713,6 +773,7 @@ async def run_turn(
     agent: str,
     *,
     exchange: TelephoneExchange,
+    mcp_server_factory: Any | None = None,
 ) -> TurnResult:
     """Run a single turn for an agent.
 
@@ -756,20 +817,24 @@ async def run_turn(
 
     # Set logging caller context for all log lines during this turn
     _prev_caller = log_caller.set(f"{agent}:{role}")
-    # Resolve model: prefer direct 'model' field, fall back from legacy 'seniority'
-    _SENIORITY_MAP = {"senior": "opus", "junior": "sonnet"}
-    model = (
-        state.get("model")
-        or _SENIORITY_MAP.get(state.get("seniority", ""), None)
-        or (DEFAULT_MANAGER_MODEL if role == "manager" else DEFAULT_MODEL)
-    )
+    from delegate.agent import resolve_model
+    model = resolve_model(state, role)
     token_budget = state.get("token_budget")
     max_turns = max(1, token_budget // 4000) if token_budget else None
 
-    # --- Message selection: pick ≤5 with same task_id (human first) ---
+    # --- Message selection: atomically claim ≤5 with same task_id (human first) ---
+    # claim_inbox_batch fetches candidates and marks only the selected batch
+    # as seen inside a single BEGIN IMMEDIATE transaction.  Messages not
+    # selected remain untouched and eligible for the next dispatch cycle.
+    # Runs in a thread pool so the BEGIN IMMEDIATE lock doesn't block the
+    # event loop (previously a major bottleneck with many concurrent agents).
     from delegate.config import get_default_human
-    inbox = read_inbox(hc_home, team, agent, unread_only=True)
-    batch = _select_batch(inbox, human_name=get_default_human(hc_home))
+    human_name = get_default_human(hc_home)
+    batch = await _to_db(
+        claim_inbox_batch,
+        hc_home, team, agent, limit=50,
+        select_fn=lambda msgs: _select_batch(msgs, human_name=human_name),
+    )
 
     if not batch:
         log_caller.reset(_prev_caller)
@@ -781,11 +846,12 @@ async def run_turn(
     if current_task_id is not None:
         try:
             from delegate.task import get_task as _get_task
-            current_task = _get_task(hc_home, team, current_task_id)
+            current_task = await _to_db(_get_task, hc_home, team, current_task_id)
         except Exception:
-            logger.debug("Could not resolve task %s", current_task_id)
+            logger.warning("Could not resolve task %s", current_task_id, exc_info=True)
 
     # --- Skip cancelled/done tasks: mark messages processed and return ---
+    # Messages are already marked seen by claim_inbox_batch above.
     if current_task and current_task.get("status") in ("cancelled", "done"):
         logger.info(
             "Task %s is %s — discarding %d message(s) for %s",
@@ -795,8 +861,7 @@ async def run_turn(
         msg_ids = [m.id for m in batch if m.id is not None]
         if msg_ids:
             ts_now = datetime.now(timezone.utc).isoformat()
-            mark_seen_batch(hc_home, team, msg_ids)
-            mark_processed_batch(hc_home, team, msg_ids)
+            await _to_db(mark_processed_batch, hc_home, team, msg_ids)
             broadcast_msg_status(team, msg_ids, "seen_at", ts_now)
             broadcast_msg_status(team, msg_ids, "processed_at", ts_now)
         log_caller.reset(_prev_caller)
@@ -807,11 +872,11 @@ async def run_turn(
         hc_home, team, agent, current_task,
     )
 
-    # --- Mark selected messages as seen ---
+    # Messages were already atomically marked seen by claim_inbox_batch.
+    # Broadcast the seen status to SSE subscribers.
     seen_ids = [m.id for m in batch if m.id is not None]
     if seen_ids:
         seen_ts = datetime.now(timezone.utc).isoformat()
-        mark_seen_batch(hc_home, team, seen_ids)
         broadcast_msg_status(team, seen_ids, "seen_at", seen_ts)
 
     for inbox_msg in batch:
@@ -822,7 +887,7 @@ async def run_turn(
     broadcast_turn_event('turn_started', agent, team=team, task_id=current_task_id, sender=primary_sender)
 
     # --- Start DB session (1:1 with run_turn) ---
-    session_id = start_session(hc_home, team, agent, task_id=current_task_id)
+    session_id = await _to_db(start_session, hc_home, team, agent, task_id=current_task_id)
     result.session_id = session_id
 
     alog.session_start_log(
@@ -896,6 +961,7 @@ async def run_turn(
             role=role,
             model=model,
             ad=ad,
+            mcp_server_factory=mcp_server_factory,
         )
         exchange.put(team, agent, tel)
 
@@ -905,16 +971,24 @@ async def run_turn(
     # worktree paths that change per-turn.
     if role != "manager" and workspace_paths:
         _tmpdir = str(Path(tempfile.gettempdir()).resolve())
+        _extra_paths = [str(p) for p in workspace_paths.values()]
+        # Researchers get write access to the task artifacts directory
+        # and ARTIFACTS_DIR env var for their scripts.
+        if role == "researcher" and current_task_id is not None:
+            from delegate.paths import task_artifacts_dir
+            _art_dir = task_artifacts_dir(hc_home, team, current_task_id)
+            _extra_paths.append(str(_art_dir))
+            tel.settings_env["ARTIFACTS_DIR"] = str(_art_dir)
         tel.allowed_write_paths = (
             _write_paths_for_role(hc_home, team, agent, role)
-            + [str(p) for p in workspace_paths.values()]
+            + _extra_paths
             + [_tmpdir]
         )
 
     user_msg = prompt_builder.build_user_message(
         messages=batch,
         current_task=current_task,
-        workspace_paths=workspace_paths or None,
+        workspace_paths=workspace_paths,
     )
 
     task_label = format_task_id(current_task_id) if current_task_id else ""
@@ -948,15 +1022,39 @@ async def run_turn(
         try:
             await _stream_telephone(tel, user_msg, **stream_kw)
 
+        except asyncio.CancelledError:
+            alog.info("Turn interrupted")
+            result.error = "interrupted"
+            result.turns = 1
+            error_occurred = True
+            await _to_db(_mark_batch_processed, hc_home, team, batch)
+            raise
         except Exception as exc:
             alog.session_error(exc)
             result.error = str(exc)
             result.turns = 1
             error_occurred = True
-            _mark_batch_processed(hc_home, team, batch)
+            await _to_db(_mark_batch_processed, hc_home, team, batch)
+            # Invalidate the Telephone so the next turn gets a fresh
+            # subprocess — a fatal SDK error (e.g. JSON buffer overflow)
+            # leaves the cached Telephone in a broken state.
+            try:
+                logger.warning(
+                    "Removing broken telephone for %s/%s after fatal error: %s",
+                    team, agent, exc,
+                )
+                removed_tel = exchange.remove(team, agent)
+                if removed_tel is not None:
+                    try:
+                        await removed_tel.close()
+                    except Exception:
+                        logger.debug("Failed to close removed telephone for %s/%s", team, agent, exc_info=True)
+            except Exception:
+                logger.exception("Failed to remove telephone for %s/%s", team, agent)
     finally:
         try:
-            end_session(
+            await _to_db(
+                end_session,
                 hc_home, team, session_id,
                 tokens_in=turn.input_tokens, tokens_out=turn.output_tokens,
                 cost_usd=turn.cost_usd,
@@ -1040,7 +1138,8 @@ async def run_turn(
         tool_calls=turn_tools or None,
     )
 
-    update_session_tokens(
+    await _to_db(
+        update_session_tokens,
         hc_home, team, session_id,
         tokens_in=turn.input_tokens,
         tokens_out=turn.output_tokens,
@@ -1049,16 +1148,18 @@ async def run_turn(
         cache_write_tokens=turn.cache_write_tokens,
     )
 
-    _mark_batch_processed(hc_home, team, batch)
+    await _to_db(_mark_batch_processed, hc_home, team, batch)
 
     # Re-check task association
     if current_task_id is None:
         try:
             from delegate.task import list_tasks as _list_tasks
-            open_tasks = _list_tasks(hc_home, team, assignee=agent, status="in_progress")
+            open_tasks = await _to_db(
+                _list_tasks, hc_home, team, assignee=agent, status="in_progress",
+            )
             if open_tasks:
                 current_task_id = open_tasks[0]["id"]
-                update_session_task(hc_home, team, session_id, current_task_id)
+                await _to_db(update_session_task, hc_home, team, session_id, current_task_id)
                 alog.info(
                     "Task association updated | task=%s",
                     format_task_id(current_task_id),
@@ -1128,7 +1229,8 @@ async def run_turn(
         result.turns = turn_num
 
         try:
-            update_session_tokens(
+            await _to_db(
+                update_session_tokens,
                 hc_home, team, session_id,
                 tokens_in=total.input_tokens,
                 tokens_out=total.output_tokens,
@@ -1155,6 +1257,36 @@ async def run_turn(
         broadcast_turn_event('turn_ended', agent, team=team, task_id=current_task_id, sender=primary_sender)
         log_caller.reset(_prev_caller)
 
+    # --- Researcher auto-continuation ---
+    # After a successful turn, re-check the task status.  If still
+    # "researching", inject a system continuation message so the daemon
+    # dispatches another turn automatically.  If the human paused the
+    # task mid-turn, send a wrap-up message instead so the researcher
+    # documents progress before going idle.
+    #
+    # If background processes are running, defer the continuation until
+    # they complete — avoids expensive poll turns where the researcher
+    # rebuilds the full prompt just to call check_background.
+    if (
+        role == "researcher"
+        and current_task_id is not None
+        and not error_occurred
+    ):
+        try:
+            disposition = await _to_db(
+                _auto_continue_researcher,
+                hc_home, team, agent, current_task_id, alog,
+            )
+            if disposition == "deferred":
+                _schedule_deferred_bg_check(
+                    hc_home, team, agent, current_task_id, alog,
+                )
+        except Exception:
+            logger.debug(
+                "Researcher auto-continue check failed for %s/%s",
+                team, agent, exc_info=True,
+            )
+
     return result
 
 
@@ -1169,3 +1301,217 @@ def _mark_batch_processed(hc_home: Path, team: str, batch: list[Message]) -> Non
         processed_ts = datetime.now(timezone.utc).isoformat()
         mark_processed_batch(hc_home, team, ids)
         broadcast_msg_status(team, ids, "processed_at", processed_ts)
+
+
+# --- Researcher auto-continuation ---
+
+_CONTINUE_MSG = (
+    "SYSTEM: Auto-continue — your previous turn completed.  "
+    "Continue your experiment loop.  Review your results file, "
+    "decide what to try next, and run the next experiment.  "
+    "Do NOT ask for permission — keep going."
+)
+
+_BG_DONE_MSG = (
+    "SYSTEM: Auto-continue — background process(es) finished since your "
+    "last turn.  Review the results and continue your experiment loop.\n\n"
+    "{summary}"
+)
+
+# How often to check if deferred background processes have completed (seconds).
+_BG_POLL_INTERVAL = 30
+
+_WRAP_UP_MSG = (
+    "SYSTEM: The human has paused this research task.  "
+    "Before you stop, you MUST document your progress:\n\n"
+    "1. Add a task_comment summarising:\n"
+    "   - Total experiments run and the best result vs baseline\n"
+    "   - Key findings — what worked, what didn't, and why\n"
+    "   - Recommended next steps if research is resumed\n"
+    "   - Paths to your results file and any saved artifacts\n"
+    "2. Save any unsaved artifacts (models, logs, reports) "
+    "via artifact_save.\n"
+    "3. Send a brief mailbox_send to the manager with the summary.\n\n"
+    "After documenting, your work is done — do not start new experiments."
+)
+
+
+def _auto_continue_researcher(
+    hc_home: Path,
+    team: str,
+    agent: str,
+    task_id: int,
+    alog: AgentLogger,
+) -> str:
+    """Inject a continuation or wrap-up message for a researcher.
+
+    Called after a successful researcher turn.  Re-reads the task
+    status from the DB (it may have been changed by the human or
+    manager during the turn) and decides:
+
+    * ``researching`` with **no** running background processes →
+      inject continuation immediately (``"sent"``).
+    * ``researching`` with running background processes →
+      **defer** continuation until processes complete (``"deferred"``).
+      This avoids expensive poll turns where the researcher just calls
+      ``check_background`` and waits.
+    * ``paused`` → inject a wrap-up message (``"sent"``).
+    * anything else → do nothing (``"skip"``).
+
+    Returns ``"sent"``, ``"deferred"``, or ``"skip"``.
+    """
+    from delegate.task import get_task as _get_task
+    from delegate.mailbox import send as _mailbox_send
+    from delegate.config import SYSTEM_USER
+
+    try:
+        task = _get_task(hc_home, team, task_id)
+    except Exception:
+        return "skip"  # task deleted or inaccessible — nothing to do
+
+    status = task.get("status", "")
+
+    if status == "researching":
+        # Check for running background processes — if any are still going,
+        # defer the continuation so we don't waste a full prompt turn on
+        # a check_background poll.
+        from delegate.background import list_active
+        from delegate.paths import agent_dir as _agent_dir
+        ad = _agent_dir(hc_home, team, agent)
+        active = list_active(ad)
+        if active:
+            labels = ", ".join(p.label or p.handle[:8] for p in active)
+            alog.info(
+                "Deferring auto-continue for %s — %d background process(es) running: %s",
+                format_task_id(task_id), len(active), labels,
+            )
+            return "deferred"
+
+        _mailbox_send(
+            hc_home, team,
+            sender=SYSTEM_USER,
+            recipient=agent,
+            message=_CONTINUE_MSG,
+            task_id=task_id,
+        )
+        alog.info("Auto-continue injected for task %s", format_task_id(task_id))
+        return "sent"
+
+    elif status == "paused":
+        _mailbox_send(
+            hc_home, team,
+            sender=SYSTEM_USER,
+            recipient=agent,
+            message=_WRAP_UP_MSG,
+            task_id=task_id,
+        )
+        alog.info("Wrap-up message injected for paused task %s", format_task_id(task_id))
+        return "sent"
+
+    return "skip"
+
+
+def _deferred_bg_check(
+    hc_home: Path,
+    team: str,
+    agent: str,
+    task_id: int,
+    alog: AgentLogger,
+) -> None:
+    """Check if background processes have completed; if so, inject continuation.
+
+    Called on a timer after ``_auto_continue_researcher`` returned ``"deferred"``.
+    If processes are still running, reschedules itself.  If all are done,
+    sends a continuation message with a summary of completed processes.
+    """
+    from delegate.task import get_task as _get_task
+    from delegate.background import list_active, list_all
+    from delegate.mailbox import send as _mailbox_send
+    from delegate.config import SYSTEM_USER
+    from delegate.paths import agent_dir as _agent_dir
+
+    # Re-check task status (may have been paused/cancelled while waiting)
+    try:
+        task = _get_task(hc_home, team, task_id)
+    except Exception:
+        return
+    status = task.get("status", "")
+    if status not in ("researching", "paused"):
+        return  # task moved to terminal state — stop checking
+
+    if status == "paused":
+        _mailbox_send(
+            hc_home, team,
+            sender=SYSTEM_USER,
+            recipient=agent,
+            message=_WRAP_UP_MSG,
+            task_id=task_id,
+        )
+        alog.info("Wrap-up message injected (deferred) for paused task %s", format_task_id(task_id))
+        return
+
+    ad = _agent_dir(hc_home, team, agent)
+    active = list_active(ad)
+    if active:
+        # Still running — reschedule
+        labels = ", ".join(p.label or p.handle[:8] for p in active)
+        alog.debug(
+            "Background processes still running for %s: %s — rechecking in %ds",
+            format_task_id(task_id), labels, _BG_POLL_INTERVAL,
+        )
+        _schedule_deferred_bg_check(hc_home, team, agent, task_id, alog)
+        return
+
+    # All done — build summary of recently completed processes
+    all_procs = list_all(ad)
+    recently_done = [
+        p for p in all_procs
+        if p.state in ("completed", "failed", "timed_out")
+        and p.ended_at is not None
+    ]
+    # Only include processes that ended in the last 10 minutes
+    import time as _time
+    cutoff = _time.time() - 600
+    recent = [p for p in recently_done if p.ended_at > cutoff]
+
+    summary_parts = []
+    for p in recent[-5:]:  # last 5
+        status_str = f"{p.state} (exit {p.exit_code})" if p.exit_code is not None else p.state
+        summary_parts.append(f"- [{p.label or p.handle[:8]}] {status_str}")
+
+    summary = "\n".join(summary_parts) if summary_parts else "Background processes completed."
+    msg = _BG_DONE_MSG.format(summary=summary)
+
+    _mailbox_send(
+        hc_home, team,
+        sender=SYSTEM_USER,
+        recipient=agent,
+        message=msg,
+        task_id=task_id,
+    )
+    alog.info(
+        "Deferred auto-continue injected for %s — %d process(es) completed",
+        format_task_id(task_id), len(recent),
+    )
+
+
+def _schedule_deferred_bg_check(
+    hc_home: Path,
+    team: str,
+    agent: str,
+    task_id: int,
+    alog: AgentLogger,
+) -> None:
+    """Schedule a deferred background process check on the event loop."""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        return  # no event loop — can't schedule
+
+    def _run_check():
+        try:
+            _deferred_bg_check(hc_home, team, agent, task_id, alog)
+        except Exception:
+            logger.debug("Deferred bg check failed for %s/%s", team, agent, exc_info=True)
+
+    loop.call_later(_BG_POLL_INTERVAL, _run_check)

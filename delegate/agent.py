@@ -12,7 +12,6 @@ The actual turn execution loop lives in ``delegate.runtime``.
 """
 
 import logging
-import re
 import sys
 import time
 from pathlib import Path
@@ -21,7 +20,7 @@ from typing import Any
 import yaml
 
 from delegate.paths import agent_dir as _resolve_agent_dir, agents_dir, base_charter_dir
-from delegate.mailbox import read_inbox, recent_processed
+from delegate.mailbox import read_inbox
 from delegate.task import format_task_id
 
 logger = logging.getLogger(__name__)
@@ -29,14 +28,45 @@ logger = logging.getLogger(__name__)
 # Default idle timeout in seconds (10 minutes)
 DEFAULT_IDLE_TIMEOUT = 600
 
-# Context window: how many recent processed messages to include per turn
-CONTEXT_MSGS_SAME_SENDER = 5   # from the primary sender of the new message
-CONTEXT_MSGS_OTHERS = 3         # most recent from anyone else
-
 # Allowed model values and defaults
 ALLOWED_MODELS = ("opus", "sonnet")
 DEFAULT_MODEL = "sonnet"
 DEFAULT_MANAGER_MODEL = "sonnet"
+
+# Legacy seniority -> model mapping for backward compatibility
+SENIORITY_MAP = {"senior": "opus", "junior": "sonnet"}
+
+
+def resolve_model(state: dict, role: str) -> str:
+    """Resolve the model for an agent from its state and role."""
+    return (
+        state.get("model")
+        or SENIORITY_MAP.get(state.get("seniority", ""), None)
+        or (DEFAULT_MANAGER_MODEL if role == "manager" else DEFAULT_MODEL)
+    )
+
+
+def build_max_tasks_notice(hc_home, team: str) -> str:
+    """Build the max-tasks notice string for the manager prompt."""
+    from delegate.config import get_max_tasks_config
+    mt_cfg = get_max_tasks_config(hc_home, team)
+    if not mt_cfg["enabled"]:
+        return ""
+    from delegate.task import count_tasks_by_status, IN_PROGRESS_STATUSES, QUEUED_STATUSES
+    in_prog = count_tasks_by_status(hc_home, team, IN_PROGRESS_STATUSES)
+    queued = count_tasks_by_status(hc_home, team, QUEUED_STATUSES)
+    lip = mt_cfg["limit_in_progress"]
+    lq = mt_cfg["limit_queued"]
+    parts = []
+    if in_prog >= lip:
+        parts.append(f"In-progress: {in_prog}/{lip} — LIMIT REACHED")
+    else:
+        parts.append(f"In-progress: {in_prog}/{lip}")
+    if queued >= lq:
+        parts.append(f"Queued: {queued}/{lq} — LIMIT REACHED, do NOT create new tasks")
+    else:
+        parts.append(f"Queued: {queued}/{lq}")
+    return f"\n** TASK LIMITS: {' | '.join(parts)} **\n"
 
 
 # ---------------------------------------------------------------------------
@@ -229,12 +259,6 @@ def _read_state(ad: Path) -> dict:
     return {}
 
 
-def _write_state(ad: Path, state: dict) -> None:
-    (ad / "state.yaml").write_text(
-        yaml.dump(state, default_flow_style=False)
-    )
-
-
 def _next_worklog_number(ad: Path) -> int:
     logs_dir = ad / "logs"
     if not logs_dir.is_dir():
@@ -267,44 +291,6 @@ def _get_current_task_id(hc_home: Path, team: str, agent: str) -> int | None:
     """Get the ID of the agent's current task, if exactly one."""
     task = _get_current_task(hc_home, team, agent)
     return task["id"] if task else None
-
-
-# ---------------------------------------------------------------------------
-# Git worktree helpers
-# ---------------------------------------------------------------------------
-
-def _slugify(title: str, max_len: int = 40) -> str:
-    """Convert a task title to a branch-safe slug.
-
-    Example: "Build the REST API endpoint" -> "build-the-rest-api-endpoint"
-    """
-    slug = title.lower().strip()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    slug = slug.strip("-")
-    return slug[:max_len].rstrip("-")
-
-
-def _branch_name(hc_home: Path, team: str, task_id: int, title: str = "") -> str:
-    """Compute the branch name for a task.
-
-    Format: ``delegate/<team_id>/<team>/T<task_id>``
-    The team_id (6-char hex) prevents collisions when a team is deleted and
-    recreated; the team name keeps branches human-readable.
-    """
-    from delegate.paths import get_team_id
-    tid = get_team_id(hc_home, team)
-    return f"delegate/{tid}/{team}/{format_task_id(task_id)}"
-
-
-def push_task_branch(hc_home: Path, team: str, task: dict) -> bool:
-    """Push the task's branch to origin in all repos.
-
-    Returns True if at least one push succeeded, False otherwise.
-    """
-    # NOTE: Removed push_branch() call. Delegate works with local branches only.
-    # Worktrees share the same .git directory, so all branches are visible locally.
-    # The merge worker (merge.py) works with local branches directly.
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -341,9 +327,7 @@ def build_system_prompt(
 
     state = yaml.safe_load((ad / "state.yaml").read_text()) or {}
     role = state.get("role", "engineer")
-    # Resolve model: prefer "model" field, fall back from legacy "seniority"
-    _SENIORITY_MAP = {"senior": "opus", "junior": "sonnet"}
-    model_name = state.get("model") or _SENIORITY_MAP.get(state.get("seniority", ""), None) or (DEFAULT_MANAGER_MODEL if role == "manager" else DEFAULT_MODEL)
+    model_name = resolve_model(state, role)
     human_name = get_default_human(hc_home) or "human"
     manager_name = get_member_by_role(hc_home, team, "manager") or "delegate"
 
@@ -371,12 +355,25 @@ def build_system_prompt(
         "worker": "engineer.md",   # legacy: workers map to engineer role charter
     }
     role_charter_name = _role_file_map.get(role, f"{role}.md")
-    role_block = ""
+    role_parts: list[str] = []
     role_path = charter_dir / "roles" / role_charter_name
     if role_path.is_file():
         content = role_path.read_text().strip()
         if content:
-            role_block = f"\n\n---\n\n{content}"
+            role_parts.append(content)
+
+    # Append applicable addon charters (e.g. ml.md when GPU detected)
+    if role == "researcher":
+        from delegate.adapters import probe_environment
+        env_info = probe_environment()
+        if env_info and "GPU: None" not in env_info:
+            addon_path = charter_dir / "addons" / "ml.md"
+            if addon_path.is_file():
+                addon_content = addon_path.read_text().strip()
+                if addon_content:
+                    role_parts.append(addon_content)
+
+    role_block = ("\n\n---\n\n" + "\n\n".join(role_parts)) if role_parts else ""
 
     # --- 3. Team override charter ---
     override_block = ""
@@ -409,6 +406,17 @@ def build_system_prompt(
         )
 
     # --- 4–5. Agent identity + commands (stable per agent) ---
+
+    # Task-freeze / max-tasks notices (manager only)
+    from delegate.config import is_task_creation_frozen
+    task_freeze_notice = ""
+    if role == "manager" and is_task_creation_frozen(hc_home, team):
+        task_freeze_notice = (
+            "\n** TASK CREATION FREEZE IS ON — do NOT create new tasks. "
+            "Continue managing existing tasks normally. **\n"
+        )
+
+    max_tasks_notice = build_max_tasks_notice(hc_home, team) if role == "manager" else ""
 
     # --- 6. Reflections & feedback (inline if present) ---
     inlined_notes_block = ""
@@ -471,6 +479,10 @@ def build_system_prompt(
 
     files_block = "\n".join(file_pointers)
 
+    # --- Hardware context (researcher only) ---
+    from delegate.prompt import format_hardware_block
+    hardware_block = format_hardware_block(role)
+
     return f"""\
 === TEAM CHARTER ===
 
@@ -480,6 +492,7 @@ def build_system_prompt(
 
 You are {agent} (role: {role}, model: {model_name}), a team member in the Delegate system.
 {human_name} is the human team member. You report to {manager_name} (manager).
+{task_freeze_notice}{max_tasks_notice}
 
 CRITICAL: You communicate ONLY by using MCP tools. Your conversational
 replies are NOT seen by anyone — they only go to an internal log. To send a
@@ -496,8 +509,8 @@ Communication:
 
 Task management:
   task_create(title, description?, priority?, repo?, depends_on?) — create a task
-  task_list(status?, assignee?) — list tasks with optional filters
-  task_show(task_id) — show task details
+  task_list(status?, assignee?) — summary list (id, title, status, assignee, priority). Excludes done/cancelled by default.
+  task_show(task_id) — full task details (description, comments, branch, commits, etc.). Use this to deep-dive on a specific task.
   task_assign(task_id, assignee) — assign a task
   task_status(task_id, new_status) — change task status
   task_comment(task_id, body) — add a comment to a task
@@ -510,7 +523,7 @@ Repository:
 
 Use these tools directly — do NOT run CLI commands for messaging or task management.
 For coding work, use standard bash, file editing, and git (add, commit, diff, log, status).
-{inlined_notes_block}
+{hardware_block}{inlined_notes_block}
 
 REFERENCE FILES (read as needed):
 {files_block}
@@ -592,15 +605,23 @@ def build_user_message(
                 f"\n- Do NOT switch branches — stay on {current_task.get('branch', '')}."
                 "\n- Your branch is local-only and will be merged by the merge worker when approved."
             )
-            parts.append(
-                "\n## Environment setup — MANDATORY FIRST STEP\n"
-                "Before writing ANY code or running ANY command, you MUST:\n"
-                "1. Run: `ls .delegate/setup.sh 2>/dev/null && echo EXISTS || echo MISSING`\n"
-                "2. If EXISTS: source it — `. .delegate/setup.sh`\n"
-                "3. If MISSING: create `.delegate/setup.sh` and `.delegate/premerge.sh` "
-                "following the Environment Setup charter section, commit them, THEN source setup.sh.\n"
-                "Do NOT skip this step. Do NOT proceed to any coding work until the environment is active."
-            )
+            # Only include verbose setup instructions if setup.sh doesn't exist yet.
+            # Once created, the agent knows the pattern — no need to repeat every turn.
+            first_worktree = next(iter(workspace_paths.values()))
+            if not (first_worktree / ".delegate" / "setup.sh").exists():
+                parts.append(
+                    "\n## Environment setup — MANDATORY FIRST STEP\n"
+                    "Before writing ANY code or running ANY command, you MUST:\n"
+                    "1. Run: `ls .delegate/setup.sh 2>/dev/null && echo EXISTS || echo MISSING`\n"
+                    "2. If EXISTS: source it — `. .delegate/setup.sh`\n"
+                    "3. If MISSING: create `.delegate/setup.sh` and `.delegate/premerge.sh` "
+                    "following the Environment Setup charter section, commit them, THEN source setup.sh.\n"
+                    "Do NOT skip this step. Do NOT proceed to any coding work until the environment is active."
+                )
+            else:
+                parts.append(
+                    "\nEnvironment: source `.delegate/setup.sh` before running commands."
+                )
 
         # Task activity — status/assignee transitions, comments, events
         try:

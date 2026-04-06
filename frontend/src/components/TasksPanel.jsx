@@ -4,6 +4,7 @@ import { cap, prettyName, fmtStatus, taskIdStr } from "../utils.js";
 import { playTaskSound, playApprovalSound } from "../audio.js";
 import { seedTaskCache } from "./TaskSidePanel.jsx";
 import { FilterBar, applyFilters } from "./FilterBar.jsx";
+import { fetchMergeOrder, fetchReviewer, setReviewer, fetchTaskFreeze, setTaskFreeze, fetchMaxTasks, setMaxTasks } from "../api.js";
 import { PillSelect } from "./PillSelect.jsx";
 import { CopyBtn } from "./CopyBtn.jsx";
 
@@ -29,6 +30,14 @@ export function TasksPanel() {
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [collapsedTeams, setCollapsedTeams] = useState(new Set());
+  const [mergeSort, setMergeSort] = useState(false);
+  const [mergeOrder, setMergeOrder] = useState(null);
+  const [reviewerAI, setReviewerAI] = useState(false);
+  const [autoMerge, setAutoMerge] = useState(false);
+  const [taskFreezeOn, setTaskFreezeOn] = useState(false);
+  const [maxTasksEnabled, setMaxTasksEnabled] = useState(false);
+  const [maxTasksInProgress, setMaxTasksInProgress] = useState(5);
+  const [maxTasksQueued, setMaxTasksQueued] = useState(10);
   const searchTimerRef = useRef(null);
   const prevStatusRef = useRef({});
 
@@ -43,6 +52,7 @@ export function TasksPanel() {
         setSearchQuery(saved.search);
         setSearchExpanded(true); // Expand if there was saved search text
       }
+      if (saved.mergeSort) setMergeSort(true);
     } catch (e) { }
   }, []);
 
@@ -50,10 +60,10 @@ export function TasksPanel() {
   useEffect(() => {
     try {
       sessionStorage.setItem("taskFilters2", JSON.stringify({
-        filters, search: searchQuery,
+        filters, search: searchQuery, mergeSort,
       }));
     } catch (e) { }
-  }, [filters, searchQuery]);
+  }, [filters, searchQuery, mergeSort]);
 
   // History API: push state on filter change
   const filtersRef = useRef(filters);
@@ -96,6 +106,89 @@ export function TasksPanel() {
     if (approvalNeeded) playApprovalSound();
     if (doneNeeded) playTaskSound();
   }, [allTasks]);
+
+  // Fetch merge order when toggle is on
+  useEffect(() => {
+    if (!mergeSort) { setMergeOrder(null); return; }
+    let cancelled = false;
+    fetchMergeOrder(team).then(data => { if (!cancelled) setMergeOrder(data); });
+    return () => { cancelled = true; };
+  }, [mergeSort, team, allTasks]);
+
+  // Fetch reviewer state (includes auto_merge) on mount / team change
+  useEffect(() => {
+    let cancelled = false;
+    fetchReviewer(team).then(data => {
+      if (cancelled) return;
+      setReviewerAI(data?.mode === "ai");
+      setAutoMerge(!!data?.auto_merge);
+    });
+    return () => { cancelled = true; };
+  }, [team]);
+
+  // Fetch task-freeze state on mount / team change
+  useEffect(() => {
+    let cancelled = false;
+    fetchTaskFreeze(team).then(data => { if (!cancelled) setTaskFreezeOn(!!data?.enabled); });
+    return () => { cancelled = true; };
+  }, [team]);
+
+  // Fetch max-tasks config on mount / team change
+  useEffect(() => {
+    let cancelled = false;
+    fetchMaxTasks(team).then(data => {
+      if (!cancelled) {
+        setMaxTasksEnabled(!!data?.enabled);
+        setMaxTasksInProgress(data?.limit_in_progress ?? 5);
+        setMaxTasksQueued(data?.limit_queued ?? 10);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [team]);
+
+  const toggleReviewer = useCallback(() => {
+    const next = !reviewerAI;
+    setReviewerAI(next);
+    // AI Review ON → auto-merge is forced ON
+    if (next) setAutoMerge(true);
+    setReviewer(team, { mode: next ? "ai" : "human" });
+  }, [reviewerAI, team]);
+
+  const toggleAutoMerge = useCallback(() => {
+    // Cannot turn off auto-merge while AI Review is on
+    if (reviewerAI) return;
+    const next = !autoMerge;
+    setAutoMerge(next);
+    setReviewer(team, { auto_merge: next });
+  }, [autoMerge, reviewerAI, team]);
+
+  const toggleTaskFreeze = useCallback(() => {
+    const next = !taskFreezeOn;
+    setTaskFreezeOn(next);
+    setTaskFreeze(team, { enabled: next });
+  }, [taskFreezeOn, team]);
+
+  const toggleMaxTasks = useCallback(() => {
+    const next = !maxTasksEnabled;
+    setMaxTasksEnabled(next);
+    setMaxTasks(team, { enabled: next, limit_in_progress: maxTasksInProgress, limit_queued: maxTasksQueued });
+  }, [maxTasksEnabled, team, maxTasksInProgress, maxTasksQueued]);
+
+  const updateMaxTasksInProgress = useCallback((val) => {
+    const n = Math.max(1, parseInt(val) || 5);
+    setMaxTasksInProgress(n);
+    if (maxTasksEnabled) {
+      setMaxTasks(team, { enabled: true, limit_in_progress: n });
+    }
+  }, [maxTasksEnabled, team]);
+
+  const updateMaxTasksQueued = useCallback((val) => {
+    const n = Math.max(1, parseInt(val) || 10);
+    setMaxTasksQueued(n);
+    if (maxTasksEnabled) {
+      setMaxTasks(team, { enabled: true, limit_queued: n });
+    }
+  }, [maxTasksEnabled, team]);
 
   // Build dynamic field config from task data
   const fieldConfig = useMemo(() => {
@@ -144,8 +237,17 @@ export function TasksPanel() {
         (t.description || "").toLowerCase().includes(sq)
       );
     }
+    if (mergeSort && mergeOrder?.order?.length) {
+      const idxMap = new Map(mergeOrder.order.map((id, i) => [id, i]));
+      return [...list].sort((a, b) => {
+        const ai = idxMap.has(a.id) ? idxMap.get(a.id) : Infinity;
+        const bi = idxMap.has(b.id) ? idxMap.get(b.id) : Infinity;
+        if (ai !== bi) return ai - bi;
+        return b.id - a.id;
+      });
+    }
     return [...list].sort((a, b) => b.id - a.id);
-  }, [allTasks, filters, searchQuery]);
+  }, [allTasks, filters, searchQuery, mergeSort, mergeOrder]);
 
   const onSearchInput = useCallback((e) => {
     const val = e.target.value;
@@ -300,6 +402,92 @@ export function TasksPanel() {
           onFiltersChange={setFilters}
           fieldConfig={fieldConfig}
         />
+        <button
+          class={`merge-sort-toggle${mergeSort ? " active" : ""}`}
+          onClick={() => setMergeSort(v => !v)}
+          title={mergeSort ? "Showing merge-optimal order" : "Sort by suggested merge order"}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+               strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 2v10M3 12l-2-2M3 12l2-2M8 3h5M8 7h3M8 11h1" />
+          </svg>
+          Merge order
+        </button>
+        <button
+          class={`merge-sort-toggle${reviewerAI ? " active" : ""}`}
+          onClick={toggleReviewer}
+          title={reviewerAI ? "AI Review is ON — AI reviews in_approval tasks" : "Enable AI reviewer"}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+               strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="7" cy="7" r="5.5" />
+            <path d="M5 7l1.5 1.5L9 5.5" />
+          </svg>
+          AI Review
+        </button>
+        <button
+          class={`merge-sort-toggle${autoMerge ? " active" : ""}${reviewerAI ? " locked" : ""}`}
+          onClick={toggleAutoMerge}
+          title={reviewerAI ? "Auto Merge is locked ON while AI Review is enabled" : autoMerge ? "Auto Merge is ON — approved tasks merge automatically" : "Enable auto merge for approved tasks"}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+               strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 2v10M4 9l3 3 3-3" />
+          </svg>
+          Auto Merge
+        </button>
+        <button
+          class={`merge-sort-toggle${taskFreezeOn ? " active" : ""}`}
+          onClick={toggleTaskFreeze}
+          title={taskFreezeOn ? "Task freeze is ON — manager will not create new tasks" : "Freeze task creation"}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+               strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="8" height="8" rx="1.5" />
+          </svg>
+          Task freeze
+        </button>
+        <button
+          class={`merge-sort-toggle${maxTasksEnabled ? " active" : ""}`}
+          onClick={toggleMaxTasks}
+          title={maxTasksEnabled ? `Max tasks ON — in-progress: ${maxTasksInProgress}, queued: ${maxTasksQueued}` : "Enable max tasks limit"}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+               strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 2v10M4 5l3-3 3 3" />
+          </svg>
+          Max tasks
+        </button>
+        {maxTasksEnabled && (
+          <>
+            <span style={{ marginLeft: "6px", fontSize: "11px", color: "var(--text-secondary)" }}>WIP</span>
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value={maxTasksInProgress}
+              onInput={(e) => updateMaxTasksInProgress(e.target.value)}
+              onFocus={() => { isInputFocused.value = true; }}
+              onBlur={() => { isInputFocused.value = false; }}
+              class="max-tasks-input"
+              style={{ width: "40px", marginLeft: "2px", padding: "2px 4px", fontSize: "12px", borderRadius: "4px", border: "1px solid var(--border)", background: "var(--bg-secondary)", color: "var(--text-primary)", textAlign: "center" }}
+              title="Max in-progress tasks"
+            />
+            <span style={{ marginLeft: "6px", fontSize: "11px", color: "var(--text-secondary)" }}>Queue</span>
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value={maxTasksQueued}
+              onInput={(e) => updateMaxTasksQueued(e.target.value)}
+              onFocus={() => { isInputFocused.value = true; }}
+              onBlur={() => { isInputFocused.value = false; }}
+              class="max-tasks-input"
+              style={{ width: "40px", marginLeft: "2px", padding: "2px 4px", fontSize: "12px", borderRadius: "4px", border: "1px solid var(--border)", background: "var(--bg-secondary)", color: "var(--text-primary)", textAlign: "center" }}
+              title="Max queued tasks"
+            />
+          </>
+        )}
         <div style={{ flex: 1 }} />
         <div class={searchExpanded ? "filter-search-wrap expanded" : "filter-search-wrap"}>
           {!searchExpanded ? (
@@ -368,7 +556,7 @@ export function TasksPanel() {
                             onClick={() => { seedTaskCache(t.id, t); openPanel("task", t.id); }}
                           >
                             <div class="task-summary">
-                              <span class="task-id copyable">{taskIdStr(t.id)}<CopyBtn text={taskIdStr(t.id)} /></span>
+                              <span class="task-id copyable">{taskIdStr(t.id, t.prefix, t.seq)}<CopyBtn text={taskIdStr(t.id, t.prefix, t.seq)} /></span>
                               <span class="task-title">{t.title}</span>
                               <span><span class={"badge badge-" + t.status}>{fmtStatus(t.status)}</span></span>
                               <span class="task-assignee">{t.assignee ? cap(t.assignee) : "\u2014"}</span>
@@ -392,7 +580,7 @@ export function TasksPanel() {
                 onClick={() => { seedTaskCache(t.id, t); openPanel("task", t.id); }}
               >
                 <div class="task-summary">
-                  <span class="task-id copyable">{taskIdStr(t.id)}<CopyBtn text={taskIdStr(t.id)} /></span>
+                  <span class="task-id copyable">{taskIdStr(t.id, t.prefix, t.seq)}<CopyBtn text={taskIdStr(t.id, t.prefix, t.seq)} /></span>
                   <span class="task-title">{t.title}</span>
                   <span><span class={"badge badge-" + t.status}>{fmtStatus(t.status)}</span></span>
                   <span class="task-assignee">{t.assignee ? cap(t.assignee) : "\u2014"}</span>

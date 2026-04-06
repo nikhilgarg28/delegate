@@ -39,9 +39,41 @@ from delegate.paths import (
 )
 from delegate.mailbox import read_inbox
 from delegate.task import format_task_id
-from delegate.agent import DEFAULT_MODEL, DEFAULT_MANAGER_MODEL, ALLOWED_MODELS
+from delegate.agent import (
+    DEFAULT_MODEL, DEFAULT_MANAGER_MODEL, ALLOWED_MODELS,
+    SENIORITY_MAP, resolve_model, build_max_tasks_notice,
+)
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Environment probing — delegates to adapters.probe_environment()
+# ---------------------------------------------------------------------------
+
+def _probe_hardware() -> str:
+    """Gather hardware context for researcher agents.
+
+    Delegates to the adapter registry so that new hardware probes
+    (AMD ROCm, TPU, etc.) can be added without touching this module.
+    """
+    from delegate.adapters import probe_environment
+    return probe_environment()
+
+
+def format_hardware_block(role: str) -> str:
+    """Return the hardware context block for a given role, or empty string."""
+    if role != "researcher":
+        return ""
+    info = _probe_hardware()
+    if not info:
+        return ""
+    return (
+        "\n\n=== HARDWARE ENVIRONMENT ===\n"
+        "(Use this to select correct packages, batch sizes, and device placement.\n"
+        " Call check_resources() for live utilization before launching experiments.)\n\n"
+        f"{info}\n"
+    )
 
 
 def collect_instruction_files(repo_path: Path) -> str:
@@ -71,18 +103,9 @@ def collect_instruction_files(repo_path: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Constants (mirrored from agent.py for identical output)
+# Constants (imported from agent.py — single source of truth)
 # ---------------------------------------------------------------------------
-
-# Legacy seniority -> model mapping for backward compatibility
-_SENIORITY_MAP = {"senior": "opus", "junior": "sonnet"}
-
-# Context window: how many recent processed messages to include per turn
-HISTORY_WITH_PEER = 8       # messages with the primary sender (both directions)
-HISTORY_WITH_OTHERS = 4     # messages with anyone else
-
-# Maximum messages to batch per turn (all must share the same task_id).
-MAX_BATCH_SIZE = 5
+from delegate.agent import HISTORY_WITH_PEER, HISTORY_WITH_OTHERS, MAX_BATCH_SIZE  # noqa: E402
 
 
 class Prompt:
@@ -102,12 +125,7 @@ class Prompt:
         self._ad = _resolve_agent_dir(hc_home, team, agent)
         self._state = yaml.safe_load((self._ad / "state.yaml").read_text()) or {}
         self._role = self._state.get("role", "engineer")
-        # Resolve model: prefer direct 'model' field, fall back from legacy 'seniority'
-        self._model = (
-            self._state.get("model")
-            or _SENIORITY_MAP.get(self._state.get("seniority", ""), None)
-            or (DEFAULT_MANAGER_MODEL if self._role == "manager" else DEFAULT_MODEL)
-        )
+        self._model = resolve_model(self._state, self._role)
 
     # ------------------------------------------------------------------
     # Preamble (formerly: system prompt)
@@ -125,6 +143,7 @@ class Prompt:
         repo_instructions_block = self._section_repo_instructions()
         inlined_notes_block = self._section_inlined_notes()
         files_block = self._files_block()
+        hardware_block = self._section_hardware_context()
 
         # The identity/commands section is inlined here so we can
         # replicate the exact f-string layout of the original.
@@ -140,6 +159,16 @@ class Prompt:
         human_name = get_default_human(hc_home) or "human"
         manager_name = get_member_by_role(hc_home, team, "manager") or "delegate"
 
+        from delegate.config import is_task_creation_frozen
+        task_freeze_notice = ""
+        if role == "manager" and is_task_creation_frozen(hc_home, team):
+            task_freeze_notice = (
+                "\n** TASK CREATION FREEZE IS ON — do NOT create new tasks. "
+                "Continue managing existing tasks normally. **\n"
+            )
+
+        max_tasks_notice = build_max_tasks_notice(hc_home, team) if role == "manager" else ""
+
         return f"""\
 === TEAM CHARTER ===
 
@@ -149,6 +178,7 @@ class Prompt:
 
 You are {agent} (role: {role}, model: {model_name}), a team member in the Delegate system.
 {human_name} is the human team member. You report to {manager_name} (manager).
+{task_freeze_notice}{max_tasks_notice}
 
 CRITICAL: You communicate ONLY by using MCP tools. Your conversational
 replies are NOT seen by anyone — they only go to an internal log. To send a
@@ -165,8 +195,8 @@ Communication:
 
 Task management:
   task_create(title, description?, priority?, repo?, depends_on?) — create a task
-  task_list(status?, assignee?) — list tasks with optional filters
-  task_show(task_id) — show task details
+  task_list(status?, assignee?) — summary list (id, title, status, assignee, priority). Excludes done/cancelled by default.
+  task_show(task_id) — full task details (description, comments, branch, commits, etc.). Use this to deep-dive on a specific task.
   task_assign(task_id, assignee) — assign a task
   task_status(task_id, new_status) — change task status
   task_comment(task_id, body) — add a comment to a task
@@ -179,7 +209,7 @@ Repository:
 
 Use these tools directly — do NOT run CLI commands for messaging or task management.
 For coding work, use standard bash, file editing, and git (add, commit, diff, log, status).
-{inlined_notes_block}
+{hardware_block}{inlined_notes_block}
 
 REFERENCE FILES (read as needed):
 {files_block}
@@ -205,15 +235,46 @@ Team data: {hc_home}/teams/{team}/"""
         return "\n\n---\n\n".join(sections)
 
     def _section_role_charter(self) -> str:
-        """Role-specific charter (e.g. roles/manager.md)."""
+        """Role-specific charter (e.g. roles/manager.md) + applicable addons."""
         _role_file_map = {"worker": "engineer.md"}
         role_charter_name = _role_file_map.get(self._role, f"{self._role}.md")
         role_path = base_charter_dir() / "roles" / role_charter_name
+        parts: list[str] = []
         if role_path.is_file():
             content = role_path.read_text().strip()
             if content:
-                return f"\n\n---\n\n{content}"
+                parts.append(content)
+
+        # Append applicable addon charters
+        for addon in self._applicable_addons():
+            addon_path = base_charter_dir() / "addons" / f"{addon}.md"
+            if addon_path.is_file():
+                addon_content = addon_path.read_text().strip()
+                if addon_content:
+                    parts.append(addon_content)
+
+        if parts:
+            return "\n\n---\n\n" + "\n\n".join(parts)
         return ""
+
+    def _applicable_addons(self) -> list[str]:
+        """Determine which charter addons apply to this agent.
+
+        Addons are technology-specific charter snippets (e.g. ``ml.md``)
+        loaded based on detected capabilities rather than being hardcoded
+        into the role charter.
+        """
+        addons: list[str] = []
+        if self._role != "researcher":
+            return addons
+
+        # ML addon: include if GPU hardware is detected
+        from delegate.adapters import probe_environment
+        env_info = probe_environment()
+        if env_info and "GPU: None" not in env_info:
+            addons.append("ml")
+
+        return addons
 
     def _section_team_overrides(self) -> str:
         """Per-team override charter."""
@@ -271,6 +332,10 @@ Team data: {hc_home}/teams/{team}/"""
                 )
 
         return "".join(parts)
+
+    def _section_hardware_context(self) -> str:
+        """Hardware context for researcher agents (GPU, CUDA, RAM, etc.)."""
+        return format_hardware_block(self._role)
 
     def _files_block(self) -> str:
         """Raw reference file pointers text."""
@@ -343,8 +408,10 @@ Team data: {hc_home}/teams/{team}/"""
     def _section_context_md(self) -> str:
         """Previous session context from context.md."""
         context = self._ad / "context.md"
-        if context.exists() and context.read_text().strip():
-            return f"=== PREVIOUS SESSION CONTEXT ===\n{context.read_text().strip()}"
+        if context.exists():
+            text = context.read_text().strip()
+            if text:
+                return f"=== PREVIOUS SESSION CONTEXT ===\n{text}"
         return ""
 
     def _section_task_context(
@@ -382,15 +449,22 @@ Team data: {hc_home}/teams/{team}/"""
                 f"\n- Do NOT switch branches — stay on {current_task.get('branch', '')}."
                 "\n- Your branch is local-only and will be merged by the merge worker when approved."
             )
-            parts.append(
-                "\n## Environment setup — MANDATORY FIRST STEP\n"
-                "Before writing ANY code or running ANY command, you MUST:\n"
-                "1. Run: `ls .delegate/setup.sh 2>/dev/null && echo EXISTS || echo MISSING`\n"
-                "2. If EXISTS: source it — `. .delegate/setup.sh`\n"
-                "3. If MISSING: create `.delegate/setup.sh` and `.delegate/premerge.sh` "
-                "following the Environment Setup charter section, commit them, THEN source setup.sh.\n"
-                "Do NOT skip this step. Do NOT proceed to any coding work until the environment is active."
-            )
+            # Only include verbose setup instructions if setup.sh doesn't exist yet.
+            first_worktree = next(iter(workspace_paths.values()))
+            if not (first_worktree / ".delegate" / "setup.sh").exists():
+                parts.append(
+                    "\n## Environment setup — MANDATORY FIRST STEP\n"
+                    "Before writing ANY code or running ANY command, you MUST:\n"
+                    "1. Run: `ls .delegate/setup.sh 2>/dev/null && echo EXISTS || echo MISSING`\n"
+                    "2. If EXISTS: source it — `. .delegate/setup.sh`\n"
+                    "3. If MISSING: create `.delegate/setup.sh` and `.delegate/premerge.sh` "
+                    "following the Environment Setup charter section, commit them, THEN source setup.sh.\n"
+                    "Do NOT skip this step. Do NOT proceed to any coding work until the environment is active."
+                )
+            else:
+                parts.append(
+                    "\nEnvironment: source `.delegate/setup.sh` before running commands."
+                )
 
         # Task activity
         try:
@@ -519,7 +593,9 @@ Team data: {hc_home}/teams/{team}/"""
         ]
 
         context = self._ad / "context.md"
-        if context.exists() and context.read_text().strip():
-            parts.insert(0, f"=== PREVIOUS SESSION CONTEXT ===\n{context.read_text().strip()}\n")
+        if context.exists():
+            text = context.read_text().strip()
+            if text:
+                parts.insert(0, f"=== PREVIOUS SESSION CONTEXT ===\n{text}\n")
 
         return "\n".join(parts)

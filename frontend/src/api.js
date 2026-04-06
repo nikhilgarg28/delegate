@@ -31,6 +31,11 @@ export async function fetchTasks(team) {
   return r.ok ? r.json() : [];
 }
 
+export async function fetchMergeOrder(team) {
+  const r = await fetch(`/teams/${team}/tasks/merge-order`);
+  return r.ok ? r.json() : { order: [] };
+}
+
 export async function fetchAllTasks() {
   const r = await fetch(`/api/tasks?team=all`);
   return r.ok ? r.json() : [];
@@ -90,16 +95,26 @@ export async function fetchMessages(team, params) {
 }
 
 export async function sendMessage(team, recipient, content) {
-  const r = await fetch(`/teams/${team}/messages`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ recipient, content }),
-  });
-  if (!r.ok) {
-    const err = await r.json().catch(() => ({}));
-    throw new Error(err.detail || r.statusText);
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 10000); // 10s timeout
+  try {
+    const r = await fetch(`/teams/${team}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient, content }),
+      signal: ctrl.signal,
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || r.statusText);
+    }
+    return r.json();
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error("Message send timed out — please try again");
+    throw e;
+  } finally {
+    clearTimeout(timeout);
   }
-  return r.json();
 }
 
 export async function greetTeam(team, lastSeen = null) {
@@ -369,6 +384,69 @@ export async function deleteProject(name) {
   return r.json();
 }
 
+// --- Reviewer ---
+
+export async function fetchReviewer(team) {
+  const r = await fetch(`/teams/${team}/reviewer`);
+  return r.ok ? r.json() : { mode: "human", threshold: 3.5 };
+}
+
+export async function setReviewer(team, config) {
+  const r = await fetch(`/teams/${team}/reviewer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  return r.ok ? r.json() : null;
+}
+
+// Deprecated — kept for backwards compat
+export async function fetchAutoApprover(team) {
+  const r = await fetch(`/teams/${team}/auto-approver`);
+  return r.ok ? r.json() : { enabled: false, threshold: 3.5 };
+}
+
+export async function setAutoApprover(team, config) {
+  const r = await fetch(`/teams/${team}/auto-approver`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  return r.ok ? r.json() : null;
+}
+
+// --- Task freeze ---
+
+export async function fetchTaskFreeze(team) {
+  const r = await fetch(`/teams/${team}/task-freeze`);
+  return r.ok ? r.json() : { enabled: false };
+}
+
+export async function setTaskFreeze(team, config) {
+  const r = await fetch(`/teams/${team}/task-freeze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  return r.ok ? r.json() : null;
+}
+
+// --- Max tasks limit ---
+
+export async function fetchMaxTasks(team) {
+  const r = await fetch(`/teams/${team}/max-tasks`);
+  return r.ok ? r.json() : { enabled: false, limit_in_progress: 5, limit_queued: 10 };
+}
+
+export async function setMaxTasks(team, config) {
+  const r = await fetch(`/teams/${team}/max-tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  return r.ok ? r.json() : null;
+}
+
 // --- Version ---
 
 export async function fetchVersion() {
@@ -396,6 +474,20 @@ export async function completeTaskFiles(taskId, q) {
   const data = await res.json();
   return data.entries || [];
 }
+// --- Agent actions ---
+
+export async function nudgeAgent(agent, team) {
+  const r = await fetch(`/api/agents/${agent}/nudge?team=${encodeURIComponent(team)}`, { method: "POST" });
+  if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.detail || r.statusText); }
+  return r.json();
+}
+
+export async function interruptAgent(agent, team) {
+  const r = await fetch(`/api/agents/${agent}/interrupt?team=${encodeURIComponent(team)}`, { method: "POST" });
+  if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.detail || r.statusText); }
+  return r.json();
+}
+
 // --- File Upload ---
 
 export async function uploadFiles(team, files, onProgress) {
