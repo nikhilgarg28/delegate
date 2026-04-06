@@ -200,9 +200,11 @@ class TestDeniedBashPatterns:
         "git filter-branch",
         "git reflog expire",
         "sqlite3 ",
+        "rm -rf .git",
         "DROP TABLE",
         "DELETE FROM",
-        "rm -rf .git",
+        "TRUNCATE ",
+        "ALTER TABLE",
     ]
 
     @pytest.mark.parametrize("pattern", MUST_DENY)
